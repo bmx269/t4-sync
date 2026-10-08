@@ -108,13 +108,22 @@ class TestProject(unittest.TestCase):
             self.assertEqual(project.read_token("test"), "a.b.c")
 
 
+class TestDoctor(unittest.TestCase):
+    def test_version_regex(self):
+        from t4sync.commands.doctor import VERSION_RE
+        page = "<title>TERMINALFOUR</title><p>Version 8.4.5</p>"
+        self.assertEqual(VERSION_RE.search(page).group(1), "8.4.5")
+        self.assertIsNone(VERSION_RE.search("<p>no version here</p>"))
+
+
 class TestCli(unittest.TestCase):
     def test_every_command_parses(self):
         parser = build_parser()
         for argv in (["init"], ["env"], ["env", "add", "t", "https://x"],
                      ["token", "set", "t"], ["pull", "--all"], ["sync"],
                      ["diff", "--show"], ["push", "--dry-run"],
-                     ["mirror", "https://x"], ["serve", "--no-proxy"]):
+                     ["mirror", "https://x"], ["serve", "--no-proxy"],
+                     ["doctor"], ["doctor", "--env", "prod"]):
             with self.subTest(argv=argv):
                 parser.parse_args(argv)
 

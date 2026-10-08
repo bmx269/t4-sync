@@ -5,7 +5,7 @@ import sys
 from . import __version__
 from .config import Project
 from .errors import T4Error
-from .commands import diff, env, init, pull, push, site, sync, token
+from .commands import diff, doctor, env, init, pull, push, site, sync, token
 
 
 def build_parser():
@@ -47,6 +47,10 @@ def build_parser():
     ts.add_argument("name")
     ts.add_argument("--value", help="pass non-interactively (avoid: enters shell history)")
     tsub.add_parser("status", help="show stored tokens and expiry")
+
+    sp = add("doctor", "Check this tool against a T4 instance. Read-only.")
+    sp.add_argument("--env", "-e")
+    sp.add_argument("--timeout", type=int, default=60)
 
     sp = add("pull", "Fetch layout source from T4 onto disk.")
     env_flags(sp)
@@ -98,6 +102,7 @@ HANDLERS = {
     "init": (init.run, False),
     "env": (env.run, True),
     "token": (token.run, True),
+    "doctor": (doctor.run, True),
     "pull": (pull.run, True),
     "sync": (sync.run, True),
     "diff": (diff.run, True),

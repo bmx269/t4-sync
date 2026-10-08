@@ -99,6 +99,21 @@ Pushing is **disabled per environment by default** — set `"push_allowed": true
 in `.t4/config.json` for the environments you want writable, and leave
 production off unless you mean it.
 
+### Checking an instance
+
+```sh
+t4 doctor                   # read-only probe of the configured environment
+t4 doctor --env prod
+```
+
+Reports the T4 version, token expiry, and whether each endpoint responds —
+including whether the fields the tool extracts source from are still present,
+since a DTO change between releases would otherwise show up as a silently
+empty pull rather than an error.
+
+Run this first against any instance you have not used before. T4's REST
+surface varies by version and deployment, so probing beats assuming.
+
 ### Local copy of the site
 
 ```sh
@@ -168,7 +183,9 @@ change — you just cannot render it locally first.
 
 ## Things that will bite you
 
-All verified against a live T4 8.4.3 instance.
+Verified against a live T4 **8.4.3** instance. 8.4.4 and 8.4.5 release notes
+record no changes to the endpoints used here, but have not been tested
+directly — run `t4 doctor` to confirm against yours.
 
 **Endpoint names are case-sensitive and inconsistent.** `/pageLayout` is
 camelCase; `/contenttype` is not. A wrong case returns **500** — identical to
@@ -185,6 +202,12 @@ push would rewrite layouts with mangled line endings.
 **Content Layouts are not exposed by the REST API.** About 30 route spellings
 were tried on 8.4.3; all 500. Page Layouts, Content Types, Navigation and Lists
 all work. Export a Package from the UI for Content Layouts.
+
+**8.4.5 deprecates the XML Web Services payload** in favour of JSON. This tool
+only ever speaks JSON, so that deprecation does not affect it. 8.4.5 also
+reverts a Repeater API change made in 8.4.4, which may alter content type
+responses between those two releases; records are written whole, so a field
+change shows up as a diff rather than a failure.
 
 **Tokens come from the UI.** Administration → User Management → generate an API
 token. `/rs/authorise` returns 500 on at least one 8.4.3 instance, so tokens
