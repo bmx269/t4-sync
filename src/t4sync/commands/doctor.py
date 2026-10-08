@@ -113,11 +113,12 @@ def run(args, project):
         print("  %-13s ok    %s" % (endpoint, note))
         working += 1
 
-    failing = len(http_failures) + len(unreachable)
+    # When the host is unreachable the probe stops early, so count every
+    # endpoint as failing rather than only the one that was actually tried.
+    failing = len(ENDPOINTS) - working if unreachable else len(http_failures)
     print("\n%d endpoint(s) working, %d failing." % (working, failing))
 
     if unreachable:
-        failing = len(ENDPOINTS)
         print("\nNothing could connect to %s." % env["base"])
         print("That is a network problem, not an API one -- the host was never\n"
               "reached. A T4 instance is usually behind a VPN; check that it is\n"
