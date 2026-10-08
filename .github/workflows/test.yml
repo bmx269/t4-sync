@@ -1,0 +1,60 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # The tool is meant to run anywhere a developer does, so prove it rather
+    # than assert it. The tests need no network and no T4 instance.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.8", "3.11", "3.13"]
+        exclude:
+          # 3.8 is unavailable on the arm64 macOS runners.
+          - os: macos-latest
+            python: "3.8"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Install the package
+        run: python -m pip install .
+
+      - name: CLI responds
+        run: |
+          t4 --version
+          t4 --help
+
+      - name: End-to-end project setup
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/proj"
+          cd "$RUNNER_TEMP/proj"
+          t4 init
+          t4 env add test https://myweb-test.example.edu
+          t4 env add prod https://myweb.example.edu
+          t4 env
+          t4 token status
+          test -f .t4/config.json
+          grep -q '.t4/tokens/' .gitignore
+          # Push must refuse an environment that is not explicitly writable.
+          if t4 push --env prod; then
+            echo "push should have refused a pull-only environment"; exit 1
+          fi
+          echo "ok"

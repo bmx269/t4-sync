@@ -135,6 +135,37 @@ Files in `overrides/` shadow the mirror, so you can iterate on CSS and JS
 against real published markup with no publish cycle. Responses are sent
 `Cache-Control: no-store`, so a plain reload picks up edits.
 
+## What this does not do
+
+**It does not render T4 tags or Handlebars.** Nothing local can. `<t4 .../>`
+tags, Handlebars expressions and Programmable Layouts are evaluated by T4's own
+publish engine, in Java, against the CMS database. There is no standalone
+renderer, and T4's helpers (`{{element}}`, `{{media}}`, `{{sectionName}}`, the
+whole set) are proprietary to that engine.
+
+So the two halves of this tool hold different things, and neither is a
+substitute for the other:
+
+| | What it holds | Tags in it |
+|---|---|---|
+| `t4 mirror` + `t4 serve` | Published **output** | Already evaluated — real HTML |
+| `t4 pull` | Layout **source** | Unevaluated — `{{...}}` as literal text |
+
+The practical consequence: a mirror is the right place to work on CSS, JS and
+markup structure, because it is exactly what a visitor's browser receives. It
+is the wrong place to test layout logic. Open a mirrored page and the template
+is already resolved; open a pulled `.hbs` file in a browser and you see
+`{{sectionName}}` printed on the page.
+
+**Layout logic still has to be tested in T4** — Preview, Direct Edit, or a
+staging channel. The loop this tool shortens is the front-end one: edit CSS or
+JS in `overrides/`, reload, see it against real published markup, with no
+publish cycle. The loop it does not shorten is changing a layout's logic.
+
+What it does give you for layout work is version control, diffing and review:
+you can see what changed in a layout, who changed it, and push a reviewed
+change — you just cannot render it locally first.
+
 ## Things that will bite you
 
 All verified against a live T4 8.4.3 instance.
