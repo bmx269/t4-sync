@@ -225,7 +225,11 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
             sys.stderr.write("  proxy %s\n" % self.path)
             return self._proxy(path)
 
-        if not (self.rules and path.endswith((".html", ".htm"))):
+        # HTML needs rewriting when there are rules, and needs the reload
+        # script whenever the watcher is running. Gating on rules alone meant
+        # live reload silently did nothing for a project with no rewrites.
+        needs_transform = bool(self.rules) or bool(self.watcher)
+        if not (needs_transform and path.endswith((".html", ".htm"))):
             return super().send_head()
         try:
             with open(path, "rb") as fh:

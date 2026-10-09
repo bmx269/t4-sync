@@ -106,6 +106,25 @@ class TestServeTransforms(unittest.TestCase):
         self.assertIn(RELOAD_PATH, out)
 
 
+class TestServeGating(unittest.TestCase):
+    """HTML must be transformed when EITHER rules or the watcher are active.
+
+    Gating on rules alone meant live reload silently did nothing on a project
+    with an empty rewrites.conf, which is the default.
+    """
+
+    def test_reload_alone_still_transforms(self):
+        out = transform_html("<body></body>", rules=(), inject_reload=True)
+        self.assertIn(RELOAD_PATH, out)
+
+    def test_rules_alone_still_transforms(self):
+        import re
+        rules = [(re.compile("a"), "b")]
+        out = transform_html("<body>a</body>", rules, inject_reload=False)
+        self.assertIn("b", out)
+        self.assertNotIn(RELOAD_PATH, out)
+
+
 class TestWatcher(unittest.TestCase):
     def test_detects_a_changed_file(self):
         with tempfile.TemporaryDirectory() as tmp:
