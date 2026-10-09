@@ -1,6 +1,6 @@
 """t4-sync — pull, push and compare Terminal Four layout source.
 
-Copyright (C) 2026
+Copyright (C) 2026 Trent Stromkins
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software

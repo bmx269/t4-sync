@@ -498,6 +498,8 @@ The tests need no network and no T4 instance.
 
 ## Licence
 
+Copyright © 2026 Trent Stromkins.
+
 GNU General Public License v3.0 or later — see [LICENSE](LICENSE).
 
 The repository is private, and the GPL's obligations attach to distribution:
