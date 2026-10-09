@@ -20,8 +20,9 @@ import re
 # chain easy to get wrong.
 InspectorContext = collections.namedtuple(
     "InspectorContext",
-    "index overrides_dir env_name mirror_dir url_path mode")
-InspectorContext.__new__.__defaults__ = (None, None, None, "/", "both")
+    "index overrides_dir env_name mirror_dir url_path mode "
+    "content_types component_markers")
+InspectorContext.__new__.__defaults__ = (None, None, None, "/", "both", None, None)
 
 LAYOUT_META = re.compile(
     r'<meta\s+name=["\']t4-layout["\']\s+content=["\']([^"\']*)["\']', re.I)
@@ -29,6 +30,112 @@ LAYOUT_ID_META = re.compile(
     r'<meta\s+name=["\']t4-layout-id["\']\s+content=["\']([^"\']*)["\']', re.I)
 ASSET_RE = re.compile(
     r'<(?:link[^>]+href|script[^>]+src)=["\']([^"\']+\.(?:css|js))["\']', re.I)
+
+# T4 does not delimit content items in published output. Many sites adopt a
+# convention of commenting them in their content layouts, and where one exists
+# it can be read back to mark where each component starts. These are the
+# default patterns; a site with different conventions sets `component_markers`
+# in .t4/config.json. A pattern needs an `id` group, a `name` group, or both.
+# `[^>]` rather than `[^>-]`: a hyphen is ordinary in a name (Footer-Contact),
+# and the pattern cannot overrun the comment anyway because `-->` contains `>`.
+DEFAULT_COMPONENT_MARKERS = [
+    (r"<!--\s*ct:(?P<id>\d+)\s*(?P<name>[^>]*?)\s*-->", "contenttype"),
+    (r"<!--\s*ct-(?P<id>\d+)[ -](?P<name>[^>]*?)\s*-->", "contenttype"),
+    (r"<!--\s*content type:\s*(?P<name>[^>]+?)\s*-->", "contenttype"),
+    (r"<!--\s*n:(?P<name>[^>(]+?)\s*\((?P<id>\d+)\)\s*-->", "navigation"),
+]
+
+
+class ContentTypeIndex:
+    """Maps a T4 content type id to the file pulled for it.
+
+    Built by reading the pulled records rather than the manifest: content
+    types have no template field, so they are written as JSON and the manifest
+    -- which exists to tell `push` which field to write back -- does not list
+    them.
+    """
+
+    def __init__(self, by_id=None, by_name=None):
+        self.by_id = by_id or {}
+        self.by_name = by_name or {}
+
+    @classmethod
+    def from_env_dir(cls, env_dir, endpoint="contenttype"):
+        by_id, by_name = {}, {}
+        if not env_dir:
+            return cls()
+        directory = os.path.join(env_dir, endpoint)
+        if not os.path.isdir(directory):
+            return cls()
+        for filename in os.listdir(directory):
+            if not filename.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(directory, filename), encoding="utf-8") as fh:
+                    record = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            rel = "%s/%s" % (endpoint, filename)
+            entry = (rel, record.get("name"), record.get("alias"))
+            if record.get("id") is not None:
+                by_id[str(record["id"])] = entry
+            for key in (record.get("name"), record.get("alias")):
+                if key:
+                    by_name.setdefault(key.strip().lower(), entry)
+        return cls(by_id, by_name)
+
+    def lookup(self, marker_id=None, marker_name=None):
+        if marker_id and str(marker_id) in self.by_id:
+            return self.by_id[str(marker_id)]
+        if marker_name:
+            return self.by_name.get(marker_name.strip().lower())
+        return None
+
+
+def annotate_components(body, indexes, patterns=None, env_name=None):
+    """Insert a debug comment at each component marker found in the page.
+
+    `indexes` maps an endpoint name to a ContentTypeIndex. Markers are left in
+    place and the note added after them, so the output still contains whatever
+    the site's own layouts emitted.
+    """
+    if not indexes:
+        return body, 0
+    if isinstance(indexes, ContentTypeIndex):          # single index, legacy call
+        indexes = {"contenttype": indexes}
+
+    markers = []
+    for entry in (patterns or DEFAULT_COMPONENT_MARKERS):
+        pattern, endpoint = entry if isinstance(entry, (tuple, list)) else (entry, "contenttype")
+        try:
+            markers.append((re.compile(pattern, re.I), endpoint))
+        except re.error:
+            continue
+
+    count = 0
+
+    def note_for(match, endpoint):
+        groups = match.groupdict()
+        index = indexes.get(endpoint)
+        found = index.lookup(groups.get("id"), groups.get("name")) if index else None
+        label = (groups.get("name") or groups.get("id") or "?").strip()
+        if not found:
+            return ("<!-- T4 %s: %s - not in the local pull -->"
+                    % (endpoint.upper(), _safe_comment(label)))
+        rel, name, _alias = found
+        return ("<!-- T4 %s: '%s' -> t4-source/%s/%s -->"
+                % ("COMPONENT" if endpoint == "contenttype" else endpoint.upper(),
+                   _safe_comment(name or label), _safe_comment(env_name or "<env>"),
+                   _safe_comment(rel)))
+
+    for regex, endpoint in markers:
+        def replace(match, _endpoint=endpoint):
+            nonlocal count
+            count += 1
+            return match.group(0) + note_for(match, _endpoint)
+        body = regex.sub(replace, body)
+
+    return body, count
 
 
 class LayoutIndex:

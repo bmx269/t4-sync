@@ -28,8 +28,8 @@ import sys
 import threading
 import time
 
-from .inspector import (InspectorContext, LayoutIndex, build_comment,
-                        build_panel)
+from .inspector import (ContentTypeIndex, InspectorContext, LayoutIndex,
+                        annotate_components, build_comment, build_panel)
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -69,6 +69,14 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
                       url_path=inspector.url_path)
         if inspector.mode in ("comments", "both"):
             prefix = build_comment(body, inspector.index, **kwargs)
+            body, marked = annotate_components(
+                body, inspector.content_types,
+                inspector.component_markers, inspector.env_name)
+            if marked:
+                prefix = prefix.replace(
+                    "<!-- END T4 DEBUG -->",
+                    "<!-- COMPONENTS: %d marked inline -->\n<!-- END T4 DEBUG -->"
+                    % marked)
         if inspector.mode in ("panel", "both"):
             extra += build_panel(body, inspector.index, **kwargs)
     if inject_reload:
@@ -288,7 +296,8 @@ class ThreadingServer(socketserver.ThreadingTCPServer):
 
 def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
           proxy_origin=None, proxy_cache=True, reload=True,
-          source_dir=None, env_name=None, inspect="both"):
+          source_dir=None, env_name=None, inspect="both",
+          component_markers=None):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
     MirrorHandler.rules = load_rules(rules_file)
     MirrorHandler.proxy_origin = proxy_origin
@@ -304,7 +313,12 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         index = LayoutIndex.from_project_dir(source_dir)
         MirrorHandler.inspector = InspectorContext(
             index=index, overrides_dir=MirrorHandler.overrides,
-            env_name=env_name, mode=inspect)
+            env_name=env_name, mode=inspect,
+            content_types={
+                "contenttype": ContentTypeIndex.from_env_dir(source_dir, "contenttype"),
+                "navigation": ContentTypeIndex.from_env_dir(source_dir, "navigation"),
+            },
+            component_markers=component_markers)
     else:
         MirrorHandler.inspector = None
 

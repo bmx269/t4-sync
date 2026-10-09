@@ -12,7 +12,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
-from t4sync.inspector import (InspectorContext, LayoutIndex,   # noqa: E402
+from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
+                              LayoutIndex, annotate_components,
                               build_comment, build_panel)
 from t4sync.serve import RELOAD_PATH, Watcher, load_rules, transform_html  # noqa: E402
 
@@ -234,6 +235,56 @@ class TestDebugComments(unittest.TestCase):
         out = build_comment(page, LayoutIndex(manifest))
         body = out.split("<!--", 1)[1]
         self.assertNotIn("--", body.split("-->")[0])
+
+
+class TestComponentAnnotation(unittest.TestCase):
+    def _index(self, tmp, endpoint="contenttype", **record):
+        directory = pathlib.Path(tmp) / endpoint
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "thing.json").write_text(json.dumps(record))
+        return ContentTypeIndex.from_env_dir(tmp, endpoint)
+
+    def test_marker_is_annotated_in_place(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            index = self._index(tmp, id=322, name="Contact footer")
+            page = '<div><!-- ct:322 Contact Footer --><p>x</p></div>'
+            out, n = annotate_components(page, {"contenttype": index}, env_name="test")
+            self.assertEqual(n, 1)
+            self.assertIn("<!-- ct:322 Contact Footer -->"
+                          "<!-- T4 COMPONENT: 'Contact footer' -> "
+                          "t4-source/test/contenttype/thing.json -->", out)
+            self.assertIn("<p>x</p>", out)          # page content untouched
+
+    def test_hyphenated_names_match(self):
+        """A hyphen is ordinary in a name; an earlier pattern excluded it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            index = self._index(tmp, "navigation", id=273, name="Footer-Contact")
+            page = "<!-- n:Footer-Contact (273) -->"
+            out, n = annotate_components(page, {"navigation": index}, env_name="test")
+            self.assertEqual(n, 1)
+            self.assertIn("T4 NAVIGATION: 'Footer-Contact'", out)
+
+    def test_unknown_marker_says_so_rather_than_guessing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            index = self._index(tmp, id=1, name="Something else")
+            out, n = annotate_components('<!-- ct:999 Mystery -->',
+                                         {"contenttype": index}, env_name="test")
+            self.assertEqual(n, 1)
+            self.assertIn("not in the local pull", out)
+            self.assertNotIn("t4-source/test/contenttype/thing.json", out)
+
+    def test_each_marker_annotated_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            index = self._index(tmp, id=5, name="Box")
+            page = "<!-- ct:5 Box --><!-- ct-5 Box -->"
+            out, n = annotate_components(page, {"contenttype": index}, env_name="test")
+            self.assertEqual(n, 2)
+            self.assertEqual(out.count("T4 COMPONENT"), 2)
+
+    def test_no_index_is_a_no_op(self):
+        page = "<!-- ct:322 Contact Footer -->"
+        out, n = annotate_components(page, {}, env_name="test")
+        self.assertEqual((out, n), (page, 0))
 
 
 class TestWatcher(unittest.TestCase):

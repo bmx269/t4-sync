@@ -147,6 +147,45 @@ Drupal-style theme-debug comments in the served HTML:
 (the default), `off` for neither. The comments are added at serve time; files
 under the mirror are never modified.
 
+#### Components marked where they start
+
+T4 does not delimit content items in published output. Many sites do comment
+them from their own content layouts, and where that convention exists it can be
+read back, so each component is marked at the point it begins:
+
+```html
+<!-- ct:322 Contact Footer --><!-- T4 COMPONENT: 'Contact footer' -> t4-source/test/contenttype/contact-footer.json -->
+<div class="row ct-322" id="contact-bar">
+```
+
+Navigation objects too:
+
+```html
+<!-- n:Footer-Contact (273) --><!-- T4 NAVIGATION: 'Footer-Contact' -> t4-source/test/navigation/footer-contact-273.json -->
+```
+
+The site's own markers are left in place; the note is added after them. A
+marker whose id is not in the local pull says so rather than pointing at the
+wrong file.
+
+**These conventions are per-site, not a T4 feature.** The defaults recognise
+`<!-- ct:ID Name -->`, `<!-- ct-ID Name -->`, `<!-- content type: Name -->` and
+`<!-- n:Name (ID) -->`. Set `component_markers` in `.t4/config.json` for other
+conventions — a list of `[regex, endpoint]` pairs, where the regex has an `id`
+group, a `name` group, or both:
+
+```json
+{
+  "component_markers": [
+    ["<!--\\s*component:(?P<name>[^>]+?)\\s*-->", "contenttype"]
+  ]
+}
+```
+
+A content layout's *template* still cannot be linked, because the REST API does
+not expose Content Layouts at all — the link is to the content type's
+definition.
+
 #### Why there are "suggestions"
 
 T4 publishes two meta tags and they are not equally useful:
