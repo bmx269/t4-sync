@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
-from t4sync.serve import load_rules    # noqa: E402
+from t4sync.serve import RELOAD_PATH, Watcher, load_rules, transform_html  # noqa: E402
 
 
 class TestExtract(unittest.TestCase):
@@ -82,6 +82,48 @@ class TestRules(unittest.TestCase):
                              'href="/a"')
 
 
+class TestServeTransforms(unittest.TestCase):
+    def test_reload_script_goes_before_body_close(self):
+        out = transform_html("<html><body><p>hi</p></body></html>",
+                             inject_reload=True)
+        self.assertIn(RELOAD_PATH, out)
+        self.assertLess(out.index(RELOAD_PATH), out.index("</body>"))
+
+    def test_reload_appended_when_no_body_tag(self):
+        out = transform_html("<p>fragment</p>", inject_reload=True)
+        self.assertIn(RELOAD_PATH, out)
+
+    def test_no_injection_when_disabled(self):
+        out = transform_html("<html><body></body></html>", inject_reload=False)
+        self.assertNotIn(RELOAD_PATH, out)
+
+    def test_rules_and_injection_combine(self):
+        import re
+        rules = [(re.compile(r"https://www\.x\.com/"), "/")]
+        out = transform_html('<body><a href="https://www.x.com/a"></a></body>',
+                             rules, inject_reload=True)
+        self.assertIn('href="/a"', out)
+        self.assertIn(RELOAD_PATH, out)
+
+
+class TestWatcher(unittest.TestCase):
+    def test_detects_a_changed_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "a.css"
+            target.write_text("body{}")
+            watcher = Watcher([tmp], interval=0.05)
+            before = watcher._fingerprint()
+            target.write_text("body{color:red}")
+            self.assertNotEqual(before, watcher._fingerprint())
+
+    def test_ignores_dotfiles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            watcher = Watcher([tmp], interval=0.05)
+            before = watcher._fingerprint()
+            (pathlib.Path(tmp) / ".DS_Store").write_text("junk")
+            self.assertEqual(before, watcher._fingerprint())
+
+
 class TestProject(unittest.TestCase):
     def test_init_then_add_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -123,7 +165,10 @@ class TestCli(unittest.TestCase):
                      ["token", "set", "t"], ["pull", "--all"], ["sync"],
                      ["diff", "--show"], ["push", "--dry-run"],
                      ["mirror", "https://x"], ["serve", "--no-proxy"],
-                     ["doctor"], ["doctor", "--env", "prod"]):
+                     ["doctor"], ["doctor", "--env", "prod"],
+                     ["status"], ["status", "--offline"],
+                     ["edit", "a/b.css"], ["edit", "--list"],
+                     ["serve", "--no-reload"]):
             with self.subTest(argv=argv):
                 parser.parse_args(argv)
 

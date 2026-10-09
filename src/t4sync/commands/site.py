@@ -73,5 +73,6 @@ def run_serve(args, project):
 
     serve_mod.serve(str(site), overrides=str(overrides),
                     rules_file=str(rules), port=args.port,
-                    proxy_origin=origin, proxy_cache=not args.no_proxy_cache)
+                    proxy_origin=origin, proxy_cache=not args.no_proxy_cache,
+                    reload=not args.no_reload)
     return 0

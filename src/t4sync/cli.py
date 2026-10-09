@@ -5,7 +5,8 @@ import sys
 from . import __version__
 from .config import Project
 from .errors import T4Error
-from .commands import diff, doctor, env, init, pull, push, site, sync, token
+from .commands import (diff, doctor, edit, env, init, pull, push, site,
+                       status, sync, token)
 
 
 def build_parser():
@@ -63,6 +64,13 @@ def build_parser():
     sp = add("sync", "Pull, then report what changed on each side.")
     env_flags(sp)
 
+    sp = add("status", "What is pending, across assets and layout source.")
+    sp.add_argument("paths", nargs="*")
+    sp.add_argument("--env", "-e")
+    sp.add_argument("--timeout", type=int, default=60)
+    sp.add_argument("--offline", action="store_true",
+                    help="skip the comparison against T4")
+
     sp = add("diff", "Show where local files differ from T4. Read-only.")
     sp.add_argument("paths", nargs="*")
     env_flags(sp, allow_all=False)
@@ -84,6 +92,13 @@ def build_parser():
     sp.add_argument("--include-documents", action="store_true",
                     help="also download PDFs and Office files")
 
+    sp = add("edit", "Copy a mirrored file into overrides/ to edit it.")
+    sp.add_argument("path", nargs="?", help="path as the site serves it")
+    sp.add_argument("--list", "-l", action="store_true", help="show current overrides")
+    sp.add_argument("--revert", action="store_true", help="drop the override")
+    sp.add_argument("--force", action="store_true", help="reset from the mirror")
+    sp.add_argument("--host-dir", help="which mirror, if several")
+
     sp = add("serve", "Serve the mirrored site locally.")
     sp.add_argument("host_dir", nargs="?", help="which mirror to serve")
     sp.add_argument("--port", "-p", type=int, default=8321)
@@ -94,6 +109,8 @@ def build_parser():
                     help="serve only what is mirrored; 404 otherwise")
     sp.add_argument("--no-proxy-cache", action="store_true",
                     help="proxy without saving fetched files into the mirror")
+    sp.add_argument("--no-reload", action="store_true",
+                    help="do not refresh the browser when overrides change")
 
     return p
 
@@ -105,8 +122,10 @@ HANDLERS = {
     "doctor": (doctor.run, True),
     "pull": (pull.run, True),
     "sync": (sync.run, True),
+    "status": (status.run, True),
     "diff": (diff.run, True),
     "push": (push.run, True),
+    "edit": (edit.run, True),
     "mirror": (site.run_mirror, True),
     "serve": (site.run_serve, True),
 }

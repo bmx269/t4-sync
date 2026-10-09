@@ -25,11 +25,97 @@ import os
 import re
 import socketserver
 import sys
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 DEFAULT_RULES = "# <regex><TAB><replacement>, one per line. '#' starts a comment.\n"
+
+RELOAD_PATH = "/__t4_reload"
+
+# Injected into HTML responses. Server-sent events rather than a websocket so
+# this stays standard-library only; the browser reconnects on its own if the
+# server restarts.
+RELOAD_SCRIPT = """
+<script>
+(function () {
+  var es = new EventSource(%r);
+  es.onmessage = function (e) { if (e.data === "reload") location.reload(); };
+})();
+</script>
+""" % RELOAD_PATH
+
+
+def transform_html(body, rules=(), inject_reload=False):
+    """Apply rewrite rules and optionally inject the reload script.
+
+    Separate from the handler so it can be tested without binding a socket.
+    """
+    for pattern, replacement in rules:
+        body = pattern.sub(replacement, body)
+    if inject_reload:
+        if "</body>" in body:
+            body = body.replace("</body>", RELOAD_SCRIPT + "</body>", 1)
+        else:
+            body += RELOAD_SCRIPT
+    return body
+
+
+class Watcher:
+    """Polls a directory tree and reports when anything changes.
+
+    Polling rather than an OS watch API: the standard library has no portable
+    file-watching, and a poll over an overrides directory -- which holds a
+    handful of files being actively edited -- costs nothing.
+    """
+
+    def __init__(self, paths, interval=0.4):
+        self.paths = [p for p in paths if p]
+        self.interval = interval
+        self.version = 0
+        self._stamp = None
+        self._lock = threading.Condition()
+        self._stop = threading.Event()
+
+    def _fingerprint(self):
+        latest = []
+        for root in self.paths:
+            for dirpath, _dirnames, filenames in os.walk(root):
+                for name in filenames:
+                    if name.startswith("."):
+                        continue
+                    full = os.path.join(dirpath, name)
+                    try:
+                        st = os.stat(full)
+                    except OSError:
+                        continue
+                    latest.append((full, st.st_mtime_ns, st.st_size))
+        return hash(tuple(sorted(latest)))
+
+    def start(self):
+        thread = threading.Thread(target=self._loop, daemon=True)
+        thread.start()
+        return self
+
+    def _loop(self):
+        self._stamp = self._fingerprint()
+        while not self._stop.is_set():
+            time.sleep(self.interval)
+            current = self._fingerprint()
+            if current != self._stamp:
+                self._stamp = current
+                with self._lock:
+                    self.version += 1
+                    self._lock.notify_all()
+
+    def wait(self, seen, timeout):
+        with self._lock:
+            if self.version != seen:
+                return self.version
+            self._lock.wait(timeout)
+            return self.version
 
 
 def load_rules(path):
@@ -57,7 +143,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
     rules = ()
     proxy_origin = None
     proxy_cache = True
-    _proxy_misses = set()
+    watcher = None
 
     def translate_path(self, path):
         mirrored = super().translate_path(path)
@@ -107,6 +193,31 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         return io.BytesIO(body)
 
+    def do_GET(self):
+        if self.watcher and self.path.split("?")[0] == RELOAD_PATH:
+            return self._reload_stream()
+        return super().do_GET()
+
+    def _reload_stream(self):
+        """Hold the connection open and emit an event whenever a file changes."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        seen = self.watcher.version
+        try:
+            while True:
+                current = self.watcher.wait(seen, timeout=20)
+                if current != seen:
+                    seen = current
+                    self.wfile.write(b"data: reload\n\n")
+                else:
+                    self.wfile.write(b": keep-alive\n\n")   # keeps proxies happy
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def send_head(self):
         path = self.translate_path(self.path)
 
@@ -122,9 +233,8 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         except OSError:
             return super().send_head()
 
-        body = raw.decode("utf-8", errors="replace")
-        for pattern, replacement in self.rules:
-            body = pattern.sub(replacement, body)
+        body = transform_html(raw.decode("utf-8", errors="replace"),
+                              self.rules, inject_reload=bool(self.watcher))
         encoded = body.encode("utf-8")
 
         self.send_response(200)
@@ -135,19 +245,33 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         return io.BytesIO(encoded)
 
     def log_message(self, fmt, *args):
+        if RELOAD_PATH in (args[0] if args else ""):
+            return          # the reload stream would otherwise log constantly
         sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
 
+class ThreadingServer(socketserver.ThreadingTCPServer):
+    # Threaded because the reload stream holds a connection open; a serial
+    # server would block every other request behind it.
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
-          proxy_origin=None, proxy_cache=True):
+          proxy_origin=None, proxy_cache=True, reload=True):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
     MirrorHandler.rules = load_rules(rules_file)
     MirrorHandler.proxy_origin = proxy_origin
     MirrorHandler.proxy_cache = proxy_cache
+
+    watcher = None
+    if reload and MirrorHandler.overrides:
+        watcher = Watcher([MirrorHandler.overrides]).start()
+    MirrorHandler.watcher = watcher
+
     handler = functools.partial(MirrorHandler, directory=os.path.abspath(site))
 
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((host, port), handler) as httpd:
+    with ThreadingServer((host, port), handler) as httpd:
         print("Serving   %s" % site)
         if MirrorHandler.overrides:
             print("Overrides %s" % MirrorHandler.overrides)
@@ -155,6 +279,8 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         if proxy_origin:
             print("Proxy     %s%s" % (proxy_origin,
                                       " (caching)" if proxy_cache else " (no cache)"))
+        print("Reload    %s" % ("on - edits in overrides/ refresh the browser"
+                                if watcher else "off"))
         print("URL       http://%s:%d/" % (host, port))
         print("Ctrl-C to stop.")
         try:

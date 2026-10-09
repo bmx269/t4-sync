@@ -99,6 +99,36 @@ Pushing is **disabled per environment by default** — set `"push_allowed": true
 in `.t4/config.json` for the environments you want writable, and leave
 production off unless you mean it.
 
+### The editing loop
+
+```sh
+t4 serve                              # start the local site
+t4 edit media/css/site.css            # copy a file in to edit it
+# edit overrides/media/css/site.css — the browser refreshes on save
+t4 status                             # what is pending, both file sets
+```
+
+`t4 edit` copies a mirrored file into `overrides/` at the right path, so you
+do not have to reproduce a deep path by hand. `--list` shows what is
+overridden, `--revert` drops one, and a wrong path suggests near matches.
+
+`t4 serve` watches `overrides/` and refreshes the browser on save, via an
+injected server-sent-events listener. `--no-reload` turns it off.
+
+**Two file sets, two deploy paths.** This is the thing to understand:
+
+| Edited in | Holds | Deployed by |
+|---|---|---|
+| `overrides/` | Published assets: CSS, JS, images | **The T4 UI.** These are Media Library items and the REST API exposes no media endpoint — about a dozen names and casings were tried, all 500. `t4 push` cannot deploy them. |
+| `t4-source/` | Page layouts, content types, navigation | `t4 push` |
+
+`t4 status` shows both together, because the easy mistake is pushing a layout
+and forgetting the stylesheet it depends on.
+
+The asymmetry is worth knowing early: CSS and JS can be developed locally with
+instant feedback but deploy by hand, while layouts deploy automatically but
+cannot be previewed locally at all (see *What this does not do*).
+
 ### Checking an instance
 
 ```sh
