@@ -79,5 +79,7 @@ def run_serve(args, project):
                     source_dir=str(project.env_dir(env_name)),
                     env_name=env_name,
                     inspect="off" if args.no_inspect else args.inspect,
-                    component_markers=project.config.get("component_markers"))
+                    component_markers=project.config.get("component_markers"),
+                    preview_edits=not args.no_preview,
+                    span_markers=project.config.get("span_markers"))
     return 0

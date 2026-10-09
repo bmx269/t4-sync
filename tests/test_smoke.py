@@ -15,6 +15,7 @@ from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
                               LayoutIndex, annotate_components,
                               build_comment, build_panel)
+from t4sync.render import align, preview, render   # noqa: E402
 from t4sync.serve import RELOAD_PATH, Watcher, load_rules, transform_html  # noqa: E402
 
 
@@ -285,6 +286,58 @@ class TestComponentAnnotation(unittest.TestCase):
         page = "<!-- ct:322 Contact Footer -->"
         out, n = annotate_components(page, {}, env_name="test")
         self.assertEqual((out, n), (page, 0))
+
+
+class TestPreview(unittest.TestCase):
+    """Reconstructing a page from layout source plus its published output."""
+
+    SRC = ('<!--start-->\n<t4 type="navigation" id="1" />\n'
+           '<t4 type="navigation" id="2" />\n<!--end-->')
+    PAGE = ('<html><!--start-->\n'
+            '<!-- n:One (1) --><nav>ONE</nav><!-- /n:1 -->'
+            '<!-- n:Two (2) --><nav>TWO</nav><!-- /n:2 -->'
+            '\n<!--end--></html>')
+
+    def test_unedited_source_rebuilds_the_page_exactly(self):
+        """The strictest check: a no-op edit must be byte-identical."""
+        out, problems = preview(self.PAGE, self.SRC, self.SRC)
+        self.assertEqual(out, self.PAGE)
+        self.assertEqual(problems, [])
+
+    def test_wrapping_a_separable_tag(self):
+        edited = self.SRC.replace('<t4 type="navigation" id="1" />',
+                                  '<div class="x"><t4 type="navigation" id="1" /></div>')
+        out, problems = preview(self.PAGE, self.SRC, edited)
+        self.assertIn('<div class="x"><!-- n:One (1) --><nav>ONE</nav><!-- /n:1 --></div>', out)
+        self.assertIn("<nav>TWO</nav>", out)
+        self.assertEqual(problems, [])
+
+    def test_inseparable_run_is_reported_not_hidden(self):
+        """Tags with no markers share one span; wrapping one wraps them all."""
+        page = "<html><!--start-->\n<nav>ONE</nav><nav>TWO</nav>\n<!--end--></html>"
+        edited = self.SRC.replace('<t4 type="navigation" id="2" />',
+                                  '<div class="x"><t4 type="navigation" id="2" /></div>')
+        out, problems = preview(page, self.SRC, edited)
+        kinds = [kind for kind, _detail in problems]
+        self.assertIn("inseparable", kinds)
+
+    def test_a_new_tag_cannot_be_previewed(self):
+        edited = self.SRC.replace("<!--end-->",
+                                  '<t4 type="navigation" id="99" />\n<!--end-->')
+        out, problems = preview(self.PAGE, self.SRC, edited)
+        self.assertIn("unpublished", [kind for kind, _d in problems])
+        self.assertIn("cannot be previewed", out)
+
+    def test_literal_only_edits_apply_cleanly(self):
+        edited = self.SRC.replace("<!--start-->", '<!--start--><h1>Added</h1>')
+        out, problems = preview(self.PAGE, self.SRC, edited)
+        self.assertIn("<h1>Added</h1>", out)
+        self.assertEqual(problems, [])
+
+    def test_unalignable_source_raises(self):
+        from t4sync.render import Unalignable
+        with self.assertRaises(Unalignable):
+            align("<!--nowhere-in-the-page-->", self.PAGE)
 
 
 class TestWatcher(unittest.TestCase):

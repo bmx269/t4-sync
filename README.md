@@ -251,6 +251,62 @@ The asymmetry is worth knowing early: CSS and JS can be developed locally with
 instant feedback but deploy by hand, while layouts deploy automatically but
 cannot be previewed locally at all (see *What this does not do*).
 
+### Previewing a layout edit
+
+Edits to a pulled page layout show up on the local site without a publish
+cycle:
+
+```sh
+t4 serve
+# edit t4-source/<env>/pageLayout/<name>.footer.html
+# reload - the change is there
+```
+
+This is not rendering. T4 tags are evaluated by T4, and nothing local can run
+them. But the mirrored page *is* the result of running them, so the two can be
+aligned:
+
+```
+source:   <lit A>  <t4 .../>  <lit B>  <t4 .../>  <lit C>
+output:   <lit A>  ...????..  <lit B>  ...????..  <lit C>
+```
+
+The literal markup appears verbatim in the published page, so whatever sits
+between those anchors is what the tags produced. Capture it, then re-emit the
+*edited* source with it substituted back. Wrapping a tag in a div, changing a
+class, adding or reordering markup — all apply locally.
+
+A no-op edit reproduces the page byte-for-byte; that invariant is tested.
+
+#### What it will tell you it cannot do
+
+**A tag with no published output** — a new tag, or an existing one pointed at a
+different id — has never produced anything to reuse:
+
+```html
+<!-- T4 PREVIEW: <t4 type="navigation" id="99" /> has no published output to
+     reuse, so it cannot be previewed -->
+```
+
+**Tags whose output cannot be told apart.** Where several tags sit together
+with no literal markup between them, their output is one undivided run. If the
+site's layouts bracket a tag's output with comments, that tag can be isolated
+(the defaults recognise `<!-- n:Name (ID) -->…<!-- /n:ID -->` and the `ct:`
+equivalent; set `span_markers` in `.t4/config.json` for other conventions).
+Otherwise, placing markup around one tag of the run would silently wrap all of
+them, so it says so:
+
+```html
+<!--   WARNING: markup was placed around tags whose individual output cannot be separated -->
+<!--   affected: <t4 type="navigation" id="276" />, <t4 type="media" id="1094476" ... -->
+<!--   what you see wraps the whole run, which is not what T4 will publish -->
+```
+
+That warning is the point. A preview that quietly differs from what T4 will
+publish is worse than no preview.
+
+`--no-preview` serves the mirror exactly as published.
+
 ### Checking an instance
 
 ```sh

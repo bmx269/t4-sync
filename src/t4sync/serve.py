@@ -29,7 +29,9 @@ import threading
 import time
 
 from .inspector import (ContentTypeIndex, InspectorContext, LayoutIndex,
+                        LAYOUT_ID_META, LAYOUT_META,
                         annotate_components, build_comment, build_panel)
+from .render import PreviewEngine, status_comment
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -172,6 +174,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
     proxy_cache = True
     watcher = None
     inspector = None
+    previewer = None
 
     def translate_path(self, path):
         mirrored = super().translate_path(path)
@@ -256,7 +259,8 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         # HTML needs rewriting when there are rules, and needs the reload
         # script whenever the watcher is running. Gating on rules alone meant
         # live reload silently did nothing for a project with no rewrites.
-        needs_transform = bool(self.rules) or bool(self.watcher) or bool(self.inspector)
+        needs_transform = (bool(self.rules) or bool(self.watcher)
+                           or bool(self.inspector) or bool(self.previewer))
         if not (needs_transform and path.endswith((".html", ".htm"))):
             return super().send_head()
         try:
@@ -269,9 +273,25 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         if self.inspector:
             inspector = self.inspector._replace(mirror_dir=self.directory,
                                                 url_path=self.path)
-        body = transform_html(raw.decode("utf-8", errors="replace"),
-                              self.rules, inject_reload=bool(self.watcher),
+        body = raw.decode("utf-8", errors="replace")
+
+        # Apply locally-edited layouts before anything else looks at the page,
+        # so the debug output describes what is actually being served.
+        preview_status = None
+        if self.previewer:
+            name = LAYOUT_META.search(body)
+            found_id = LAYOUT_ID_META.search(body)
+            body, preview_status = self.previewer.apply(
+                body, name.group(1) if name else None,
+                found_id.group(1) if found_id else None)
+
+        body = transform_html(body, self.rules,
+                              inject_reload=bool(self.watcher),
                               inspector=inspector)
+        if preview_status:
+            body = status_comment(
+                preview_status,
+                self.inspector.env_name if self.inspector else None) + body
         encoded = body.encode("utf-8")
 
         self.send_response(200)
@@ -297,20 +317,32 @@ class ThreadingServer(socketserver.ThreadingTCPServer):
 def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
           proxy_origin=None, proxy_cache=True, reload=True,
           source_dir=None, env_name=None, inspect="both",
-          component_markers=None):
+          component_markers=None, preview_edits=True, span_markers=None):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
     MirrorHandler.rules = load_rules(rules_file)
     MirrorHandler.proxy_origin = proxy_origin
     MirrorHandler.proxy_cache = proxy_cache
 
+    index = LayoutIndex.from_project_dir(source_dir)
+
+    MirrorHandler.previewer = None
+    if preview_edits and source_dir:
+        engine = PreviewEngine(source_dir, index, span_markers=span_markers,
+                               env_name=env_name)
+        if engine.available:
+            MirrorHandler.previewer = engine
+
     watcher = None
-    if reload and MirrorHandler.overrides:
-        watcher = Watcher([MirrorHandler.overrides]).start()
+    if reload:
+        # Watch the pulled source as well, so editing a layout refreshes the
+        # browser the same way editing an override does.
+        watched = [p for p in (MirrorHandler.overrides,
+                               source_dir if preview_edits else None) if p]
+        if watched:
+            watcher = Watcher(watched).start()
     MirrorHandler.watcher = watcher
 
-    index = None
     if inspect and inspect != "off":
-        index = LayoutIndex.from_project_dir(source_dir)
         MirrorHandler.inspector = InspectorContext(
             index=index, overrides_dir=MirrorHandler.overrides,
             env_name=env_name, mode=inspect,
@@ -334,7 +366,10 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
                                       " (caching)" if proxy_cache else " (no cache)"))
         print("Reload    %s" % ("on - edits in overrides/ refresh the browser"
                                 if watcher else "off"))
-        if index is not None:
+        print("Preview   %s" % ("on - local layout edits are applied to served pages"
+                                if MirrorHandler.previewer else
+                                "off (run `t4 pull` to enable)"))
+        if inspect and inspect != "off":
             known = len(index.by_id)
             print("Inspector %s - %s" % (inspect,
                   ("%d page layout(s) mapped" % known if known else
