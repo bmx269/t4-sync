@@ -21,9 +21,9 @@ import re
 InspectorContext = collections.namedtuple(
     "InspectorContext",
     "index overrides_dir env_name mirror_dir url_path mode "
-    "content_types component_markers resolver")
+    "content_types component_markers resolver sections")
 InspectorContext.__new__.__defaults__ = (None, None, None, "/", "both",
-                                         None, None, None)
+                                         None, None, None, None)
 
 LAYOUT_META = re.compile(
     r'<meta\s+name=["\']t4-layout["\']\s+content=["\']([^"\']*)["\']', re.I)
@@ -247,7 +247,7 @@ def _safe_comment(text):
 
 
 def build_comment(body, index, overrides_dir=None, env_name=None,
-                  mirror_dir=None, url_path="/", resolver=None):
+                  mirror_dir=None, url_path="/", resolver=None, sections=None):
     """Drupal-style theme-debug comments, emitted into the served HTML.
 
     Mirrors how Twig debug marks up a page: the hook, the candidate templates
@@ -275,15 +275,29 @@ def build_comment(body, index, overrides_dir=None, env_name=None,
 
     note = None
     files = []
-    if resolver is not None:
-        record, why = resolver.resolve(body, layout_name, layout_id)
-        if record:
-            files = index.files_for(record["id"])
-            note = "identified as %s (%s)" % (record.get("name"), why)
+
+    # T4's own assignment, when the section tree has been pulled. Exact, so it
+    # is preferred over inferring the layout from the page.
+    if sections is not None and getattr(sections, "available", False):
+        layout_id_exact, section = sections.resolve(url_path)
+        if layout_id_exact:
+            files = index.files_for(layout_id_exact)
+            note = ("assigned in T4 to section %s (%s)"
+                    % (section.get("id"), section.get("name")))
+
+    # Only fall back while nothing has been resolved. An earlier version made
+    # the fallback an `else` of the resolver check, so an exact answer from the
+    # section tree was overwritten by the ambiguous name lookup.
+    if not files:
+        if resolver is not None:
+            record, why = resolver.resolve(body, layout_name, layout_id)
+            if record:
+                files = index.files_for(record["id"])
+                note = "identified as %s (%s)" % (record.get("name"), why)
+            else:
+                note = why
         else:
-            note = why
-    else:
-        files, note = index.resolve(layout_name, layout_id)
+            files, note = index.resolve(layout_name, layout_id)
 
     candidates = ([] if files else
                   sorted(n for n in index.by_name
@@ -387,7 +401,7 @@ def child_layouts(mirror_dir, url_path, limit=25):
 
 
 def build_panel(body, index, overrides_dir=None, env_name=None,
-                mirror_dir=None, url_path="/", resolver=None):
+                mirror_dir=None, url_path="/", resolver=None, sections=None):
     """Return the overlay markup for this page, or '' if there is nothing to say."""
     layout = LAYOUT_META.search(body)
     layout_id = LAYOUT_ID_META.search(body)
@@ -401,9 +415,18 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
             label += '  <span class="t4i-dim">#%s</span>' % _esc(layout_id)
         rows.append(("Page layout", label, None))
 
-        if resolver is not None:
+        files, note = [], None
+        # T4's own assignment when the section tree has been pulled: exact,
+        # so preferred over inferring the layout from the page.
+        if sections is not None and getattr(sections, "available", False):
+            exact_id, section = sections.resolve(url_path)
+            if exact_id:
+                files = index.files_for(exact_id)
+                note = "assigned in T4 to section %s" % _esc(section.get("id"))
+
+        if not files and resolver is not None:
             record, why = resolver.resolve(body, layout_name, layout_id)
-            files = index.files_for(record["id"]) if record else []
+            files = index.files_for(record["id"]) if record else files
             # Plain text: the caller escapes it before it reaches the page.
             note = ("%s (%s)" % (record.get("name"), why)) if record else why
         else:

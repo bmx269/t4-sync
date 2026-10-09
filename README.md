@@ -186,7 +186,28 @@ A content layout's *template* still cannot be linked, because the REST API does
 not expose Content Layouts at all — the link is to the content type's
 definition.
 
-#### How the layout is identified
+#### Exact resolution
+
+```sh
+t4 sections --root <site-root-id>     # walk the tree, record each assignment
+```
+
+T4 knows exactly which layout each section uses — every section carries, per
+channel, `{"pageLayout": 1100982, "inheritedPageLayout": 1100998}`. With that
+pulled, the inspector reports the real assignment instead of inferring it:
+
+```html
+<!-- NOTE: assigned in T4 to section 228911 (Applied Business Technology) -->
+<!-- SOURCE FILES:
+   x t4-source/test/pageLayout/u-webpage.production.header.html
+-->
+```
+
+Two requests per section, so it is a separate, opt-in pull. It is resumable:
+`--limit` stops early and re-running continues from the cache. Without it, the
+inference below is used instead.
+
+#### How the layout is identified when there is no section map
 
 T4 publishes a layout *name* into nearly every page, but the name need not
 identify one layout: a site can publish `u_webpage` from any of several

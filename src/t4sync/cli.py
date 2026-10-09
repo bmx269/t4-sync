@@ -6,7 +6,8 @@ from . import __version__
 from .config import Project
 from .errors import T4Error
 from .commands import (compare, diff, doctor, edit, env, init, layouts,
-                       preview, pull, push, site, status, sync, token)
+                       preview, pull, push, sections, site, status, sync,
+                       token)
 
 
 def build_parser():
@@ -92,6 +93,13 @@ def build_parser():
     sp.add_argument("--include-documents", action="store_true",
                     help="also download PDFs and Office files")
 
+    sp = add("sections", "Walk the section tree, recording each page layout.")
+    sp.add_argument("--env", "-e")
+    sp.add_argument("--root", type=int, help="section id to start from")
+    sp.add_argument("--limit", type=int, help="stop after this many sections")
+    sp.add_argument("--restart", action="store_true", help="ignore the cache")
+    sp.add_argument("--timeout", type=int, default=60)
+
     sp = add("compare", "Check the local server matches the live site.")
     sp.add_argument("page", nargs="?", help="page path (default: the home page)")
     sp.add_argument("--env", "-e")
@@ -157,6 +165,7 @@ HANDLERS = {
     "status": (status.run, True),
     "diff": (diff.run, True),
     "push": (push.run, True),
+    "sections": (sections.run, True),
     "compare": (compare.run, True),
     "preview": (preview.run, True),
     "layouts": (layouts.run, True),

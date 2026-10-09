@@ -32,6 +32,7 @@ from .inspector import (ContentTypeIndex, InspectorContext, LayoutIndex,
                         LAYOUT_ID_META, LAYOUT_META,
                         annotate_components, build_comment, build_panel, fence)
 from .render import PreviewEngine, status_comment
+from .sections import SectionLayouts
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -69,7 +70,8 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
                       env_name=inspector.env_name,
                       mirror_dir=inspector.mirror_dir,
                       url_path=inspector.url_path,
-                      resolver=inspector.resolver)
+                      resolver=inspector.resolver,
+                      sections=inspector.sections)
         if inspector.mode in ("comments", "both"):
             prefix = fence(build_comment(body, inspector.index, **kwargs))
             body, marked = annotate_components(
@@ -378,6 +380,7 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         MirrorHandler.inspector = InspectorContext(
             index=index, overrides_dir=MirrorHandler.overrides,
             env_name=env_name, mode=inspect,
+            sections=SectionLayouts.from_env_dir(source_dir),
             resolver=(MirrorHandler.previewer.resolver()
                       if MirrorHandler.previewer else None),
             content_types={

@@ -20,6 +20,7 @@ from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
 from t4sync.compare import read_field, remote_path, write_field  # noqa: E402
 from t4sync.contentlayout import format_key, layout_name  # noqa: E402
+from t4sync.sections import SectionLayouts, by_url_path, layout_for  # noqa: E402
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 
@@ -489,6 +490,61 @@ class TestContentLayout(unittest.TestCase):
         self.assertEqual(layout_name(rec), "text/box")
         self.assertEqual(layout_name({"id": 5, "name": "fallback", "elements": {}}),
                          "fallback")
+
+
+class TestSectionLayouts(unittest.TestCase):
+    """T4's own section-to-layout assignment, which beats inferring it."""
+
+    SECTIONS = {
+        "10": {"id": 10, "name": "About", "path": "/Root/about",
+               "channels": [{"id": 13, "pageLayout": 100,
+                             "inheritedPageLayout": 200}]},
+        "11": {"id": 11, "name": "Inherits", "path": "/Root/inherits",
+               "channels": [{"id": 13, "pageLayout": None,
+                             "inheritedPageLayout": 200}]},
+    }
+
+    def test_own_assignment_wins_over_inherited(self):
+        self.assertEqual(layout_for(self.SECTIONS["10"]), 100)
+
+    def test_falls_back_to_inherited(self):
+        self.assertEqual(layout_for(self.SECTIONS["11"]), 200)
+
+    def test_url_indexed_with_and_without_the_site_root(self):
+        """Section paths are rooted at the CMS tree, URLs at the channel."""
+        index = by_url_path(self.SECTIONS)
+        self.assertIn("root/about", index)
+        self.assertIn("about", index)
+
+    def test_resolve_a_published_url(self):
+        s = SectionLayouts(self.SECTIONS)
+        self.assertTrue(s.available)
+        layout_id, section = s.resolve("/about/")
+        self.assertEqual(layout_id, 100)
+        self.assertEqual(section["name"], "About")
+
+    def test_unknown_url(self):
+        self.assertEqual(SectionLayouts(self.SECTIONS).resolve("/nope/"), (None, None))
+
+    def test_empty_map_is_unavailable(self):
+        self.assertFalse(SectionLayouts({}).available)
+
+
+class TestExactBeatsInference(unittest.TestCase):
+    def test_section_assignment_is_not_overwritten_by_the_name_lookup(self):
+        """The fallback used to be an `else`, clobbering the exact answer."""
+        manifest = {"pageLayout/exact.header.html": {
+            "endpoint": "pageLayout", "id": 100, "field": "headerCode",
+            "name": "u_webpage.production"}}
+        sections = SectionLayouts({"10": {
+            "id": 10, "name": "About", "path": "/Root/about",
+            "channels": [{"id": 13, "pageLayout": 100}]}})
+        page = '<meta name="t4-layout" content="u_webpage">'
+        out = build_comment(page, LayoutIndex(manifest), env_name="test",
+                            url_path="/about/", sections=sections)
+        self.assertIn("assigned in T4 to section 10", out)
+        self.assertIn("x t4-source/test/pageLayout/exact.header.html", out)
+        self.assertNotIn("SUGGESTIONS", out)
 
 
 class TestWatcher(unittest.TestCase):
