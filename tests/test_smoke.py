@@ -17,7 +17,8 @@ from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
                               build_comment, build_panel, strip_injected)
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
-from t4sync.serve import RELOAD_PATH, Watcher, load_rules, transform_html  # noqa: E402
+from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
+                          rules_for_published_urls, transform_html)
 
 
 class TestExtract(unittest.TestCase):
@@ -437,6 +438,34 @@ class TestWatcher(unittest.TestCase):
             before = watcher._fingerprint()
             (pathlib.Path(tmp) / ".DS_Store").write_text("junk")
             self.assertEqual(before, watcher._fingerprint())
+
+
+class TestDerivedRewrites(unittest.TestCase):
+    """T4 writes absolute production URLs into test pages; they must map local."""
+
+    def test_host_is_rewritten_to_a_local_path(self):
+        rules = rules_for_published_urls(["https://www.example.edu"])
+        out = transform_html('<a href="https://www.example.edu/a/b">x</a>', rules)
+        self.assertIn('href="/a/b"', out)
+
+    def test_http_and_https_both_match(self):
+        rules = rules_for_published_urls(["https://www.example.edu"])
+        out = transform_html('<img src="http://www.example.edu/i.png">', rules)
+        self.assertIn('src="/i.png"', out)
+
+    def test_other_hosts_are_left_alone(self):
+        rules = rules_for_published_urls(["https://www.example.edu"])
+        page = '<a href="https://blogs.example.edu/p">x</a>'
+        self.assertEqual(transform_html(page, rules), page)
+
+    def test_a_dot_in_the_host_is_not_a_wildcard(self):
+        rules = rules_for_published_urls(["https://www.example.edu"])
+        page = '<a href="https://wwwXexampleYedu/p">x</a>'
+        self.assertEqual(transform_html(page, rules), page)
+
+    def test_empty_config_yields_no_rules(self):
+        self.assertEqual(rules_for_published_urls([]), [])
+        self.assertEqual(rules_for_published_urls(None), [])
 
 
 class TestProject(unittest.TestCase):

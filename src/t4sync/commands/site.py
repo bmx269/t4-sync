@@ -81,5 +81,8 @@ def run_serve(args, project):
                     inspect="off" if args.no_inspect else args.inspect,
                     component_markers=project.config.get("component_markers"),
                     preview_edits=not args.no_preview,
-                    span_markers=project.config.get("span_markers"))
+                    span_markers=project.config.get("span_markers"),
+                    published_urls=[e.get("published_url")
+                                    for e in project.config.get("environments", {}).values()
+                                    if e.get("published_url")])
     return 0

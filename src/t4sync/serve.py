@@ -148,6 +148,25 @@ class Watcher:
             return self.version
 
 
+def rules_for_published_urls(urls):
+    """Rewrite absolute URLs of known channels to local paths.
+
+    T4 writes absolute URLs into published pages, and they usually point at
+    production even in a test channel. Those hosts are typically unreachable
+    from a workstation, so without this the stylesheets never arrive and the
+    page renders unstyled -- which looks like a rendering fault rather than a
+    missing asset.
+    """
+    rules = []
+    for url in urls or []:
+        host = str(url).split("//", 1)[-1].split("/", 1)[0].strip()
+        if not host:
+            continue
+        pattern = r"https?://%s/" % re.escape(host)
+        rules.append((re.compile(pattern), "/"))
+    return rules
+
+
 def load_rules(path):
     rules = []
     if not path or not os.path.isfile(path):
@@ -318,9 +337,12 @@ class ThreadingServer(socketserver.ThreadingTCPServer):
 def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
           proxy_origin=None, proxy_cache=True, reload=True,
           source_dir=None, env_name=None, inspect="both",
-          component_markers=None, preview_edits=True, span_markers=None):
+          component_markers=None, preview_edits=True, span_markers=None,
+          published_urls=None):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
-    MirrorHandler.rules = load_rules(rules_file)
+    # File rules first, so a project can override the derived ones.
+    derived = rules_for_published_urls(published_urls)
+    MirrorHandler.rules = load_rules(rules_file) + derived
     MirrorHandler.proxy_origin = proxy_origin
     MirrorHandler.proxy_cache = proxy_cache
 
@@ -363,7 +385,10 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         print("Serving   %s" % site)
         if MirrorHandler.overrides:
             print("Overrides %s" % MirrorHandler.overrides)
-        print("Rewrites  %d rule(s) applied to HTML" % len(MirrorHandler.rules))
+        print("Rewrites  %d rule(s) applied to HTML%s"
+              % (len(MirrorHandler.rules),
+                 " (%d derived from configured channels)" % len(derived)
+                 if derived else ""))
         if proxy_origin:
             print("Proxy     %s%s" % (proxy_origin,
                                       " (caching)" if proxy_cache else " (no cache)"))

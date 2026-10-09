@@ -373,11 +373,21 @@ t4 serve                    # http://127.0.0.1:8321/
 
 The mirror saves files **verbatim**. They are byte-identical to what T4
 published, so markup copied out of them pastes straight back into a layout.
-URL rewriting happens at serve time instead, from `.t4/rewrites.conf`:
+URL rewriting happens at serve time instead.
+
+**Rules for your own channels are derived automatically** from the
+`published_url` of each configured environment. T4 writes absolute URLs into
+published pages, and they usually point at production even in a test channel —
+hosts that are typically unreachable from a workstation. Without rewriting them
+the stylesheets never arrive and the page renders unstyled, which looks like a
+rendering fault rather than a missing asset.
+
+Add anything else to `.t4/rewrites.conf`; file rules are applied before the
+derived ones:
 
 ```
 # <regex><TAB><replacement>
-https?://www\.example\.edu/	/
+https?://legacy\.example\.edu/	/
 ```
 
 Documents (PDF, Office) are skipped by default; `--include-documents` keeps
