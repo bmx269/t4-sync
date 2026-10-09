@@ -281,19 +281,24 @@ than one overwriting the other.
 If a page has no `t4-layout` meta, or the layout has not been pulled yet, the
 panel says so rather than showing nothing. `--no-inspect` turns it off.
 
-**Two file sets, two deploy paths.** This is the thing to understand:
+**One file to edit, and it is the one that deploys.** A site's CSS and JS are
+Media Library items whose content T4 serves verbatim, so the file pulled into
+`t4-source/media/` is the same bytes the site publishes. `t4 serve` serves that
+file in place of the mirrored copy, so:
 
-| Edited in | Holds | Deployed by |
-|---|---|---|
-| `overrides/` | Published assets: CSS, JS, images | **The T4 UI.** These are Media Library items and the REST API exposes no media endpoint — about a dozen names and casings were tried, all 500. `t4 push` cannot deploy them. |
-| `t4-source/` | Page layouts, content types, navigation | `t4 push` |
+```sh
+t4 serve
+# edit t4-source/<env>/media/site.css   -> the browser reloads
+t4 diff media/site.css                  -> shows the change
+t4 push media/site.css                  -> deploys it
+```
 
-`t4 status` shows both together, because the easy mistake is pushing a layout
-and forgetting the stylesheet it depends on.
+No second copy to keep in step, and no manual upload.
 
-The asymmetry is worth knowing early: CSS and JS can be developed locally with
-instant feedback but deploy by hand, while layouts deploy automatically but
-cannot be previewed locally at all (see *What this does not do*).
+`overrides/` remains for shadowing a mirrored file you have *not* pulled — a
+quick experiment on something that is not Media Library source. Overrides are
+local-only and are never deployed; `--no-media-source` turns the behaviour off
+if you want the mirror served as-is.
 
 ### Previewing a layout edit
 

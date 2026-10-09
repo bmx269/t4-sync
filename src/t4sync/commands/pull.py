@@ -1,5 +1,6 @@
 """t4 pull -- fetch layout source from T4 onto disk."""
 import json
+import os
 import re
 import urllib.error
 
@@ -129,6 +130,46 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
     return failures
 
 
+def prune(outdir, endpoint, manifest, previous, root):
+    """Remove files this pull no longer produces.
+
+    Only files the previous pull wrote, and only where the contents still
+    match what it wrote: anything edited locally is left alone, because a
+    changed file may be work in progress rather than an orphan.
+    """
+    from ..extract import locally_modified
+
+    wanted = {rel for rel in manifest if rel.split("/", 1)[0] == endpoint}
+    removed = 0
+    for path in sorted(outdir.glob("*")):
+        if not path.is_file():
+            continue
+        rel = "%s/%s" % (endpoint, path.name)
+        if rel in wanted:
+            continue
+        prior = previous.get(rel, {}).get("sha")
+        if not prior:
+            continue                      # not ours; leave it
+        if locally_modified(path, prior):
+            continue                      # edited since; leave it
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
+def media_filename(name, media_id):
+    """A safe filename for a media item, keeping its extension."""
+    base = os.path.basename(str(name or "").strip()) or str(media_id)
+    base = re.sub(r"[^\w.\- ]", "", base).strip().replace(" ", "-")
+    base = base.lstrip(".") or str(media_id)
+    if "." not in base:
+        base += ".txt"
+    return base
+
+
 def pull_media(client, root, manifest, env, previous, force=False):
     """Text media items -- the code snippets T4 sites keep in the Media Library.
 
@@ -193,7 +234,11 @@ def pull_media(client, root, manifest, env, previous, force=False):
                 continue          # binary media: nothing to version here
             records.append(record)
 
-            rel = "media/%s.html" % slug(record.get("name"), media_id)
+            # The media item's own name carries its extension (v8.css,
+            # app.js), so use it rather than slugging it into a .html file --
+            # the extension is what gives an editor its syntax highlighting,
+            # and what makes the file recognisable as the asset it is.
+            rel = "media/%s" % media_filename(record.get("name"), media_id)
             target = root / rel
             prior = previous.get(rel, {}).get("sha")
             if not force and prior and locally_modified(target, prior):
@@ -212,11 +257,15 @@ def pull_media(client, root, manifest, env, previous, force=False):
     finally:
         bar.close()
 
+    removed = prune(outdir, "media", manifest, previous, root)
+
     write_text(root / "_raw" / "media.json",
                json.dumps(records, indent=2, ensure_ascii=False))
     parts = ["%d source" % written]
     if kept:
         parts.append("%d kept (edited locally)" % kept)
+    if removed:
+        parts.append("%d stale removed" % removed)
     if failures:
         parts.append("%d fetch failure(s)" % failures)
     print("  %-13s %d referenced, %d text: %s"

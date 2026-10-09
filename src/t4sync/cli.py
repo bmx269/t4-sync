@@ -151,6 +151,8 @@ def build_parser():
                          "source (Drupal theme-debug style), both, or neither")
     sp.add_argument("--no-inspect", action="store_true",
                     help="same as --inspect off")
+    sp.add_argument("--no-media-source", action="store_true",
+                    help="serve mirrored assets, not the pulled media source")
     sp.add_argument("--no-preview", action="store_true",
                     help="serve the mirror as published, ignoring local layout edits")
 

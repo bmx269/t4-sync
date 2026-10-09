@@ -33,7 +33,7 @@ from .inspector import (ContentTypeIndex, InspectorContext, LayoutIndex,
                         annotate_components, annotate_content_items,
                         build_comment, build_panel, fence)
 from .render import PreviewEngine, status_comment
-from .sections import ContentItems, SectionLayouts
+from .sections import ContentItems, MediaSources, SectionLayouts
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -201,6 +201,7 @@ def load_rules(path):
 
 class MirrorHandler(http.server.SimpleHTTPRequestHandler):
     overrides = None
+    media_sources = None
     rules = ()
     proxy_origin = None
     proxy_cache = True
@@ -210,6 +211,20 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
 
     def translate_path(self, path):
         mirrored = super().translate_path(path)
+
+        # The pulled media source outranks the mirrored copy: it is the same
+        # bytes, and editing it is what `t4 push` deploys. An override still
+        # wins over both, since that is an explicit local choice.
+        if self.media_sources:
+            source = self.media_sources.path_for(path)
+            if source:
+                if self.overrides:
+                    rel = os.path.relpath(mirrored, self.directory)
+                    candidate = os.path.join(self.overrides, rel)
+                    if os.path.isfile(candidate):
+                        return candidate
+                return source
+
         if self.overrides:
             rel = os.path.relpath(mirrored, self.directory)
             candidate = os.path.join(self.overrides, rel)
@@ -359,7 +374,7 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
           proxy_origin=None, proxy_cache=True, reload=True,
           source_dir=None, env_name=None, inspect="both",
           component_markers=None, preview_edits=True, span_markers=None,
-          published_urls=None):
+          published_urls=None, serve_media_source=True):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
     # File rules first, so a project can override the derived ones.
     derived = rules_for_published_urls(published_urls)
@@ -369,6 +384,8 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
 
     index = LayoutIndex.from_project_dir(source_dir)
 
+    MirrorHandler.media_sources = (MediaSources.from_env_dir(source_dir)
+                                   if serve_media_source else None)
     MirrorHandler.previewer = None
     if preview_edits and source_dir:
         engine = PreviewEngine(source_dir, index, span_markers=span_markers,
@@ -381,7 +398,8 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         # Watch the pulled source as well, so editing a layout refreshes the
         # browser the same way editing an override does.
         watched = [p for p in (MirrorHandler.overrides,
-                               source_dir if preview_edits else None) if p]
+                               source_dir if (preview_edits or serve_media_source)
+                               else None) if p]
         if watched:
             watcher = Watcher(watched).start()
     MirrorHandler.watcher = watcher
@@ -415,6 +433,9 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         if proxy_origin:
             print("Proxy     %s%s" % (proxy_origin,
                                       " (caching)" if proxy_cache else " (no cache)"))
+        if MirrorHandler.media_sources and MirrorHandler.media_sources.available:
+            print("Media     %d asset(s) served from t4-source, not the mirror"
+                  % len(MirrorHandler.media_sources.by_name))
         print("Reload    %s" % ("on - edits in overrides/ refresh the browser"
                                 if watcher else "off"))
         print("Preview   %s" % ("on - local layout edits are applied to served pages"

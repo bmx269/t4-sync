@@ -2,13 +2,12 @@
 
 A T4 project is edited in two places that behave differently:
 
-  overrides/   published assets (CSS, JS, images). These live in the T4 Media
-               Library. The REST API exposes no media endpoint, so they are
-               deployed by uploading through the T4 UI -- this tool can show
-               you what changed but cannot push it.
+  t4-source/   everything T4 stores: page layouts, content layouts, content
+               types, navigation, and the Media Library items that hold the
+               site's CSS and JS. All deployed with `t4 push`.
 
-  t4-source/   layout source (page layouts, content types, navigation).
-               Deployed with `t4 push`.
+  overrides/   optional local shadowing of mirrored files, for trying
+               something without touching the source. Never deployed.
 
 Showing them together is the point: otherwise it is easy to push layouts and
 forget the stylesheet they depend on, or the reverse.
@@ -30,16 +29,16 @@ def run(args, project):
     # -- published assets --------------------------------------------------
     overrides = overrides_root(project)
     files = sorted(p for p in overrides.rglob("*") if p.is_file()) if overrides.is_dir() else []
-    print("Published assets (overrides/)")
+    print("Local-only overrides (overrides/)")
     if not files:
         print("  nothing overridden")
     else:
         for path in files:
             print("  M %s" % path.relative_to(overrides))
-        print("\n  %d file(s). These are Media Library items: the REST API has no"
+        print("\n  %d file(s) shadowing the mirror. These are local-only and are"
               % len(files))
-        print("  media endpoint, so upload them through the T4 UI")
-        print("  (Content > Media Library). `t4 push` cannot deploy them.")
+        print("  never deployed. To change an asset for real, edit it under")
+        print("  t4-source/media/ instead -- that is what `t4 push` sends.")
 
     # -- layout source -----------------------------------------------------
     print("\nLayout source (t4-source/%s/)" % env_name)
@@ -93,5 +92,5 @@ def run(args, project):
                   % env_name)
             print("       .t4/config.json if this environment should be writable")
     if files:
-        print("       upload the overrides above via the T4 UI")
+        print("       overrides above are local-only; edit t4-source/media/ to deploy")
     return 0

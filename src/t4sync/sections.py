@@ -197,3 +197,49 @@ class SectionLayouts:
         if section is None:
             return None, None
         return layout_for(section, self.channel_id), section
+
+
+class MediaSources:
+    """Maps a published asset URL to the pulled media file behind it.
+
+    Stylesheets and scripts are Media Library items whose content T4 serves
+    verbatim, so the file pulled into t4-source/media is the same bytes the
+    site publishes. Serving that file instead of the mirrored copy means the
+    thing you edit is also the thing `t4 push` deploys -- no second copy in
+    overrides/ to keep in step, and no separate manual upload.
+    """
+
+    def __init__(self, manifest=None, env_dir=None):
+        self.env_dir = env_dir
+        self.by_name = {}
+        for rel, meta in (manifest or {}).items():
+            if meta.get("endpoint") != "media":
+                continue
+            name = (rel.rsplit("/", 1)[-1] or "").lower()
+            if name:
+                self.by_name.setdefault(name, rel)
+
+    @classmethod
+    def from_env_dir(cls, env_dir):
+        import json
+        import os
+        path = os.path.join(env_dir or "", "_manifest.json")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return cls(json.load(fh), env_dir)
+        except (OSError, ValueError):
+            return cls({}, env_dir)
+
+    @property
+    def available(self):
+        return bool(self.by_name)
+
+    def path_for(self, url_path):
+        """Local file for a published asset URL, or None."""
+        import os
+        name = (url_path or "").split("?")[0].rsplit("/", 1)[-1].lower()
+        rel = self.by_name.get(name)
+        if not rel or not self.env_dir:
+            return None
+        full = os.path.join(self.env_dir, rel)
+        return full if os.path.isfile(full) else None

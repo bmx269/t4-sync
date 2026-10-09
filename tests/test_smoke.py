@@ -21,8 +21,9 @@ from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
 from t4sync.compare import read_field, remote_path, write_field  # noqa: E402
 from t4sync.contentlayout import format_key, layout_name  # noqa: E402
-from t4sync.sections import (ContentItems, SectionLayouts,   # noqa: E402
-                             by_url_path, layout_for)
+from t4sync.commands.pull import media_filename   # noqa: E402
+from t4sync.sections import (ContentItems, MediaSources,   # noqa: E402
+                             SectionLayouts, by_url_path, layout_for)
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 
@@ -577,6 +578,56 @@ class TestContentItemAnnotation(unittest.TestCase):
     def test_no_data_is_a_no_op(self):
         page = '<span id="d.en.980255"></span>'
         self.assertEqual(annotate_content_items(page, ContentItems({})), (page, 0))
+
+
+class TestMediaFilenames(unittest.TestCase):
+    """The media item's own name carries the extension that makes it usable."""
+
+    def test_extension_is_kept(self):
+        self.assertEqual(media_filename("v8.css", 1), "v8.css")
+        self.assertEqual(media_filename("app.js", 1), "app.js")
+
+    def test_extensionless_gets_one(self):
+        self.assertEqual(media_filename("b3-footer-PROD", 1), "b3-footer-PROD.txt")
+
+    def test_path_separators_cannot_escape(self):
+        self.assertEqual(media_filename("../../etc/passwd", 1), "passwd.txt")
+        self.assertEqual(media_filename("/abs/x.css", 1), "x.css")
+
+    def test_empty_falls_back_to_the_id(self):
+        self.assertEqual(media_filename("", 42), "42.txt")
+        self.assertEqual(media_filename(None, 42), "42.txt")
+
+    def test_leading_dots_are_not_hidden_files(self):
+        self.assertFalse(media_filename(".hidden", 1).startswith("."))
+
+
+class TestMediaSources(unittest.TestCase):
+    """Published asset URLs resolve to the pulled source, so one file serves
+    the browser and is what `push` deploys."""
+
+    def test_url_basename_maps_to_the_media_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            media = pathlib.Path(tmp) / "media"
+            media.mkdir()
+            (media / "v8.css").write_text("body{}")
+            manifest = {"media/v8.css": {"endpoint": "media", "id": 1,
+                                         "field": "text"}}
+            sources = MediaSources(manifest, tmp)
+            self.assertTrue(sources.available)
+            self.assertEqual(sources.path_for("/media/web/b3/css/v8.css"),
+                             str(media / "v8.css"))
+            self.assertEqual(sources.path_for("/media/web/b3/css/v8.css?v=2"),
+                             str(media / "v8.css"))
+
+    def test_unknown_asset_is_not_claimed(self):
+        sources = MediaSources({"media/v8.css": {"endpoint": "media"}}, "/nowhere")
+        self.assertIsNone(sources.path_for("/media/other.css"))
+
+    def test_non_media_manifest_entries_are_ignored(self):
+        sources = MediaSources({"pageLayout/x.header.html":
+                                {"endpoint": "pageLayout"}}, "/tmp")
+        self.assertFalse(sources.available)
 
 
 class TestWatcher(unittest.TestCase):
