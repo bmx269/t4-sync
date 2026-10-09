@@ -5,8 +5,8 @@ import sys
 from . import __version__
 from .config import Project
 from .errors import T4Error
-from .commands import (diff, doctor, edit, env, init, pull, push, site,
-                       status, sync, token)
+from .commands import (diff, doctor, edit, env, init, layouts, pull, push,
+                       site, status, sync, token)
 
 
 def build_parser():
@@ -92,6 +92,12 @@ def build_parser():
     sp.add_argument("--include-documents", action="store_true",
                     help="also download PDFs and Office files")
 
+    sp = add("layouts", "Which layout renders what, and where its source is.")
+    sp.add_argument("page", nargs="?", help="a page path, to ask about just that page")
+    sp.add_argument("--env", "-e")
+    sp.add_argument("--all", action="store_true", help="include unused layouts")
+    sp.add_argument("--host-dir", help="which mirror, if several")
+
     sp = add("edit", "Copy a mirrored file into overrides/ to edit it.")
     sp.add_argument("path", nargs="?", help="path as the site serves it")
     sp.add_argument("--list", "-l", action="store_true", help="show current overrides")
@@ -111,8 +117,12 @@ def build_parser():
                     help="proxy without saving fetched files into the mirror")
     sp.add_argument("--no-reload", action="store_true",
                     help="do not refresh the browser when overrides change")
+    sp.add_argument("--inspect", choices=["both", "panel", "comments", "off"],
+                    default="both",
+                    help="layout debug output: an overlay, HTML comments in the "
+                         "source (Drupal theme-debug style), both, or neither")
     sp.add_argument("--no-inspect", action="store_true",
-                    help="do not inject the layout inspector overlay")
+                    help="same as --inspect off")
 
     return p
 
@@ -127,6 +137,7 @@ HANDLERS = {
     "status": (status.run, True),
     "diff": (diff.run, True),
     "push": (push.run, True),
+    "layouts": (layouts.run, True),
     "edit": (edit.run, True),
     "mirror": (site.run_mirror, True),
     "serve": (site.run_serve, True),

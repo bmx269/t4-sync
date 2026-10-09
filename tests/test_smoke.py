@@ -12,7 +12,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
-from t4sync.inspector import LayoutIndex, build_panel   # noqa: E402
+from t4sync.inspector import (InspectorContext, LayoutIndex,   # noqa: E402
+                              build_comment, build_panel)
 from t4sync.serve import RELOAD_PATH, Watcher, load_rules, transform_html  # noqa: E402
 
 
@@ -182,9 +183,57 @@ class TestInspector(unittest.TestCase):
         self.assertIn("not in the local pull", panel)
 
     def test_injected_before_body_close(self):
-        out = transform_html(self.PAGE, inspector=(LayoutIndex(self.MANIFEST), None, "test"))
+        out = transform_html(self.PAGE, inspector=InspectorContext(
+            index=LayoutIndex(self.MANIFEST), env_name="test"))
         self.assertIn("t4-inspector", out)
         self.assertLess(out.index("t4-inspector"), out.index("</body>"))
+
+
+class TestDebugComments(unittest.TestCase):
+    AMBIGUOUS = {
+        "pageLayout/a.header.html": {"endpoint": "pageLayout", "id": 1,
+                                     "field": "headerCode", "name": "u_webpage.production"},
+        "pageLayout/b.header.html": {"endpoint": "pageLayout", "id": 2,
+                                     "field": "headerCode", "name": "u_webpage.webdev"},
+    }
+
+    def test_exact_name_resolves_to_a_file(self):
+        manifest = {"pageLayout/m.header.html": {
+            "endpoint": "pageLayout", "id": 7, "field": "headerCode", "name": "m_open"}}
+        page = '<meta name="t4-layout" content="m_open">'
+        out = build_comment(page, LayoutIndex(manifest), env_name="test")
+        self.assertIn("PAGE LAYOUT: 'm_open'", out)
+        self.assertIn("x t4-source/test/pageLayout/m.header.html", out)
+        self.assertNotIn("SUGGESTIONS", out)
+
+    def test_ambiguous_name_lists_candidates(self):
+        """A published name that maps to several layouts must not be guessed."""
+        page = '<meta name="t4-layout" content="u_webpage">'
+        out = build_comment(page, LayoutIndex(self.AMBIGUOUS), env_name="test")
+        self.assertIn("LAYOUT NAME SUGGESTIONS", out)
+        self.assertIn("u_webpage.production", out)
+        self.assertIn("u_webpage.webdev", out)
+        self.assertNotIn("x t4-source", out)      # nothing claimed as used
+
+    def test_id_wins_over_an_ambiguous_name(self):
+        page = ('<meta name="t4-layout" content="u_webpage">'
+                '<meta name="t4-layout-id" content="2">')
+        out = build_comment(page, LayoutIndex(self.AMBIGUOUS), env_name="test")
+        self.assertIn("x t4-source/test/pageLayout/b.header.html", out)
+        self.assertNotIn("SUGGESTIONS", out)
+
+    def test_untagged_page_says_so(self):
+        out = build_comment("<html><body>x</body></html>", LayoutIndex({}))
+        self.assertIn("no t4-layout meta", out)
+
+    def test_double_hyphen_cannot_break_the_comment(self):
+        manifest = {"pageLayout/x.header.html": {
+            "endpoint": "pageLayout", "id": 1, "field": "headerCode",
+            "name": "weird--name"}}
+        page = '<meta name="t4-layout" content="weird--name">'
+        out = build_comment(page, LayoutIndex(manifest))
+        body = out.split("<!--", 1)[1]
+        self.assertNotIn("--", body.split("-->")[0])
 
 
 class TestWatcher(unittest.TestCase):

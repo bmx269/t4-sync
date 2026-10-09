@@ -28,7 +28,8 @@ import sys
 import threading
 import time
 
-from .inspector import LayoutIndex, build_panel
+from .inspector import (InspectorContext, LayoutIndex, build_comment,
+                        build_panel)
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -59,18 +60,26 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
     for pattern, replacement in rules:
         body = pattern.sub(replacement, body)
 
+    prefix = ""
     extra = ""
     if inspector:
-        index, overrides_dir, env_name = inspector
-        extra += build_panel(body, index, overrides_dir, env_name)
+        kwargs = dict(overrides_dir=inspector.overrides_dir,
+                      env_name=inspector.env_name,
+                      mirror_dir=inspector.mirror_dir,
+                      url_path=inspector.url_path)
+        if inspector.mode in ("comments", "both"):
+            prefix = build_comment(body, inspector.index, **kwargs)
+        if inspector.mode in ("panel", "both"):
+            extra += build_panel(body, inspector.index, **kwargs)
     if inject_reload:
         extra += RELOAD_SCRIPT
 
-    if not extra:
-        return body
-    if "</body>" in body:
-        return body.replace("</body>", extra + "</body>", 1)
-    return body + extra
+    if extra:
+        if "</body>" in body:
+            body = body.replace("</body>", extra + "</body>", 1)
+        else:
+            body += extra
+    return prefix + body
 
 
 class Watcher:
@@ -248,9 +257,13 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         except OSError:
             return super().send_head()
 
+        inspector = None
+        if self.inspector:
+            inspector = self.inspector._replace(mirror_dir=self.directory,
+                                                url_path=self.path)
         body = transform_html(raw.decode("utf-8", errors="replace"),
                               self.rules, inject_reload=bool(self.watcher),
-                              inspector=self.inspector)
+                              inspector=inspector)
         encoded = body.encode("utf-8")
 
         self.send_response(200)
@@ -275,7 +288,7 @@ class ThreadingServer(socketserver.ThreadingTCPServer):
 
 def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
           proxy_origin=None, proxy_cache=True, reload=True,
-          source_dir=None, env_name=None, inspect=True):
+          source_dir=None, env_name=None, inspect="both"):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
     MirrorHandler.rules = load_rules(rules_file)
     MirrorHandler.proxy_origin = proxy_origin
@@ -287,9 +300,11 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
     MirrorHandler.watcher = watcher
 
     index = None
-    if inspect:
+    if inspect and inspect != "off":
         index = LayoutIndex.from_project_dir(source_dir)
-        MirrorHandler.inspector = (index, MirrorHandler.overrides, env_name)
+        MirrorHandler.inspector = InspectorContext(
+            index=index, overrides_dir=MirrorHandler.overrides,
+            env_name=env_name, mode=inspect)
     else:
         MirrorHandler.inspector = None
 
@@ -307,10 +322,9 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
                                 if watcher else "off"))
         if index is not None:
             known = len(index.by_id)
-            print("Inspector on - %s"
-                  % ("%d page layout(s) mapped; the T4 badge shows the source file"
-                     % known if known else
-                     "no layouts pulled yet, run `t4 pull` to map pages to files"))
+            print("Inspector %s - %s" % (inspect,
+                  ("%d page layout(s) mapped" % known if known else
+                   "no layouts pulled yet, run `t4 pull` to map pages to files")))
         else:
             print("Inspector off")
         print("URL       http://%s:%d/" % (host, port))

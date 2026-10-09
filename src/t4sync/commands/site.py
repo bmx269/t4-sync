@@ -78,5 +78,5 @@ def run_serve(args, project):
                     reload=not args.no_reload,
                     source_dir=str(project.env_dir(env_name)),
                     env_name=env_name,
-                    inspect=not args.no_inspect)
+                    inspect="off" if args.no_inspect else args.inspect)
     return 0

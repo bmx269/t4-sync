@@ -115,6 +115,62 @@ overridden, `--revert` drops one, and a wrong path suggests near matches.
 `t4 serve` watches `overrides/` and refreshes the browser on save, via an
 injected server-sent-events listener. `--no-reload` turns it off.
 
+### Finding the source file
+
+```sh
+t4 layouts                    every published layout, its pages, its local files
+t4 layouts about/admissions   just that page
+```
+
+`t4 serve` also reports it per page, in two forms — an overlay and
+Drupal-style theme-debug comments in the served HTML:
+
+```html
+<!-- T4 DEBUG -->
+<!-- PAGE LAYOUT: 'm_open' #1027039 -->
+<!-- SOURCE FILES:
+   x t4-source/test/pageLayout/m-open-2.header.html
+   x t4-source/test/pageLayout/m-open-2.footer.html
+-->
+<!-- ASSETS (23, 1 overridden):
+   x media/web/css/brand.css
+   * media/web/css/site.css
+   * not overridden - copy it in with: t4 edit <path>
+-->
+<!-- CHILD PAGES (25):
+   u_webpage: admissions, advising, aging, agriculture, ...
+   m_open: arts, alumni-weekend
+-->
+```
+
+`--inspect comments` for comments only, `panel` for the overlay only, `both`
+(the default), `off` for neither. The comments are added at serve time; files
+under the mirror are never modified.
+
+#### Why there are "suggestions"
+
+T4 publishes two meta tags and they are not equally useful:
+
+| | Coverage | Precision |
+|---|---|---|
+| `t4-layout-id` | A small minority of pages | Exact |
+| `t4-layout` | Nearly every page | The name the layout writes into its own markup, which need not be its name in T4 |
+
+So a site can publish `u_webpage` from any of `u_webpage.production`,
+`u_webpage.webdev`, `u_webpage.development` and so on. When the name does not
+identify one layout, the debug output lists the candidates the way Twig debug
+does, rather than guessing:
+
+```html
+<!-- LAYOUT NAME SUGGESTIONS:
+   * u_webpage.production  (#975522)
+   * u_webpage.webdev  (#1033845)
+   the published name does not say which - check the section's layout in T4
+-->
+```
+
+Guessing here would send you to edit the wrong file, so it does not.
+
 ### The inspector
 
 `t4 serve` injects a small **T4** badge in the corner of every page. Expand it
