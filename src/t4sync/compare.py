@@ -19,6 +19,41 @@ def load_manifest(project, env_name):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def read_field(record, field):
+    """Read a field that may be nested, e.g. 'elements.formatcode#2:1'.
+
+    Content layouts keep their markup inside `elements`, so the manifest must
+    be able to name a path rather than a single key.
+    """
+    value = record or {}
+    for part in field.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def write_field(record, field, new_value):
+    """Set a possibly-nested field, returning the modified record."""
+    parts = field.split(".")
+    target = record
+    for part in parts[:-1]:
+        nxt = dict(target.get(part) or {})
+        target[part] = nxt
+        target = nxt
+    target[parts[-1]] = new_value
+    return record
+
+
+def remote_path(meta):
+    """Where this item lives.
+
+    `path` wins, because not every resource is `endpoint/id`: content layouts
+    need a trailing language segment.
+    """
+    return meta.get("path") or "%s/%s" % (meta["endpoint"], meta["id"])
+
+
 def matches(rel, selectors):
     if not selectors:
         return True
@@ -59,7 +94,7 @@ def _compare(project, env_name, client, selected, bar):
             continue
         entry["local"] = read_text(local_path)
         try:
-            record = client.record(meta["endpoint"], meta["id"])
+            record = client.fetch_path(remote_path(meta))
         except urllib.error.HTTPError as exc:
             entry.update(state="error", error=describe_http_error(exc))
             results.append(entry)
@@ -69,7 +104,7 @@ def _compare(project, env_name, client, selected, bar):
             results.append(entry)
             continue
         entry["record"] = record
-        entry["remote"] = (record or {}).get(meta["field"]) or ""
+        entry["remote"] = read_field(record, meta["field"]) or ""
         entry["state"] = "same" if entry["remote"] == entry["local"] else "changed"
         results.append(entry)
     return results

@@ -57,10 +57,21 @@ class Client:
 
     def record(self, endpoint, item_id):
         """Fetch one record, cached, so a multi-field item is fetched once."""
-        key = (endpoint, item_id)
-        if key not in self._cache:
-            self._cache[key] = self.get_json("%s/%s" % (endpoint, item_id))
-        return self._cache[key]
+        return self.fetch_path("%s/%s" % (endpoint, item_id))
+
+    def fetch_path(self, path):
+        """Fetch an arbitrary path, cached.
+
+        Not every resource is `endpoint/id`: content layouts need a language
+        segment, so the manifest can record a full path instead.
+        """
+        if path not in self._cache:
+            data = self.get_json(path)
+            # Some endpoints answer with a single-item list.
+            if isinstance(data, list) and len(data) == 1:
+                data = data[0]
+            self._cache[path] = data
+        return self._cache[path]
 
 
 def describe_http_error(exc):

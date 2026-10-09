@@ -4,7 +4,7 @@ import json
 import sys
 
 from ..api import Client
-from ..compare import compare, load_manifest, unified
+from ..compare import compare, load_manifest, remote_path, unified, write_field
 from ..errors import T4Error
 
 
@@ -83,10 +83,9 @@ def run(args, project):
             continue
 
         saved = backup(project, env_name, entry, stamp)
-        record = dict(entry["record"])
-        record[meta["field"]] = entry["local"]
+        record = write_field(dict(entry["record"]), meta["field"], entry["local"])
         try:
-            client.put_json("%s/%s" % (meta["endpoint"], meta["id"]), record)
+            client.put_json(remote_path(meta), record)
             print("Pushed. Backup: %s\n" % saved.relative_to(project.root))
             pushed += 1
         except Exception as exc:

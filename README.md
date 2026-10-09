@@ -458,6 +458,12 @@ Verified against a live T4 **8.4.3** instance. 8.4.4 and 8.4.5 release notes
 record no changes to the endpoints used here, but have not been tested
 directly — run `t4 doctor` to confirm against yours.
 
+**Some resources need a `{language}` path segment**, and omitting it returns
+500 — the same answer as a route that does not exist. This hides whole
+resources: Content Layouts are at `/layout/contenttype/{id}/{language}`, and
+media at `/media/{id}/{language}`. Both looked absent for a long time because
+they were requested without it.
+
 **Endpoint names are case-sensitive and inconsistent.** `/pageLayout` is
 camelCase; `/contenttype` is not. A wrong case returns **500** — identical to
 an unrouted path — so a typo is indistinguishable from "this endpoint does not

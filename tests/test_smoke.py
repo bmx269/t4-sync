@@ -18,6 +18,8 @@ from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
 from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
+from t4sync.compare import read_field, remote_path, write_field  # noqa: E402
+from t4sync.contentlayout import format_key, layout_name  # noqa: E402
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 
@@ -442,6 +444,51 @@ class TestPanelEscaping(unittest.TestCase):
         panel = build_panel("<html></html>", LayoutIndex({}))
         self.assertIn('id="t4i-hl"', panel)
         self.assertIn("Highlight components", panel)
+
+
+class TestNestedFields(unittest.TestCase):
+    """Content layouts keep their markup inside `elements`, not at the top."""
+
+    REC = {"id": 1, "elements": {"formatcode#2:1": "<p>markup</p>",
+                                 "name#1:1": "text/box"}}
+
+    def test_read_nested(self):
+        self.assertEqual(read_field(self.REC, "elements.formatcode#2:1"), "<p>markup</p>")
+
+    def test_read_top_level_still_works(self):
+        self.assertEqual(read_field({"text": "x"}, "text"), "x")
+
+    def test_read_missing_is_none(self):
+        self.assertIsNone(read_field(self.REC, "elements.nope"))
+        self.assertIsNone(read_field(self.REC, "a.b.c"))
+
+    def test_write_nested_does_not_mutate_the_original(self):
+        import copy
+        original = copy.deepcopy(self.REC)
+        out = write_field(copy.deepcopy(self.REC), "elements.formatcode#2:1", "<p>new</p>")
+        self.assertEqual(out["elements"]["formatcode#2:1"], "<p>new</p>")
+        self.assertEqual(out["elements"]["name#1:1"], "text/box")   # siblings kept
+        self.assertEqual(self.REC, original)
+
+    def test_explicit_path_wins_over_endpoint_and_id(self):
+        self.assertEqual(remote_path({"endpoint": "layout", "id": 9,
+                                      "path": "layout/9/en"}), "layout/9/en")
+        self.assertEqual(remote_path({"endpoint": "pageLayout", "id": 9}), "pageLayout/9")
+
+
+class TestContentLayout(unittest.TestCase):
+    def test_format_key_is_matched_by_prefix(self):
+        """The suffix encodes element id and type and is not fixed."""
+        self.assertEqual(format_key({"elements": {"formatcode#2:1": "x"}}), "formatcode#2:1")
+        self.assertEqual(format_key({"elements": {"formatcode#7:4": "x"}}), "formatcode#7:4")
+        self.assertIsNone(format_key({"elements": {"other#1:1": "x"}}))
+        self.assertIsNone(format_key({}))
+
+    def test_layout_name_prefers_the_element(self):
+        rec = {"id": 5, "name": "fallback", "elements": {"name#1:1": "text/box"}}
+        self.assertEqual(layout_name(rec), "text/box")
+        self.assertEqual(layout_name({"id": 5, "name": "fallback", "elements": {}}),
+                         "fallback")
 
 
 class TestWatcher(unittest.TestCase):

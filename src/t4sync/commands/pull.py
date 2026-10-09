@@ -1,10 +1,12 @@
 """t4 pull -- fetch layout source from T4 onto disk."""
 import json
+import re
 import urllib.error
 
+from .. import contentlayout
 from ..api import Client, describe_http_error
-from ..endpoints import ENDPOINTS, ID_FIELDS
-from ..extract import extract, first_field, write_text
+from ..endpoints import ENDPOINTS, ID_FIELDS, MEDIA_TEXT_FIELD
+from ..extract import digest, extract, first_field, slug, write_text
 from ..progress import Progress
 
 
@@ -29,7 +31,9 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
     if not quiet:
         print("Pulling %s" % env["label"])
 
-    for endpoint in (only or list(ENDPOINTS)):
+    # `only` may name the specially-handled pulls (media, contentLayout), which
+    # are not in ENDPOINTS and must not be requested as `/<name>`.
+    for endpoint in [e for e in (only or list(ENDPOINTS)) if e in ENDPOINTS]:
         config = ENDPOINTS.get(endpoint, {})
         path = config.get("path", endpoint)
         try:
@@ -87,6 +91,13 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
             parts.append("%d skipped" % skipped)
         print("  %-13s %d item(s): %s" % (endpoint, len(items), ", ".join(parts) or "nothing"))
 
+    if not only or "media" in only:
+        failures += pull_media(client, root, manifest, env, previous, force=force)
+
+    if not only or "contentLayout" in only:
+        failures += pull_content_layouts(client, root, manifest, env, previous,
+                                         force=force)
+
     if manifest:
         existing = {}
         if manifest_path.is_file() and only:
@@ -116,6 +127,174 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
     if failures:
         print("  %d endpoint(s) failed." % failures)
     return failures
+
+
+def pull_media(client, root, manifest, env, previous, force=False):
+    """Text media items -- the code snippets T4 sites keep in the Media Library.
+
+    Page layouts pull these in by id, so their markup is part of the site's
+    source even though it lives under Media rather than Layouts. Binary media
+    is deliberately skipped; see endpoints.py.
+    """
+    language = env.get("language", "en")
+    # Scan the parsed records rather than the raw file: inside JSON every
+    # quote is escaped, so a pattern written for markup matches nothing.
+    media_tag = re.compile(r'type=["\']media["\'][^>]*?\bid=["\'](\d+)["\']', re.I)
+
+    def strings(value):
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for item in value.values():
+                for found in strings(item):
+                    yield found
+        elif isinstance(value, list):
+            for item in value:
+                for found in strings(item):
+                    yield found
+
+    ids = set()
+    for name in ("pageLayout.detail.json", "contentLayout.json"):
+        path = root / "_raw" / name
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for text in strings(data):
+            ids.update(media_tag.findall(text))
+
+    if not ids:
+        print("  %-13s none referenced by the pulled layouts" % "media")
+        return 0
+
+    from ..extract import locally_modified
+    from ..progress import Progress
+
+    outdir = root / "media"
+    outdir.mkdir(parents=True, exist_ok=True)
+    records, written, kept, failures = [], 0, 0, 0
+    bar = Progress("  media", total=len(ids))
+    try:
+        for media_id in sorted(ids, key=int):
+            bar.update()
+            try:
+                record = client.get_json("media/%s/%s" % (media_id, language))
+            except Exception:
+                failures += 1
+                continue
+            if isinstance(record, list):
+                record = record[0] if record else None
+            if not record:
+                continue
+            text = record.get(MEDIA_TEXT_FIELD)
+            if not isinstance(text, str) or not text.strip():
+                continue          # binary media: nothing to version here
+            records.append(record)
+
+            rel = "media/%s.html" % slug(record.get("name"), media_id)
+            target = root / rel
+            prior = previous.get(rel, {}).get("sha")
+            if not force and prior and locally_modified(target, prior):
+                kept += 1
+            else:
+                write_text(target, text)
+                written += 1
+            manifest[rel] = {
+                "endpoint": "media",
+                "id": int(media_id),
+                "path": "media/%s/%s" % (media_id, language),
+                "field": MEDIA_TEXT_FIELD,
+                "name": record.get("name"),
+                "sha": digest(text),
+            }
+    finally:
+        bar.close()
+
+    write_text(root / "_raw" / "media.json",
+               json.dumps(records, indent=2, ensure_ascii=False))
+    parts = ["%d source" % written]
+    if kept:
+        parts.append("%d kept (edited locally)" % kept)
+    if failures:
+        parts.append("%d fetch failure(s)" % failures)
+    print("  %-13s %d referenced, %d text: %s"
+          % ("media", len(ids), len(records), ", ".join(parts)))
+    return 0
+
+
+def pull_content_layouts(client, root, manifest, env, previous, force=False):
+    """Content Layouts, which are reached through their content type.
+
+    Not a top-level resource: see contentlayout.py for the paths and why they
+    are easy to miss.
+    """
+    language = env.get("language", "en")
+    raw = root / "_raw" / "contenttype.json"
+    if not raw.is_file():
+        print("  %-13s skipped (needs contenttype; run a full pull)" % "contentLayout")
+        return 0
+
+    try:
+        content_types = json.loads(raw.read_text(encoding="utf-8"))
+    except ValueError:
+        return 1
+    if isinstance(content_types, dict):
+        content_types = content_types.get("data") or []
+
+    records, failures = contentlayout.collect(
+        client, content_types, language,
+        progress_label="  contentLayout")
+    write_text(root / "_raw" / "contentLayout.json",
+               json.dumps(records, indent=2, ensure_ascii=False))
+
+    outdir = root / "contentLayout"
+    outdir.mkdir(parents=True, exist_ok=True)
+    written = kept = 0
+    seen = {}
+
+    for record in records:
+        key = contentlayout.format_key(record)
+        if not key:
+            continue
+        markup = record["elements"].get(key)
+        if not isinstance(markup, str) or not markup.strip():
+            continue
+
+        base = "%s--%s" % (slug(record.get("_contentTypeName"), record.get("_contentTypeId")),
+                           slug(contentlayout.layout_name(record), record["id"]))
+        seen[base] = seen.get(base, 0) + 1
+        if seen[base] > 1:
+            base = "%s-%d" % (base, seen[base])
+
+        rel = "contentLayout/%s.html" % base
+        target = root / rel
+        prior = previous.get(rel, {}).get("sha")
+        from ..extract import locally_modified
+        if not force and prior and locally_modified(target, prior):
+            kept += 1
+        else:
+            write_text(target, markup)
+            written += 1
+
+        manifest[rel] = {
+            "endpoint": "layout",
+            "id": record["id"],
+            "path": "layout/%s/%s" % (record["id"], language),
+            "field": "elements.%s" % key,
+            "name": contentlayout.layout_name(record),
+            "contentType": record.get("_contentTypeName"),
+            "sha": digest(markup),
+        }
+
+    parts = ["%d source" % written]
+    if kept:
+        parts.append("%d kept (edited locally)" % kept)
+    if failures:
+        parts.append("%d fetch failure(s)" % failures)
+    print("  %-13s %d layout(s): %s" % ("contentLayout", len(records), ", ".join(parts)))
+    return 0
 
 
 def run(args, project):

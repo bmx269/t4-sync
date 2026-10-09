@@ -16,7 +16,21 @@ ENDPOINTS = {
     # /list alone returns 500. /list/<anything> returns ALL lists -- the segment
     # is required but ignored, and is not an id.
     "list":        {"detail": False, "path": "list/1"},
+    # The whole section tree in one response.
+    "sitestructure": {"detail": False},
 }
+
+# Media items also need a language segment: /media/{id}/{language}. Text-based
+# media -- the code snippets T4 sites keep in the Media Library -- carry their
+# content in a `text` field, so they are source worth versioning. Binary media
+# (stylesheets, scripts, images) are not fetched: their bytes live behind
+# /media/{id}/{language}/{version}/{element} and belong in the site mirror
+# rather than here.
+MEDIA_TEXT_FIELD = "text"
+
+# Content Layouts are pulled separately: they hang off a content type and need
+# a language segment, so they do not fit the endpoint/id shape above. See
+# contentlayout.py.
 
 # Page layouts split their source across three fields rather than one "code".
 SOURCE_FIELDS = [
