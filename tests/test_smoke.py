@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
+from t4sync.inspector import LayoutIndex, build_panel   # noqa: E402
 from t4sync.serve import RELOAD_PATH, Watcher, load_rules, transform_html  # noqa: E402
 
 
@@ -123,6 +124,67 @@ class TestServeGating(unittest.TestCase):
         out = transform_html("<body>a</body>", rules, inject_reload=False)
         self.assertIn("b", out)
         self.assertNotIn(RELOAD_PATH, out)
+
+
+class TestInspector(unittest.TestCase):
+    MANIFEST = {
+        "pageLayout/my-layout.header.html": {
+            "endpoint": "pageLayout", "id": 1027039,
+            "field": "headerCode", "name": "my_layout"},
+        "pageLayout/my-layout.footer.html": {
+            "endpoint": "pageLayout", "id": 1027039,
+            "field": "footerCode", "name": "my_layout"},
+        "contenttype/thing.json": {
+            "endpoint": "contenttype", "id": 5, "field": None, "name": "Thing"},
+    }
+    PAGE = ('<html><head>'
+            '<meta name="t4-layout" content="my_layout">'
+            '<meta name="t4-layout-id" content="1027039">'
+            '<link rel="stylesheet" href="/media/css/site.css">'
+            '<script src="/media/js/app.js"></script>'
+            '</head><body>hi</body></html>')
+
+    def test_index_only_tracks_page_layouts(self):
+        index = LayoutIndex(self.MANIFEST)
+        self.assertEqual(len(index.files_for(1027039)), 2)
+        self.assertEqual(index.files_for(999), [])
+
+    def test_panel_names_the_layout_and_its_files(self):
+        panel = build_panel(self.PAGE, LayoutIndex(self.MANIFEST), env_name="test")
+        self.assertIn("my_layout", panel)
+        self.assertIn("1027039", panel)
+        self.assertIn("pageLayout/my-layout.header.html", panel)
+        self.assertIn("pageLayout/my-layout.footer.html", panel)
+
+    def test_panel_lists_local_assets_only(self):
+        page = self.PAGE.replace("</head>",
+                                 '<link rel="stylesheet" href="https://cdn.example/x.css"></head>')
+        panel = build_panel(page, LayoutIndex(self.MANIFEST))
+        self.assertIn("media/css/site.css", panel)
+        self.assertIn("media/js/app.js", panel)
+        self.assertNotIn("cdn.example", panel)
+
+    def test_overridden_assets_are_marked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = pathlib.Path(tmp) / "media" / "css" / "site.css"
+            target.parent.mkdir(parents=True)
+            target.write_text("body{}")
+            panel = build_panel(self.PAGE, LayoutIndex(self.MANIFEST), overrides_dir=tmp)
+            self.assertIn("t4i-on", panel)
+            self.assertIn("1 overridden", panel)
+
+    def test_page_without_meta_says_so(self):
+        panel = build_panel("<html><body>x</body></html>", LayoutIndex({}))
+        self.assertIn("no t4-layout meta", panel)
+
+    def test_known_layout_not_yet_pulled(self):
+        panel = build_panel(self.PAGE, LayoutIndex({}))
+        self.assertIn("not in the local pull", panel)
+
+    def test_injected_before_body_close(self):
+        out = transform_html(self.PAGE, inspector=(LayoutIndex(self.MANIFEST), None, "test"))
+        self.assertIn("t4-inspector", out)
+        self.assertLess(out.index("t4-inspector"), out.index("</body>"))
 
 
 class TestWatcher(unittest.TestCase):

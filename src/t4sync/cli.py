@@ -111,6 +111,8 @@ def build_parser():
                     help="proxy without saving fetched files into the mirror")
     sp.add_argument("--no-reload", action="store_true",
                     help="do not refresh the browser when overrides change")
+    sp.add_argument("--no-inspect", action="store_true",
+                    help="do not inject the layout inspector overlay")
 
     return p
 

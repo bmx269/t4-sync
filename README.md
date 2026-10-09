@@ -115,6 +115,33 @@ overridden, `--revert` drops one, and a wrong path suggests near matches.
 `t4 serve` watches `overrides/` and refreshes the browser on save, via an
 injected server-sent-events listener. `--no-reload` turns it off.
 
+### The inspector
+
+`t4 serve` injects a small **T4** badge in the corner of every page. Expand it
+and it answers "what rendered this, and what do I edit":
+
+```
+Page layout   m_open  #1027039
+              pageLayout/m-open-2.header.html      [edit]
+              pageLayout/m-open-2.footer.html      [edit]
+Assets        23, 1 overridden
+              media/web/css/site.css           [edit]
+              media/web/css/brand.css        [editing]
+              ...
+```
+
+T4 publishes `<meta name="t4-layout">` and `<meta name="t4-layout-id">` into
+every page. The id is matched against the pull manifest, so the panel names the
+exact file on disk rather than leaving you to guess which of 58 layouts with
+names like `u_webpage.production` and `m_open_alt_no_menu` produced the page.
+Layout *names* are not reliably unique after slugging; the id is.
+
+Each row's **edit** button copies the matching `t4 edit …` command. Assets
+already overridden are highlighted and read **editing**.
+
+If a page has no `t4-layout` meta, or the layout has not been pulled yet, the
+panel says so rather than showing nothing. `--no-inspect` turns it off.
+
 **Two file sets, two deploy paths.** This is the thing to understand:
 
 | Edited in | Holds | Deployed by |

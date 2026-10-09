@@ -71,8 +71,12 @@ def run_serve(args, project):
     if args.no_proxy:
         origin = None
 
+    env_name = args.env or project.default_env()
     serve_mod.serve(str(site), overrides=str(overrides),
                     rules_file=str(rules), port=args.port,
                     proxy_origin=origin, proxy_cache=not args.no_proxy_cache,
-                    reload=not args.no_reload)
+                    reload=not args.no_reload,
+                    source_dir=str(project.env_dir(env_name)),
+                    env_name=env_name,
+                    inspect=not args.no_inspect)
     return 0

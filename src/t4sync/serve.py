@@ -27,6 +27,8 @@ import socketserver
 import sys
 import threading
 import time
+
+from .inspector import LayoutIndex, build_panel
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -48,19 +50,27 @@ RELOAD_SCRIPT = """
 """ % RELOAD_PATH
 
 
-def transform_html(body, rules=(), inject_reload=False):
-    """Apply rewrite rules and optionally inject the reload script.
+def transform_html(body, rules=(), inject_reload=False, inspector=None):
+    """Apply rewrite rules, then append anything injected.
 
     Separate from the handler so it can be tested without binding a socket.
+    `inspector`, when given, is (LayoutIndex, overrides_dir, env_name).
     """
     for pattern, replacement in rules:
         body = pattern.sub(replacement, body)
+
+    extra = ""
+    if inspector:
+        index, overrides_dir, env_name = inspector
+        extra += build_panel(body, index, overrides_dir, env_name)
     if inject_reload:
-        if "</body>" in body:
-            body = body.replace("</body>", RELOAD_SCRIPT + "</body>", 1)
-        else:
-            body += RELOAD_SCRIPT
-    return body
+        extra += RELOAD_SCRIPT
+
+    if not extra:
+        return body
+    if "</body>" in body:
+        return body.replace("</body>", extra + "</body>", 1)
+    return body + extra
 
 
 class Watcher:
@@ -144,6 +154,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
     proxy_origin = None
     proxy_cache = True
     watcher = None
+    inspector = None
 
     def translate_path(self, path):
         mirrored = super().translate_path(path)
@@ -228,7 +239,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         # HTML needs rewriting when there are rules, and needs the reload
         # script whenever the watcher is running. Gating on rules alone meant
         # live reload silently did nothing for a project with no rewrites.
-        needs_transform = bool(self.rules) or bool(self.watcher)
+        needs_transform = bool(self.rules) or bool(self.watcher) or bool(self.inspector)
         if not (needs_transform and path.endswith((".html", ".htm"))):
             return super().send_head()
         try:
@@ -238,7 +249,8 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
             return super().send_head()
 
         body = transform_html(raw.decode("utf-8", errors="replace"),
-                              self.rules, inject_reload=bool(self.watcher))
+                              self.rules, inject_reload=bool(self.watcher),
+                              inspector=self.inspector)
         encoded = body.encode("utf-8")
 
         self.send_response(200)
@@ -262,7 +274,8 @@ class ThreadingServer(socketserver.ThreadingTCPServer):
 
 
 def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
-          proxy_origin=None, proxy_cache=True, reload=True):
+          proxy_origin=None, proxy_cache=True, reload=True,
+          source_dir=None, env_name=None, inspect=True):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
     MirrorHandler.rules = load_rules(rules_file)
     MirrorHandler.proxy_origin = proxy_origin
@@ -272,6 +285,13 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
     if reload and MirrorHandler.overrides:
         watcher = Watcher([MirrorHandler.overrides]).start()
     MirrorHandler.watcher = watcher
+
+    index = None
+    if inspect:
+        index = LayoutIndex.from_project_dir(source_dir)
+        MirrorHandler.inspector = (index, MirrorHandler.overrides, env_name)
+    else:
+        MirrorHandler.inspector = None
 
     handler = functools.partial(MirrorHandler, directory=os.path.abspath(site))
 
@@ -285,6 +305,14 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
                                       " (caching)" if proxy_cache else " (no cache)"))
         print("Reload    %s" % ("on - edits in overrides/ refresh the browser"
                                 if watcher else "off"))
+        if index is not None:
+            known = len(index.by_id)
+            print("Inspector on - %s"
+                  % ("%d page layout(s) mapped; the T4 badge shows the source file"
+                     % known if known else
+                     "no layouts pulled yet, run `t4 pull` to map pages to files"))
+        else:
+            print("Inspector off")
         print("URL       http://%s:%d/" % (host, port))
         print("Ctrl-C to stop.")
         try:
