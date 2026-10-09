@@ -231,6 +231,18 @@ Layout *names* are not reliably unique after slugging; the id is.
 Each row's **edit** button copies the matching `t4 edit …` command. Assets
 already overridden are highlighted and read **editing**.
 
+**Highlight components** outlines every content item and navigation object on
+the page, coloured by type, with a legend. The colour is derived from the type
+name, so the same component is the same colour on every page. The setting is
+remembered per browser.
+
+It works from the marker comments already in the DOM — no markup is injected
+into the page, which would risk landing somewhere invalid like `<head>` or
+inside a `<table>` and changing how the page renders. A component that resolves
+to an element with no height climbs to the nearest ancestor that occupies
+space, and two components sharing one element have their labels combined rather
+than one overwriting the other.
+
 If a page has no `t4-layout` meta, or the layout has not been pulled yet, the
 panel says so rather than showing nothing. `--no-inspect` turns it off.
 

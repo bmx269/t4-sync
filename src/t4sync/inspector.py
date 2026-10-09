@@ -404,8 +404,8 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
         if resolver is not None:
             record, why = resolver.resolve(body, layout_name, layout_id)
             files = index.files_for(record["id"]) if record else []
-            note = ("%s  <span class=\"t4i-dim\">(%s)</span>"
-                    % (_esc(record.get("name")), _esc(why))) if record else _esc(why)
+            # Plain text: the caller escapes it before it reaches the page.
+            note = ("%s (%s)" % (record.get("name"), why)) if record else why
         else:
             files, note = index.resolve(layout_name, layout_id)
         for rel, _meta in files:
@@ -435,7 +435,12 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
 def _render(rows, assets, children=(), url_path="/"):
     parts = ['<div id="t4-inspector" data-collapsed="1">',
              '<button type="button" id="t4i-toggle" title="T4 inspector">T4</button>',
-             '<div id="t4i-body">']
+             '<div id="t4i-body">',
+             '<div class="t4i-row t4i-controls">',
+             '<label class="t4i-switch"><input type="checkbox" id="t4i-hl"> '
+             'Highlight components</label>',
+             '</div>',
+             '<div id="t4i-legend" class="t4i-legend"></div>']
 
     for label, value, copy_target in rows:
         parts.append('<div class="t4i-row">')
@@ -504,6 +509,20 @@ STYLE = """
 .t4i-copy:hover{background:#222a3a}
 .t4i-child a{color:#9fb4ff;text-decoration:none}
 .t4i-child a:hover{text-decoration:underline}
+.t4i-controls{gap:12px}
+.t4i-switch{cursor:pointer;user-select:none;display:flex;gap:6px;align-items:center}
+.t4i-legend{display:none;flex-wrap:wrap;gap:4px 10px;padding:4px 0 2px}
+.t4i-legend.on{display:flex}
+.t4i-legend span{display:flex;align-items:center;gap:5px;font-size:11px}
+.t4i-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+
+/* Applied to the page being inspected, not to the panel. */
+html.t4c-on [data-t4c-hl]{outline:2px dashed var(--t4c);outline-offset:-2px;
+ position:relative}
+html.t4c-on [data-t4c-hl]::before{content:attr(data-t4c-hl);position:absolute;
+ top:0;left:0;z-index:2147483646;background:var(--t4c);color:#0b0d12;
+ font:600 10px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+ padding:1px 5px;border-radius:0 0 3px 0;pointer-events:none;white-space:nowrap}
 @media (prefers-color-scheme:light){
  #t4-inspector{background:#fff;color:#1a1d25;border-color:#d4d8e0}
  #t4-inspector code{background:#f1f3f7}
@@ -518,6 +537,103 @@ SCRIPT = """
 (function () {
   var root = document.getElementById("t4-inspector");
   if (!root) return;
+
+  // Component highlighting.
+  //
+  // The component markers are already comment nodes in the DOM, so the element
+  // each one introduces can be found without injecting any markup. Injecting
+  // elements would risk landing somewhere invalid -- inside <head>, a <table>
+  // or a <select> -- and changing how the page renders, which defeats the
+  // purpose of looking at it.
+  var NOTE = /T4 (COMPONENT|NAVIGATION): '([^']*)'/;
+  var found = null;
+
+  function hue(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) { h = (h * 31 + name.charCodeAt(i)) % 360; }
+    return h;
+  }
+
+  function collect() {
+    if (found) return found;
+    found = [];
+    var walker = document.createTreeWalker(document.body || document.documentElement,
+                                           NodeFilter.SHOW_COMMENT, null, false);
+    var node;
+    while ((node = walker.nextNode())) {
+      var m = NOTE.exec(node.nodeValue || "");
+      if (!m) continue;
+      var el = node.nextElementSibling;
+      // The marker may sit just before its element, or be the last child of a
+      // wrapper; fall back to the parent so something is always highlighted.
+      if (!el && node.parentElement) el = node.parentElement;
+      if (!el || el.closest("#t4-inspector")) continue;
+      found.push({ kind: m[1], name: m[2], el: el });
+    }
+
+    // Content layouts often open with an empty anchor span, which has no box
+    // to outline. Climb to the nearest ancestor that actually occupies space,
+    // without escaping into a shared wrapper that holds other components.
+    var claimed = new Set(found.map(function (f) { return f.el; }));
+    found.forEach(function (item) {
+      var el = item.el, hops = 0;
+      while (el && hops < 3 && el.getBoundingClientRect().height === 0) {
+        var parent = el.parentElement;
+        if (!parent || parent === document.body || claimed.has(parent)) break;
+        el = parent;
+        hops++;
+      }
+      item.el = el;
+    });
+    return found;
+  }
+
+  function apply(on) {
+    var items = collect();
+    var seen = {};
+    items.forEach(function (item) {
+      if (on) {
+        var h = hue(item.name);
+        // Two components can resolve to the same element -- a wrapper holding
+        // both, or an empty anchor that climbed to a shared parent. Combine
+        // the labels rather than letting the last one win, so the page and
+        // the legend agree about what is on it.
+        var existing = item.el.getAttribute("data-t4c-hl");
+        if (existing && existing.split(" + ").indexOf(item.name) === -1) {
+          item.el.setAttribute("data-t4c-hl", existing + " + " + item.name);
+        } else if (!existing) {
+          item.el.style.setProperty("--t4c", "hsl(" + h + " 85% 62%)");
+          item.el.setAttribute("data-t4c-hl", item.name);
+        }
+        seen[item.name] = h;
+      } else {
+        item.el.removeAttribute("data-t4c-hl");
+        item.el.style.removeProperty("--t4c");
+      }
+    });
+    document.documentElement.classList.toggle("t4c-on", !!on);
+
+    var legend = document.getElementById("t4i-legend");
+    if (!legend) return;
+    legend.classList.toggle("on", !!on);
+    if (!on) { legend.innerHTML = ""; return; }
+    var names = Object.keys(seen).sort();
+    legend.innerHTML = names.map(function (n) {
+      return '<span><i style="background:hsl(' + seen[n] + ' 85% 62%)"></i>' +
+             n.replace(/[&<>]/g, "") + "</span>";
+    }).join("") || '<span class="t4i-dim">no components on this page</span>';
+  }
+
+  var box = document.getElementById("t4i-hl");
+  if (box) {
+    var HLKEY = "t4-inspector-highlight";
+    try { if (localStorage.getItem(HLKEY) === "1") { box.checked = true; apply(true); } }
+    catch (e) {}
+    box.addEventListener("change", function () {
+      apply(box.checked);
+      try { localStorage.setItem(HLKEY, box.checked ? "1" : "0"); } catch (e) {}
+    });
+  }
   var KEY = "t4-inspector-open";
   try { if (localStorage.getItem(KEY) === "1") root.dataset.collapsed = "0"; } catch (e) {}
   root.querySelector("#t4i-toggle").addEventListener("click", function () {

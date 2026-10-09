@@ -333,6 +333,15 @@ class ThreadingServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def handle_error(self, request, client_address):
+        # Browsers drop idle keep-alive sockets and cancel requests on
+        # navigation. That is routine, not a server fault, so don't dump
+        # a traceback for it; anything else still gets the default report.
+        if isinstance(sys.exc_info()[1], (ConnectionResetError, BrokenPipeError,
+                                          ConnectionAbortedError)):
+            return
+        super().handle_error(request, client_address)
+
 
 def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
           proxy_origin=None, proxy_cache=True, reload=True,

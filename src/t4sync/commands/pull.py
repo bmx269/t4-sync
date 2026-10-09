@@ -5,6 +5,7 @@ import urllib.error
 from ..api import Client, describe_http_error
 from ..endpoints import ENDPOINTS, ID_FIELDS
 from ..extract import extract, first_field, write_text
+from ..progress import Progress
 
 
 def pull_env(project, env_name, only=None, detail=True, timeout=60,
@@ -32,7 +33,8 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
         config = ENDPOINTS.get(endpoint, {})
         path = config.get("path", endpoint)
         try:
-            data = client.get_json(path)
+            with Progress("  %-13s fetching list" % endpoint, enabled=False if quiet else None):
+                data = client.get_json(path)
         except urllib.error.HTTPError as exc:
             print("  %-13s %s" % (endpoint, describe_http_error(exc)))
             failures += 1
@@ -50,16 +52,19 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
 
         if detail and config.get("detail"):
             detailed, missed = [], 0
-            for item in items:
-                item_id = first_field(item, ID_FIELDS)
-                if item_id is None:
-                    detailed.append(item)
-                    continue
-                try:
-                    detailed.append(client.get_json("%s/%s" % (path, item_id)))
-                except Exception:
-                    missed += 1
-                    detailed.append(item)
+            with Progress("  %-13s" % endpoint, total=len(items),
+                          enabled=False if quiet else None) as bar:
+                for item in items:
+                    bar.update()
+                    item_id = first_field(item, ID_FIELDS)
+                    if item_id is None:
+                        detailed.append(item)
+                        continue
+                    try:
+                        detailed.append(client.get_json("%s/%s" % (path, item_id)))
+                    except Exception:
+                        missed += 1
+                        detailed.append(item)
             items = detailed
             write_text(root / "_raw" / ("%s.detail.json" % endpoint),
                        json.dumps(items, indent=2, ensure_ascii=False))

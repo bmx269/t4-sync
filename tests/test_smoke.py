@@ -15,6 +15,7 @@ from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
                               LayoutIndex, annotate_components,
                               build_comment, build_panel, strip_injected)
+from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
@@ -422,6 +423,27 @@ class TestLayoutResolver(unittest.TestCase):
         self.assertIn("no layout named", why)
 
 
+class TestPanelEscaping(unittest.TestCase):
+    """The panel must not emit raw markup from data, nor escape its own."""
+
+    def test_layout_note_is_escaped_not_double_escaped(self):
+        page = '<meta name="t4-layout" content="m_open">'
+
+        class FakeResolver:
+            @staticmethod
+            def resolve(_body, _name, _id=None):
+                return {"id": 1, "name": "m_open & co"}, "named uniquely"
+
+        panel = build_panel(page, LayoutIndex({}), resolver=FakeResolver())
+        self.assertIn("m_open &amp; co", panel)      # data is escaped
+        self.assertNotIn("&lt;span", panel)          # our own markup is not
+
+    def test_highlight_toggle_is_present(self):
+        panel = build_panel("<html></html>", LayoutIndex({}))
+        self.assertIn('id="t4i-hl"', panel)
+        self.assertIn("Highlight components", panel)
+
+
 class TestWatcher(unittest.TestCase):
     def test_detects_a_changed_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -521,6 +543,31 @@ class TestCli(unittest.TestCase):
                              capture_output=True, text=True,
                              cwd=str(ROOT / "src"))
         self.assertIn("t4-sync", out.stdout)
+
+
+class TestProgress(unittest.TestCase):
+    def test_silent_when_not_a_terminal(self):
+        """Piped output and CI logs must not fill with carriage returns."""
+        import io
+        stream = io.StringIO()       # isatty() is False
+        with Progress("x", total=3, stream=stream) as bar:
+            bar.update()
+        self.assertEqual(stream.getvalue(), "")
+
+    def test_line_fits_the_terminal(self):
+        bar = Progress("  pageLayout", total=58, enabled=False)
+        bar.count = 23
+        for columns in (20, 40, 80, 200):
+            self.assertLess(len(bar.render(columns)), columns)
+        self.assertIn("23/58", bar.render(80))
+
+    def test_close_erases_the_bar(self):
+        import io
+        stream = io.StringIO()
+        with Progress("label", total=2, stream=stream, enabled=True) as bar:
+            bar.update()
+        self.assertTrue(stream.getvalue().endswith("\r"))
+        self.assertTrue(stream.getvalue().split("\r")[-2].strip() == "")
 
 
 if __name__ == "__main__":

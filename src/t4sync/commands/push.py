@@ -35,7 +35,8 @@ def run(args, project):
     manifest = load_manifest(project, env_name)
 
     print("Target: %s%s\n" % (env["label"], "   [DRY RUN]" if args.dry_run else ""))
-    results = compare(project, env_name, client, manifest, args.paths or None)
+    results = compare(project, env_name, client, manifest, args.paths or None,
+                      progress_label="Checking against T4")
     changed = [e for e in results if e["state"] == "changed"]
 
     for entry in [e for e in results if e["state"] == "error"]:

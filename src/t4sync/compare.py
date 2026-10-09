@@ -6,6 +6,7 @@ import urllib.error
 
 from .api import describe_http_error
 from .extract import read_text
+from .progress import Progress
 
 MANIFEST = "_manifest.json"
 
@@ -28,16 +29,28 @@ def matches(rel, selectors):
     return False
 
 
-def compare(project, env_name, client, manifest, selectors=None):
+def compare(project, env_name, client, manifest, selectors=None,
+            progress_label=None):
     """Return one entry per manifest item.
 
-    state is 'same', 'changed', 'local-missing' or 'error'.
+    state is 'same', 'changed', 'local-missing' or 'error'. Each item costs a
+    request, so pass `progress_label` to show a bar while it runs.
     """
+    selected = [(rel, meta) for rel, meta in sorted(manifest.items())
+                if matches(rel, selectors)]
+    bar = Progress(progress_label, total=len(selected),
+                   enabled=None if progress_label else False)
+    try:
+        return _compare(project, env_name, client, selected, bar)
+    finally:
+        bar.close()
+
+
+def _compare(project, env_name, client, selected, bar):
     root = project.env_dir(env_name)
     results = []
-    for rel, meta in sorted(manifest.items()):
-        if not matches(rel, selectors):
-            continue
+    for rel, meta in selected:
+        bar.update()
         entry = {"path": rel, "meta": meta, "local": None, "remote": None}
         local_path = pathlib.Path(root) / rel
         if not local_path.is_file():
