@@ -8,10 +8,10 @@ version = "0.1.0"
 description = "Pull, push and compare Terminal Four layout source, and run a local copy of the published site."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "GPL-3.0-or-later" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "Trent Stromkins" }]
 classifiers = [
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]

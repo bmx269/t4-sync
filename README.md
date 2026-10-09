@@ -500,8 +500,8 @@ The tests need no network and no T4 instance.
 
 Copyright © 2026 Trent Stromkins.
 
-GNU General Public License v3.0 or later — see [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-The repository is private, and the GPL's obligations attach to distribution:
-nothing is required of you while the tool stays internal. If it is ever shared
-outside the organisation, recipients get the source and the same freedoms.
+Use it, change it, ship it, including commercially. Keep the copyright notice
+and the NOTICE file, and say what you changed. The licence includes an express
+patent grant from contributors.
