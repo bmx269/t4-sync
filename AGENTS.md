@@ -4,8 +4,9 @@ A cross-platform CLI for Terminal Four. Read [README.md](README.md) first for
 what the commands do; this file covers how to work on the tool itself.
 
 **This repo is client-neutral and must stay that way.** It is a general T4
-tool, a general one. No client hostnames, layout names, section names, content
-or data. Examples use `example.edu`. Before committing:
+tool. No client hostnames, layout names, section names, content or data —
+examples use `example.edu`. The tool was extracted from a client engagement,
+so the pull is toward leaking specifics back in. Before committing:
 
 ```sh
 git grep -niE '<your client names>'
