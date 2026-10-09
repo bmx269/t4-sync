@@ -5,8 +5,8 @@ import sys
 from . import __version__
 from .config import Project
 from .errors import T4Error
-from .commands import (diff, doctor, edit, env, init, layouts, pull, push,
-                       site, status, sync, token)
+from .commands import (diff, doctor, edit, env, init, layouts, preview,
+                       pull, push, site, status, sync, token)
 
 
 def build_parser():
@@ -92,6 +92,13 @@ def build_parser():
     sp.add_argument("--include-documents", action="store_true",
                     help="also download PDFs and Office files")
 
+    sp = add("preview", "What a local layout edit changes in the output.")
+    sp.add_argument("page", nargs="?", help="a page path (default: the home page)")
+    sp.add_argument("--env", "-e")
+    sp.add_argument("--out", help="write the previewed HTML to a file")
+    sp.add_argument("--context", type=int, default=3, help="diff context lines")
+    sp.add_argument("--host-dir")
+
     sp = add("layouts", "Which layout renders what, and where its source is.")
     sp.add_argument("page", nargs="?", help="a page path, to ask about just that page")
     sp.add_argument("--env", "-e")
@@ -139,6 +146,7 @@ HANDLERS = {
     "status": (status.run, True),
     "diff": (diff.run, True),
     "push": (push.run, True),
+    "preview": (preview.run, True),
     "layouts": (layouts.run, True),
     "edit": (edit.run, True),
     "mirror": (site.run_mirror, True),

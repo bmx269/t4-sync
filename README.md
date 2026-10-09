@@ -278,6 +278,29 @@ class, adding or reordering markup — all apply locally.
 
 A no-op edit reproduces the page byte-for-byte; that invariant is tested.
 
+Or as a diff, without a browser:
+
+```sh
+t4 preview                     # the home page
+t4 preview about/admissions
+t4 preview --out /tmp/x.html   # write the previewed HTML instead
+```
+
+```diff
+index.html
+  layout  m_open  #1027039
+  edited  pageLayout/m-open-2.footer.html
+
+--- published
++++ with local edits
+-<!-- n:Footer-Contact (273) -->
++<div class="footer-contact-bar-ts"><!-- n:Footer-Contact (273) -->
+```
+
+This is not a substitute for T4's own Preview, which is authoritative. The
+REST API exposes no preview or publish operation (checked on 8.4.3 and 8.4.5),
+so seeing the rendered result still means previewing or publishing in T4.
+
 #### What it will tell you it cannot do
 
 **A tag with no published output** — a new tag, or an existing one pointed at a
