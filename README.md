@@ -147,6 +147,19 @@ Drupal-style theme-debug comments in the served HTML:
 (the default), `off` for neither. The comments are added at serve time; files
 under the mirror are never modified.
 
+#### Content items named where they appear
+
+T4 publishes an anchor for every content item it renders:
+
+```html
+<span id="d.en.980255"></span><!-- T4 CONTENT: #980255 'Full time program - action box' of type 'Action boxes' -> t4-source/test/contenttype/action-boxes.json -->
+```
+
+This is T4's own markup rather than a site convention, so it works on any
+instance, and it carries the item's id — so the annotation names the specific
+piece of content, not only its type. Requires `t4 sections`, which records the
+content items as it walks (`--no-contents` skips them).
+
 #### Components marked where they start
 
 T4 does not delimit content items in published output. Many sites do comment
@@ -203,7 +216,8 @@ pulled, the inspector reports the real assignment instead of inferring it:
 -->
 ```
 
-Two requests per section, so it is a separate, opt-in pull. It is resumable:
+Three requests per section with content items, two without, so it is a
+separate, opt-in pull. It is resumable:
 `--limit` stops early and re-running continues from the cache. Without it, the
 inference below is used instead.
 

@@ -21,9 +21,9 @@ import re
 InspectorContext = collections.namedtuple(
     "InspectorContext",
     "index overrides_dir env_name mirror_dir url_path mode "
-    "content_types component_markers resolver sections")
+    "content_types component_markers resolver sections content_items")
 InspectorContext.__new__.__defaults__ = (None, None, None, "/", "both",
-                                         None, None, None, None)
+                                         None, None, None, None, None)
 
 LAYOUT_META = re.compile(
     r'<meta\s+name=["\']t4-layout["\']\s+content=["\']([^"\']*)["\']', re.I)
@@ -91,6 +91,44 @@ class ContentTypeIndex:
         if marker_name:
             return self.by_name.get(marker_name.strip().lower())
         return None
+
+
+# T4 publishes an anchor for every content item it renders. This is T4's own
+# markup, not a site convention, so it works on any instance.
+DIRECT_EDIT_ANCHOR = re.compile(r'<span\s+id=["\']d\.(?P<lang>[a-z]{2})\.(?P<id>\d+)["\']\s*>\s*</span>', re.I)
+
+
+def annotate_content_items(body, items, content_types=None, env_name=None):
+    """Name each content item the page renders, at its anchor.
+
+    More precise than the marker comments: the anchor is emitted by T4 for
+    every item, and carries the item's id rather than only its type.
+    """
+    if not items or not getattr(items, "available", False):
+        return body, 0
+
+    count = 0
+
+    def replace(match):
+        nonlocal count
+        record = items.get(match.group("id"))
+        if not record:
+            return match.group(0)
+        count += 1
+        bits = ["<!-- T4 CONTENT: #%s '%s'"
+                % (_safe_comment(record["id"]),
+                   _safe_comment(record.get("name") or "(unnamed)"))]
+        type_name = record.get("contentTypeName")
+        if type_name:
+            bits.append(" of type '%s'" % _safe_comment(type_name))
+            found = content_types.lookup(record.get("contentTypeId"), type_name) if content_types else None
+            if found:
+                bits.append(" -> t4-source/%s/%s"
+                            % (_safe_comment(env_name or "<env>"), _safe_comment(found[0])))
+        bits.append(" -->")
+        return match.group(0) + fence("".join(bits))
+
+    return DIRECT_EDIT_ANCHOR.sub(replace, body), count
 
 
 def annotate_components(body, indexes, patterns=None, env_name=None):

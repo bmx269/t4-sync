@@ -19,6 +19,8 @@ def run(args, project):
     (env_dir / "_raw").mkdir(parents=True, exist_ok=True)
 
     known = {} if args.restart else sectionlib.load(str(env_dir))
+    found_contents = ({} if args.restart
+                      else sectionlib.load(str(env_dir), sectionlib.CONTENT_CACHE))
     if known:
         print("Resuming from %d known section(s)." % len(known))
 
@@ -35,12 +37,21 @@ def run(args, project):
     try:
         found = sectionlib.walk(client, root, language, known=known,
                                 limit=args.limit,
-                                progress=lambda _n: bar.update())
+                                progress=lambda _n: bar.update(),
+                                with_contents=not args.no_contents,
+                                content_sink=found_contents)
     finally:
         bar.close()
 
     path = env_dir / "_raw" / sectionlib.CACHE
     path.write_text(json.dumps(found, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    if found_contents:
+        content_path = env_dir / "_raw" / sectionlib.CONTENT_CACHE
+        content_path.write_text(
+            json.dumps(found_contents, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+        print("%d content item(s) recorded" % len(found_contents))
 
     with_layout = sum(1 for r in found.values() if sectionlib.layout_for(r))
     print("\n%d section(s), %d with a page layout assignment" % (len(found), with_layout))

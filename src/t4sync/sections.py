@@ -17,6 +17,7 @@ import json
 import urllib.error
 
 CACHE = "sections.json"
+CONTENT_CACHE = "sectioncontent.json"
 
 
 def child_ids(client, section_id, language):
@@ -26,6 +27,33 @@ def child_ids(client, section_id, language):
         return []
     children = (data or {}).get("children") if isinstance(data, dict) else data
     return [(c["id"], c.get("name")) for c in (children or []) if c.get("id") is not None]
+
+
+def contents(client, section_id, language):
+    """Content items placed in a section.
+
+    T4 publishes an anchor for each one, `<span id="d.en.980255">`, so these
+    ids can be matched straight back to the published page. That anchor is
+    T4's own, not a site convention, which makes this mapping work anywhere.
+    """
+    try:
+        data = client.get_json("hierarchy/%s/%s/contents" % (section_id, language))
+    except urllib.error.HTTPError:
+        return []
+    children = (data or {}).get("children") if isinstance(data, dict) else data
+    found = []
+    for child in children or []:
+        record = child.get("content") or {}
+        if record.get("id") is None:
+            continue
+        found.append({
+            "id": record["id"],
+            "name": record.get("name"),
+            "contentTypeId": record.get("contentTypeID"),
+            "contentTypeName": record.get("contentTypeName"),
+            "section": section_id,
+        })
+    return found
 
 
 def describe(client, section_id, language):
@@ -44,7 +72,8 @@ def layout_for(record, channel_id=None):
     return None
 
 
-def walk(client, root_id, language, known=None, limit=None, progress=None):
+def walk(client, root_id, language, known=None, limit=None, progress=None,
+         with_contents=False, content_sink=None):
     """Breadth-first walk from `root_id`, returning {section_id: record}.
 
     `known` seeds the result so an interrupted walk can be resumed without
@@ -79,6 +108,10 @@ def walk(client, root_id, language, known=None, limit=None, progress=None):
             }
             found[key] = record
 
+        if with_contents and content_sink is not None:
+            for item in contents(client, section_id, language):
+                content_sink[str(item["id"])] = item
+
         slug = record.get("outputUri") or record.get("name") or ""
         record["path"] = "%s/%s" % (parent_path, slug) if slug else parent_path
         if progress:
@@ -91,13 +124,31 @@ def walk(client, root_id, language, known=None, limit=None, progress=None):
     return found
 
 
-def load(env_dir):
-    path = "%s/_raw/%s" % (env_dir, CACHE)
+def load(env_dir, name=CACHE):
+    path = "%s/_raw/%s" % (env_dir, name)
     try:
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     except (OSError, ValueError):
         return {}
+
+
+class ContentItems:
+    """Maps a published `d.en.<id>` anchor to the content item behind it."""
+
+    def __init__(self, items=None):
+        self.items = {str(k): v for k, v in (items or {}).items()}
+
+    @classmethod
+    def from_env_dir(cls, env_dir):
+        return cls(load(env_dir, CONTENT_CACHE))
+
+    @property
+    def available(self):
+        return bool(self.items)
+
+    def get(self, content_id):
+        return self.items.get(str(content_id))
 
 
 def by_url_path(sections):

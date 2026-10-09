@@ -14,13 +14,15 @@ from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
                               LayoutIndex, annotate_components,
-                              build_comment, build_panel, strip_injected)
+                              annotate_content_items, build_comment,
+                              build_panel, strip_injected)
 from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
 from t4sync.compare import read_field, remote_path, write_field  # noqa: E402
 from t4sync.contentlayout import format_key, layout_name  # noqa: E402
-from t4sync.sections import SectionLayouts, by_url_path, layout_for  # noqa: E402
+from t4sync.sections import (ContentItems, SectionLayouts,   # noqa: E402
+                             by_url_path, layout_for)
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 
@@ -545,6 +547,36 @@ class TestExactBeatsInference(unittest.TestCase):
         self.assertIn("assigned in T4 to section 10", out)
         self.assertIn("x t4-source/test/pageLayout/exact.header.html", out)
         self.assertNotIn("SUGGESTIONS", out)
+
+
+class TestContentItemAnnotation(unittest.TestCase):
+    """T4 emits <span id="d.en.<id>"> for every content item it renders."""
+
+    ITEMS = ContentItems({"980255": {"id": 980255, "name": "Action box A",
+                                     "contentTypeId": 326,
+                                     "contentTypeName": "Action boxes"}})
+
+    def test_anchor_is_named(self):
+        page = '<span id="d.en.980255"></span><p>x</p>'
+        out, n = annotate_content_items(page, self.ITEMS, env_name="test")
+        self.assertEqual(n, 1)
+        self.assertIn("T4 CONTENT: #980255 'Action box A'", out)
+        self.assertIn("of type 'Action boxes'", out)
+        self.assertEqual(strip_injected(out), page)   # removable, exactly
+
+    def test_unknown_anchor_is_left_alone(self):
+        page = '<span id="d.en.999999"></span>'
+        out, n = annotate_content_items(page, self.ITEMS, env_name="test")
+        self.assertEqual((out, n), (page, 0))
+
+    def test_other_languages_match(self):
+        page = '<span id="d.fr.980255"></span>'
+        out, n = annotate_content_items(page, self.ITEMS, env_name="test")
+        self.assertEqual(n, 1)
+
+    def test_no_data_is_a_no_op(self):
+        page = '<span id="d.en.980255"></span>'
+        self.assertEqual(annotate_content_items(page, ContentItems({})), (page, 0))
 
 
 class TestWatcher(unittest.TestCase):

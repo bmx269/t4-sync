@@ -98,6 +98,8 @@ def build_parser():
     sp.add_argument("--root", type=int, help="section id to start from")
     sp.add_argument("--limit", type=int, help="stop after this many sections")
     sp.add_argument("--restart", action="store_true", help="ignore the cache")
+    sp.add_argument("--no-contents", action="store_true",
+                    help="skip content items (one fewer request per section)")
     sp.add_argument("--timeout", type=int, default=60)
 
     sp = add("compare", "Check the local server matches the live site.")

@@ -30,9 +30,10 @@ import time
 
 from .inspector import (ContentTypeIndex, InspectorContext, LayoutIndex,
                         LAYOUT_ID_META, LAYOUT_META,
-                        annotate_components, build_comment, build_panel, fence)
+                        annotate_components, annotate_content_items,
+                        build_comment, build_panel, fence)
 from .render import PreviewEngine, status_comment
-from .sections import SectionLayouts
+from .sections import ContentItems, SectionLayouts
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -77,6 +78,15 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
             body, marked = annotate_components(
                 body, inspector.content_types,
                 inspector.component_markers, inspector.env_name)
+            body, named = annotate_content_items(
+                body, inspector.content_items,
+                (inspector.content_types or {}).get("contenttype"),
+                inspector.env_name)
+            if named:
+                prefix = prefix.replace(
+                    "<!-- END T4 DEBUG -->",
+                    "<!-- CONTENT ITEMS: %d named inline -->\n<!-- END T4 DEBUG -->"
+                    % named)
             if marked:
                 prefix = prefix.replace(
                     "<!-- END T4 DEBUG -->",
@@ -381,6 +391,7 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
             index=index, overrides_dir=MirrorHandler.overrides,
             env_name=env_name, mode=inspect,
             sections=SectionLayouts.from_env_dir(source_dir),
+            content_items=ContentItems.from_env_dir(source_dir),
             resolver=(MirrorHandler.previewer.resolver()
                       if MirrorHandler.previewer else None),
             content_types={
