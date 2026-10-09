@@ -21,8 +21,9 @@ import re
 InspectorContext = collections.namedtuple(
     "InspectorContext",
     "index overrides_dir env_name mirror_dir url_path mode "
-    "content_types component_markers")
-InspectorContext.__new__.__defaults__ = (None, None, None, "/", "both", None, None)
+    "content_types component_markers resolver")
+InspectorContext.__new__.__defaults__ = (None, None, None, "/", "both",
+                                         None, None, None)
 
 LAYOUT_META = re.compile(
     r'<meta\s+name=["\']t4-layout["\']\s+content=["\']([^"\']*)["\']', re.I)
@@ -132,7 +133,7 @@ def annotate_components(body, indexes, patterns=None, env_name=None):
         def replace(match, _endpoint=endpoint):
             nonlocal count
             count += 1
-            return match.group(0) + note_for(match, _endpoint)
+            return match.group(0) + fence(note_for(match, _endpoint))
         body = regex.sub(replace, body)
 
     return body, count
@@ -209,6 +210,33 @@ class LayoutIndex:
         return [], "no layout named %r in the local pull" % layout_name
 
 
+# Everything this tool injects is fenced, so it can be removed exactly.
+# Without a fence, stripping means guessing at comment boundaries, and the
+# annotations themselves contain "->" and ">" which trip naive patterns.
+MARK_BEGIN = "<!--T4SYNC:BEGIN-->"
+MARK_END = "<!--T4SYNC:END-->"
+
+
+def fence(text):
+    """Wrap injected markup so `strip_injected` can take it out again."""
+    return "%s%s%s" % (MARK_BEGIN, text, MARK_END) if text else ""
+
+
+def strip_injected(html):
+    """Remove everything this tool injected, leaving the page as published."""
+    out, cursor = [], 0
+    while True:
+        start = html.find(MARK_BEGIN, cursor)
+        if start < 0:
+            out.append(html[cursor:])
+            return "".join(out)
+        out.append(html[cursor:start])
+        end = html.find(MARK_END, start)
+        if end < 0:
+            return "".join(out)
+        cursor = end + len(MARK_END)
+
+
 def _esc(value):
     return html.escape(str(value), quote=True)
 
@@ -219,7 +247,7 @@ def _safe_comment(text):
 
 
 def build_comment(body, index, overrides_dir=None, env_name=None,
-                  mirror_dir=None, url_path="/"):
+                  mirror_dir=None, url_path="/", resolver=None):
     """Drupal-style theme-debug comments, emitted into the served HTML.
 
     Mirrors how Twig debug marks up a page: the hook, the candidate templates
@@ -245,9 +273,21 @@ def build_comment(body, index, overrides_dir=None, env_name=None,
         _safe_comment(layout_name or "(unnamed)"),
         " #%s" % _safe_comment(layout_id) if layout_id else ""))
 
-    files, note = index.resolve(layout_name, layout_id)
-    candidates = sorted(n for n in index.by_name
-                        if layout_name and n.split(".")[0] == layout_name)
+    note = None
+    files = []
+    if resolver is not None:
+        record, why = resolver.resolve(body, layout_name, layout_id)
+        if record:
+            files = index.files_for(record["id"])
+            note = "identified as %s (%s)" % (record.get("name"), why)
+        else:
+            note = why
+    else:
+        files, note = index.resolve(layout_name, layout_id)
+
+    candidates = ([] if files else
+                  sorted(n for n in index.by_name
+                         if layout_name and n.split(".")[0] == layout_name))
 
     if candidates and not files:
         # Same convention as Twig debug: '*' offered, 'x' used.
@@ -347,7 +387,7 @@ def child_layouts(mirror_dir, url_path, limit=25):
 
 
 def build_panel(body, index, overrides_dir=None, env_name=None,
-                mirror_dir=None, url_path="/"):
+                mirror_dir=None, url_path="/", resolver=None):
     """Return the overlay markup for this page, or '' if there is nothing to say."""
     layout = LAYOUT_META.search(body)
     layout_id = LAYOUT_ID_META.search(body)
@@ -361,7 +401,13 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
             label += '  <span class="t4i-dim">#%s</span>' % _esc(layout_id)
         rows.append(("Page layout", label, None))
 
-        files, note = index.resolve(layout_name, layout_id)
+        if resolver is not None:
+            record, why = resolver.resolve(body, layout_name, layout_id)
+            files = index.files_for(record["id"]) if record else []
+            note = ("%s  <span class=\"t4i-dim\">(%s)</span>"
+                    % (_esc(record.get("name")), _esc(why))) if record else _esc(why)
+        else:
+            files, note = index.resolve(layout_name, layout_id)
         for rel, _meta in files:
             rows.append(("", '<code>%s</code>' % _esc(rel),
                          "t4-source/%s/%s" % (env_name or "<env>", rel)))

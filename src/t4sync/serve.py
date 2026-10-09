@@ -30,7 +30,7 @@ import time
 
 from .inspector import (ContentTypeIndex, InspectorContext, LayoutIndex,
                         LAYOUT_ID_META, LAYOUT_META,
-                        annotate_components, build_comment, build_panel)
+                        annotate_components, build_comment, build_panel, fence)
 from .render import PreviewEngine, status_comment
 import urllib.error
 import urllib.parse
@@ -68,9 +68,10 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
         kwargs = dict(overrides_dir=inspector.overrides_dir,
                       env_name=inspector.env_name,
                       mirror_dir=inspector.mirror_dir,
-                      url_path=inspector.url_path)
+                      url_path=inspector.url_path,
+                      resolver=inspector.resolver)
         if inspector.mode in ("comments", "both"):
-            prefix = build_comment(body, inspector.index, **kwargs)
+            prefix = fence(build_comment(body, inspector.index, **kwargs))
             body, marked = annotate_components(
                 body, inspector.content_types,
                 inspector.component_markers, inspector.env_name)
@@ -80,9 +81,9 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
                     "<!-- COMPONENTS: %d marked inline -->\n<!-- END T4 DEBUG -->"
                     % marked)
         if inspector.mode in ("panel", "both"):
-            extra += build_panel(body, inspector.index, **kwargs)
+            extra += fence(build_panel(body, inspector.index, **kwargs))
     if inject_reload:
-        extra += RELOAD_SCRIPT
+        extra += fence(RELOAD_SCRIPT)
 
     if extra:
         if "</body>" in body:
@@ -289,9 +290,9 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
                               inject_reload=bool(self.watcher),
                               inspector=inspector)
         if preview_status:
-            body = status_comment(
+            body = fence(status_comment(
                 preview_status,
-                self.inspector.env_name if self.inspector else None) + body
+                self.inspector.env_name if self.inspector else None)) + body
         encoded = body.encode("utf-8")
 
         self.send_response(200)
@@ -302,7 +303,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         return io.BytesIO(encoded)
 
     def log_message(self, fmt, *args):
-        if RELOAD_PATH in (args[0] if args else ""):
+        if getattr(self, "path", "").startswith(RELOAD_PATH):
             return          # the reload stream would otherwise log constantly
         sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
@@ -346,6 +347,8 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         MirrorHandler.inspector = InspectorContext(
             index=index, overrides_dir=MirrorHandler.overrides,
             env_name=env_name, mode=inspect,
+            resolver=(MirrorHandler.previewer.resolver()
+                      if MirrorHandler.previewer else None),
             content_types={
                 "contenttype": ContentTypeIndex.from_env_dir(source_dir, "contenttype"),
                 "navigation": ContentTypeIndex.from_env_dir(source_dir, "navigation"),

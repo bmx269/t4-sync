@@ -14,8 +14,9 @@ from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
                               LayoutIndex, annotate_components,
-                              build_comment, build_panel)
-from t4sync.render import align, preview, render   # noqa: E402
+                              build_comment, build_panel, strip_injected)
+from t4sync.render import (LayoutResolver, align,   # noqa: E402
+                           preview, render)
 from t4sync.serve import RELOAD_PATH, Watcher, load_rules, transform_html  # noqa: E402
 
 
@@ -251,10 +252,11 @@ class TestComponentAnnotation(unittest.TestCase):
             page = '<div><!-- ct:322 Contact Footer --><p>x</p></div>'
             out, n = annotate_components(page, {"contenttype": index}, env_name="test")
             self.assertEqual(n, 1)
-            self.assertIn("<!-- ct:322 Contact Footer -->"
-                          "<!-- T4 COMPONENT: 'Contact footer' -> "
-                          "t4-source/test/contenttype/thing.json -->", out)
+            self.assertIn("T4 COMPONENT: 'Contact footer' -> "
+                          "t4-source/test/contenttype/thing.json", out)
             self.assertIn("<p>x</p>", out)          # page content untouched
+            # The fence must take the page back to exactly what it was.
+            self.assertEqual(strip_injected(out), page)
 
     def test_hyphenated_names_match(self):
         """A hyphen is ordinary in a name; an earlier pattern excluded it."""
@@ -338,6 +340,85 @@ class TestPreview(unittest.TestCase):
         from t4sync.render import Unalignable
         with self.assertRaises(Unalignable):
             align("<!--nowhere-in-the-page-->", self.PAGE)
+
+
+class TestStripInjected(unittest.TestCase):
+    """Everything injected must be removable, exactly.
+
+    This is what lets a served page be compared against the live site: the
+    annotations contain '>' and '->', which defeats stripping by pattern.
+    """
+
+    def test_round_trip_through_transform(self):
+        page = "<html><body><p>content</p></body></html>"
+        out = transform_html(page, inject_reload=True)
+        self.assertNotEqual(out, page)
+        self.assertEqual(strip_injected(out), page)
+
+    def test_round_trip_with_rules_applied(self):
+        import re
+        page = '<body><a href="https://www.x.com/a">x</a></body>'
+        rules = [(re.compile(r"https://www\.x\.com/"), "/")]
+        out = transform_html(page, rules, inject_reload=True)
+        # Rewrites are deliberate output changes and are NOT stripped.
+        self.assertEqual(strip_injected(out), '<body><a href="/a">x</a></body>')
+
+    def test_unfenced_page_is_untouched(self):
+        page = "<html><!-- an ordinary comment --><body>hi</body></html>"
+        self.assertEqual(strip_injected(page), page)
+
+    def test_unterminated_fence_does_not_lose_the_page(self):
+        self.assertEqual(strip_injected("<p>a</p><!--T4SYNC:BEGIN--><p>b</p>"),
+                         "<p>a</p>")
+
+
+class TestLayoutResolver(unittest.TestCase):
+    """Identifying which layout produced a page, from the page itself."""
+
+    A = {"id": 1, "name": "u_webpage.production",
+         "headerCode": '<!--top--><t4 type="media" id="100" />',
+         "footerCode": "<!--bottom-->"}
+    B = {"id": 2, "name": "u_webpage.webdev",
+         "headerCode": '<!--top--><t4 type="media" id="200" />',
+         "footerCode": "<!--bottom-->"}
+    C = {"id": 3, "name": "m_open",
+         "headerCode": "<!--other-->", "footerCode": "<!--end-->"}
+
+    def resolver(self, *records):
+        return LayoutResolver(None, list(records))
+
+    def test_unique_name_needs_no_guessing(self):
+        rec, why = self.resolver(self.A, self.C).resolve("<html>", "m_open")
+        self.assertEqual(rec["name"], "m_open")
+        self.assertIn("uniquely", why)
+
+    def test_id_is_preferred_when_published(self):
+        rec, _why = self.resolver(self.A, self.B).resolve("<html>", "u_webpage", 2)
+        self.assertEqual(rec["name"], "u_webpage.webdev")
+
+    def test_distinguishing_tag_id_decides(self):
+        """Same literals; only the media id tells them apart."""
+        page = "<html><!--top--><!-- 100 css -->rendered<!--bottom--></html>"
+        rec, why = self.resolver(self.A, self.B).resolve(page, "u_webpage")
+        self.assertEqual(rec["name"], "u_webpage.production")
+        self.assertIn("tag id", why)
+
+    def test_alignment_alone_can_decide(self):
+        page = "<html><!--other-->x<!--end--></html>"
+        rec, why = self.resolver(self.A, self.C).resolve(page, "m_open")
+        self.assertEqual(rec["name"], "m_open")
+
+    def test_truly_identical_layouts_are_not_guessed(self):
+        twin = dict(self.A, id=9, name="u_webpage.copy")
+        page = "<html><!--top--><!-- 100 css -->x<!--bottom--></html>"
+        rec, why = self.resolver(self.A, twin).resolve(page, "u_webpage")
+        self.assertIsNone(rec)
+        self.assertIn("indistinguishable", why)
+
+    def test_unknown_name(self):
+        rec, why = self.resolver(self.A).resolve("<html>", "nothing_like_this")
+        self.assertIsNone(rec)
+        self.assertIn("no layout named", why)
 
 
 class TestWatcher(unittest.TestCase):

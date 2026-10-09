@@ -186,29 +186,26 @@ A content layout's *template* still cannot be linked, because the REST API does
 not expose Content Layouts at all — the link is to the content type's
 definition.
 
-#### Why there are "suggestions"
+#### How the layout is identified
 
-T4 publishes two meta tags and they are not equally useful:
+T4 publishes a layout *name* into nearly every page, but the name need not
+identify one layout: a site can publish `u_webpage` from any of several
+`u_webpage.*` layouts. Rather than asking for a mapping, the layout is
+identified from the page itself:
 
-| | Coverage | Precision |
-|---|---|---|
-| `t4-layout-id` | A small minority of pages | Exact |
-| `t4-layout` | Nearly every page | The name the layout writes into its own markup, which need not be its name in T4 |
+| Signal | What it does |
+|---|---|
+| `t4-layout-id` | Exact, when the page carries it (often it does not) |
+| **Alignment** | A layout's literal markup must appear, in order, in the page. One that did not produce the page usually fails outright |
+| **Tag ids** | Among survivors, score the ids that *differ* between them. T4 layouts commonly echo media and navigation ids into the output |
 
-So a site can publish `u_webpage` from any of `u_webpage.production`,
-`u_webpage.webdev`, `u_webpage.development` and so on. When the name does not
-identify one layout, the debug output lists the candidates the way Twig debug
-does, rather than guessing:
+On a real site this resolved 297 of 300 pages; the other three carry no meta
+tag at all. Where two layouts are genuinely indistinguishable -- identical
+literals, identical tags -- it says so instead of picking one:
 
 ```html
-<!-- LAYOUT NAME SUGGESTIONS:
-   * u_webpage.production  (#975522)
-   * u_webpage.webdev  (#1033845)
-   the published name does not say which - check the section's layout in T4
--->
+<!-- NOTE: indistinguishable from the published page: u_webpage.a, u_webpage.b -->
 ```
-
-Guessing here would send you to edit the wrong file, so it does not.
 
 ### The inspector
 
@@ -329,6 +326,27 @@ That warning is the point. A preview that quietly differs from what T4 will
 publish is worse than no preview.
 
 `--no-preview` serves the mirror exactly as published.
+
+### Checking the local copy is faithful
+
+```sh
+t4 compare                      # the home page
+t4 compare about/admissions
+t4 compare --local http://127.0.0.1:8331
+```
+
+Fetches the page from the published site and from the local server, removes
+everything this tool injected, and diffs the two. The local copy is assembled
+from a mirror, plus local edits, plus captured tag output -- several places for
+a difference to creep in unnoticed.
+
+Everything injected is fenced with `<!--T4SYNC:BEGIN-->` / `<!--T4SYNC:END-->`
+so it can be removed exactly. Stripping by pattern does not work: the
+annotations themselves contain `>` and `->`.
+
+Differences are explained rather than reported as failures -- local layout
+edits not yet published will show up, and so will content that changed in T4
+since the mirror was taken.
 
 ### Checking an instance
 

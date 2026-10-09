@@ -21,7 +21,12 @@ guessed at, so a preview never silently shows something T4 would not.
 import collections
 import re
 
-TAG_RE = re.compile(r"<t4\b[^>]*?/>|<t4\b[^>]*?</t4>", re.I)
+# A T4 tag's attributes can contain `>` inside quotes, e.g.
+#   format="<p>Email: $value</p>"
+# so the body is matched as a run of quoted strings or non-quote, non-`>`
+# characters rather than simply "anything but >".
+_ATTRS = r'(?:[^>"\']|"[^"]*"|\'[^\']*\')*?'
+TAG_RE = re.compile(r"<t4\b%s/>|<t4\b%s</t4>" % (_ATTRS, _ATTRS), re.I)
 ID_ATTR_RE = re.compile(r'\bid\s*=\s*["\'](\d+)["\']', re.I)
 
 # Openers and closers a site's layouts emit around a tag's output. Both forms
@@ -259,18 +264,26 @@ class PreviewEngine:
     def available(self):
         return bool(self._published)
 
+    @property
+    def records(self):
+        return list(self._published.values())
+
+    def resolver(self):
+        return LayoutResolver(self.index, self.records)
+
     def apply(self, page, layout_name=None, layout_id=None):
         """Return (html, status). `status` is None when nothing was applied."""
         import os
         if not self._published:
             return page, None
 
-        files, _note = self.index.resolve(layout_name, layout_id) if self.index else ([], None)
-        if not files:
-            return page, None
-
-        record = self._published.get(str(files[0][1].get("id")))
+        # Identify the layout from the page itself, so a published name that
+        # does not name one layout still resolves.
+        record, _why = self.resolver().resolve(page, layout_name, layout_id)
         if not record:
+            return page, None
+        files = self.index.files_for(record["id"]) if self.index else []
+        if not files:
             return page, None
 
         html, problems, applied = page, [], []
@@ -323,3 +336,84 @@ def status_comment(status, env_name=None):
         else:
             lines.append("<!--   %s: %s -->" % (kind, str(detail).replace("--", "- -")))
     return "\n".join(lines) + "\n"
+
+
+class LayoutResolver:
+    """Works out which page layout actually produced a page.
+
+    T4 publishes a layout *name* into nearly every page, but that name need
+    not identify one layout: a site can publish `u_webpage` from any of
+    several `u_webpage.*` layouts. Rather than ask for a mapping, identify the
+    layout from the page itself, using two signals:
+
+      alignment   the layout's literal markup must appear, in order, in the
+                  page. A layout that did not produce the page generally fails
+                  this outright.
+      tag ids     among the survivors, score the tag ids that differ between
+                  them by whether they appear in the page. T4 layouts commonly
+                  echo media and navigation ids into the output.
+
+    Where two layouts are genuinely indistinguishable -- identical literals and
+    identical tags -- it says so rather than picking one.
+    """
+
+    def __init__(self, index, published_records):
+        self.index = index
+        self.records = {str(r.get("id")): r for r in (published_records or [])}
+
+    def candidates(self, layout_name, layout_id=None):
+        if layout_id and str(layout_id) in self.records:
+            return [self.records[str(layout_id)]]
+        if not layout_name:
+            return []
+        exact = [r for r in self.records.values() if r.get("name") == layout_name]
+        if exact:
+            return exact
+        prefix = layout_name.split(".")[0]
+        return [r for r in self.records.values()
+                if (r.get("name") or "").split(".")[0] == prefix]
+
+    def resolve(self, page, layout_name, layout_id=None):
+        """Return (record, reason). `record` is None when undecidable."""
+        pool = self.candidates(layout_name, layout_id)
+        if not pool:
+            return None, "no layout named %r in the local pull" % layout_name
+        if len(pool) == 1:
+            return pool[0], "named uniquely"
+
+        aligned = [r for r in pool if self._aligns(r, page)]
+        if len(aligned) == 1:
+            return aligned[0], "its markup is the only one that fits the page"
+        pool = aligned or pool
+
+        ids = {str(r["id"]): self._tag_ids(r) for r in pool}
+        shared = set.intersection(*ids.values()) if ids else set()
+        scored = sorted(
+            ((len({i for i in ids[str(r["id"])] - shared if i in page}), r) for r in pool),
+            key=lambda pair: -pair[0])
+        if len(scored) > 1 and scored[0][0] == scored[1][0]:
+            tied = [r["name"] for score, r in scored if score == scored[0][0]]
+            return None, ("indistinguishable from the published page: %s"
+                          % ", ".join(sorted(set(tied))))
+        return scored[0][1], ("matched on %d tag id(s) unique to it" % scored[0][0])
+
+    def _aligns(self, record, page):
+        for field in ("headerCode", "footerCode"):
+            source = record.get(field)
+            if not isinstance(source, str) or not source.strip():
+                continue
+            try:
+                align(source, page)
+            except Unalignable:
+                return False
+        return True
+
+    @staticmethod
+    def _tag_ids(record):
+        ids = set()
+        for field in ("headerCode", "footerCode"):
+            for match in TAG_RE.finditer(record.get(field) or ""):
+                found = ID_ATTR_RE.search(match.group(0))
+                if found:
+                    ids.add(found.group(1))
+        return ids
