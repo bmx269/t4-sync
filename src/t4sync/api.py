@@ -51,6 +51,32 @@ class Client:
         except json.JSONDecodeError as exc:
             raise T4Error("%s returned non-JSON: %s" % (path, exc))
 
+    def get_bytes(self, path):
+        """Fetch a binary media element.
+
+        T4 answers the media path with a short-lived signed download URL
+        rather than the bytes, so this is two requests: the URL, then the
+        file. The URL is single use, so it cannot be cached.
+
+        The first response is a 302 whose *body* carries the URL and which has
+        no Location header, so urllib raises rather than following it. Reading
+        the body off the error is the whole trick.
+        """
+        try:
+            location = self._request(path)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (301, 302, 303, 307, 308):
+                raise
+            location = exc.headers.get("Location") or exc.read().decode(
+                "utf-8", errors="replace")
+        location = (location or "").strip().strip('"')
+        if not location.startswith("http"):
+            raise T4Error("expected a download URL, got %r" % location[:80])
+        req = urllib.request.Request(location)
+        req.add_header("Authorization", "Bearer %s" % self.token)
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            return resp.read()
+
     def put_json(self, path, payload):
         body = self._request(path, method="PUT", payload=payload)
         return json.loads(body) if body.strip() else None

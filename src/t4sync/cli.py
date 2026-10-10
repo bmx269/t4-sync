@@ -61,6 +61,9 @@ def build_parser():
                     help="metadata only: fast, but no source")
     sp.add_argument("--force", action="store_true",
                     help="overwrite files edited locally since the last pull")
+    sp.add_argument("--binary", action="store_true",
+                    help="also download binary media (images, fonts) - these "
+                         "can be large and are already visible via the mirror")
 
     sp = add("sync", "Pull, then report what changed on each side.")
     env_flags(sp)

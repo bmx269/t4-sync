@@ -12,7 +12,7 @@ from ..progress import Progress
 
 
 def pull_env(project, env_name, only=None, detail=True, timeout=60,
-             quiet=False, force=False):
+             quiet=False, force=False, binary=False):
     """Pull one environment. Returns the number of failed endpoints."""
     env = project.env(env_name)
     token = project.require_token(env_name)
@@ -93,7 +93,8 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
         print("  %-13s %d item(s): %s" % (endpoint, len(items), ", ".join(parts) or "nothing"))
 
     if not only or "media" in only:
-        failures += pull_media(client, root, manifest, env, previous, force=force)
+        failures += pull_media(client, root, manifest, env, previous,
+                               force=force, binary=binary)
 
     if not only or "contentLayout" in only:
         failures += pull_content_layouts(client, root, manifest, env, previous,
@@ -170,7 +171,31 @@ def media_filename(name, media_id):
     return base
 
 
-def pull_media(client, root, manifest, env, previous, force=False):
+def save_binary(client, record, root, language):
+    """Save a binary media item's bytes. Returns 1 if written.
+
+    Opt-in: images and fonts are already visible locally through the site
+    mirror, so the only thing this adds is being able to deploy a changed one,
+    and a site's media library can be very large.
+    """
+    media_id = record.get("id")
+    version = record.get("version") or "1.0"
+    name = record.get("fileName") or record.get("name")
+    if media_id is None or not name:
+        return 0
+    target = root / "media-binary" / media_filename(name, media_id)
+    if target.is_file() and target.stat().st_size == (record.get("mediaSize") or -1):
+        return 0                       # already have these exact bytes
+    try:
+        data = client.get_bytes("media/%s/%s/%s/Media" % (media_id, language, version))
+    except Exception:
+        return 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return 1
+
+
+def pull_media(client, root, manifest, env, previous, force=False, binary=False):
     """Text media items -- the code snippets T4 sites keep in the Media Library.
 
     Page layouts pull these in by id, so their markup is part of the site's
@@ -216,6 +241,7 @@ def pull_media(client, root, manifest, env, previous, force=False):
     outdir = root / "media"
     outdir.mkdir(parents=True, exist_ok=True)
     records, written, kept, failures = [], 0, 0, 0
+    binary_saved = 0
     bar = Progress("  media", total=len(ids))
     try:
         for media_id in sorted(ids, key=int):
@@ -231,7 +257,9 @@ def pull_media(client, root, manifest, env, previous, force=False):
                 continue
             text = record.get(MEDIA_TEXT_FIELD)
             if not isinstance(text, str) or not text.strip():
-                continue          # binary media: nothing to version here
+                if binary:
+                    binary_saved += save_binary(client, record, root, language)
+                continue
             records.append(record)
 
             # The media item's own name carries its extension (v8.css,
@@ -264,6 +292,8 @@ def pull_media(client, root, manifest, env, previous, force=False):
     parts = ["%d source" % written]
     if kept:
         parts.append("%d kept (edited locally)" % kept)
+    if binary_saved:
+        parts.append("%d binary" % binary_saved)
     if removed:
         parts.append("%d stale removed" % removed)
     if failures:
@@ -357,5 +387,5 @@ def run(args, project):
             continue
         failures += pull_env(project, name, only=args.only,
                              detail=not args.no_detail, timeout=args.timeout,
-                             force=args.force)
+                             force=args.force, binary=args.binary)
     return 1 if failures else 0
