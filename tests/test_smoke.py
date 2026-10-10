@@ -684,6 +684,27 @@ class TestSectionWalk(unittest.TestCase):
         self.assertEqual(len(sink), 4)
         self.assertEqual(sink["901"]["contentTypeName"], "Thing")
 
+    def test_resume_does_not_refetch_cached_sections(self):
+        """A resume must not spend two requests per known section."""
+        client = FakeClient()
+        found = sectionlib.walk(client, 1, "en", with_contents=True, content_sink={})
+        first = len(client.calls)
+
+        again = FakeClient()
+        sectionlib.walk(again, 1, "en", known=found, with_contents=True,
+                        content_sink={})
+        self.assertLess(len(again.calls), first,
+                        "resume cost as much as the original walk")
+        self.assertNotIn("hierarchy/1/en/contents", again.calls)
+        self.assertNotIn("hierarchy/1/en/subsections", again.calls)
+
+    def test_checkpoint_is_called_during_the_walk(self):
+        seen = []
+        sectionlib.walk(FakeClient(), 1, "en",
+                        checkpoint=lambda f, c: seen.append(len(f)),
+                        checkpoint_every=1)
+        self.assertTrue(seen, "no checkpoint during a multi-section walk")
+
     def test_a_dropped_request_does_not_end_the_walk(self):
         class Flaky(FakeClient):
             def get_json(self, path):

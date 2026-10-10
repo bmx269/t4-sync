@@ -75,11 +75,16 @@ def layout_for(record, channel_id=None):
 
 
 def walk(client, root_id, language, known=None, limit=None, progress=None,
-         with_contents=False, content_sink=None):
+         with_contents=False, content_sink=None, checkpoint=None,
+         checkpoint_every=50):
     """Breadth-first walk from `root_id`, returning {section_id: record}.
 
     `known` seeds the result so an interrupted walk can be resumed without
     refetching. Sections already present are not requested again.
+
+    `checkpoint(found, contents)` is called every `checkpoint_every` sections.
+    A full walk is thousands of requests over a link that drops, so saving
+    only at the end means a failure late in the run discards all of it.
     """
     found = dict(known or {})
     queue = [(root_id, None, "")]
@@ -115,16 +120,28 @@ def walk(client, root_id, language, known=None, limit=None, progress=None,
             }
             found[key] = record
 
-        if with_contents and content_sink is not None:
+        # Resuming must not re-fetch what the cache already answers. Without
+        # this, a resumed walk spends two requests per known section before it
+        # reaches anything new -- on a large tree that is the whole run.
+        if (with_contents and content_sink is not None
+                and not record.get("contentsFetched")):
             for item in contents(client, section_id, language):
                 content_sink[str(item["id"])] = item
+            record["contentsFetched"] = True
+
+        if checkpoint and visited % checkpoint_every == 0:
+            checkpoint(found, content_sink)
 
         slug = record.get("outputUri") or record.get("name") or ""
         record["path"] = "%s/%s" % (parent_path, slug) if slug else parent_path
         if progress:
             progress(len(found))
 
-        for child_id, child_name in child_ids(client, section_id, language):
+        children = record.get("children")
+        if children is None:
+            children = child_ids(client, section_id, language)
+            record["children"] = children
+        for child_id, child_name in children:
             if str(child_id) not in seen:
                 queue.append((child_id, child_name, record["path"]))
 

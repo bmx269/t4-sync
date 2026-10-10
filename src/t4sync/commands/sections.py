@@ -33,6 +33,17 @@ def run(args, project):
         from ..errors import T4Error
         raise T4Error(raise_help)
 
+    path = env_dir / "_raw" / sectionlib.CACHE
+    content_path = env_dir / "_raw" / sectionlib.CONTENT_CACHE
+
+    def save(found, contents):
+        path.write_text(json.dumps(found, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8")
+        if contents:
+            content_path.write_text(
+                json.dumps(contents, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8")
+
     bar = Progress("  sections", total=args.limit)
     interrupted = False
     try:
@@ -40,7 +51,8 @@ def run(args, project):
                                 limit=args.limit,
                                 progress=lambda _n: bar.update(),
                                 with_contents=not args.no_contents,
-                                content_sink=found_contents)
+                                content_sink=found_contents,
+                                checkpoint=save)
     except KeyboardInterrupt:
         # Whatever was gathered is still worth keeping; the walk resumes.
         interrupted = True
@@ -48,14 +60,9 @@ def run(args, project):
     finally:
         bar.close()
 
-    path = env_dir / "_raw" / sectionlib.CACHE
-    path.write_text(json.dumps(found, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    save(found, found_contents)
 
     if found_contents:
-        content_path = env_dir / "_raw" / sectionlib.CONTENT_CACHE
-        content_path.write_text(
-            json.dumps(found_contents, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8")
         print("%d content item(s) recorded" % len(found_contents))
 
     with_layout = sum(1 for r in found.values() if sectionlib.layout_for(r))
