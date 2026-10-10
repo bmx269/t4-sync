@@ -1,5 +1,6 @@
 """Turn API records into files on disk, and record how to get back."""
 import hashlib
+import os
 import json
 import pathlib
 import re
@@ -29,6 +30,17 @@ def guess_extension(source):
     if head.startswith("<") or "<t4" in source:
         return "html"
     return "txt"
+
+
+def local_path(base, rel):
+    """Join a "/"-separated identifier to a filesystem path.
+
+    Manifest keys and URL paths always use "/" -- they are portable
+    identifiers, not filesystem paths. Python will open the mixed-separator
+    result on Windows, so this is not about making IO work; it is so the path
+    can be compared, printed and stored consistently.
+    """
+    return os.path.normpath(os.path.join(str(base), *str(rel).split("/")))
 
 
 def write_text(path, value):

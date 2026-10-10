@@ -242,11 +242,18 @@ class MediaSources:
         return bool(self.by_name)
 
     def path_for(self, url_path):
-        """Local file for a published asset URL, or None."""
+        """Local file for a published asset URL, or None.
+
+        Manifest keys always use "/" -- they are portable identifiers, not
+        filesystem paths -- so the result is normalised. Windows tolerates the
+        mixed separators that joining produces, but anything comparing the
+        path afterwards does not.
+        """
         import os
         name = (url_path or "").split("?")[0].rsplit("/", 1)[-1].lower()
         rel = self.by_name.get(name)
         if not rel or not self.env_dir:
             return None
-        full = os.path.join(self.env_dir, rel)
+        from .extract import local_path
+        full = local_path(self.env_dir, rel)
         return full if os.path.isfile(full) else None

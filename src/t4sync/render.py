@@ -21,6 +21,8 @@ guessed at, so a preview never silently shows something T4 would not.
 import collections
 import re
 
+from .extract import local_path
+
 # A T4 tag's attributes can contain `>` inside quotes, e.g.
 #   format="<p>Email: $value</p>"
 # so the body is matched as a run of quoted strings or non-quote, non-`>`
@@ -293,7 +295,7 @@ class PreviewEngine:
             if not isinstance(published_src, str):
                 continue
             try:
-                with open(os.path.join(self.env_dir, rel), encoding="utf-8",
+                with open(local_path(self.env_dir, rel), encoding="utf-8",
                           newline="") as fh:
                     edited_src = fh.read()
             except OSError:

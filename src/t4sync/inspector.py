@@ -15,6 +15,8 @@ import json
 import os
 import re
 
+from .extract import local_path
+
 # Grouped rather than passed positionally: this is handed from the request
 # handler through transform_html to build_panel, and a bare tuple made that
 # chain easy to get wrong.
@@ -357,7 +359,7 @@ def build_comment(body, index, overrides_dir=None, env_name=None,
         lines.append("<!-- SOURCE FILES:")
         for rel, meta in files:
             overridden = bool(overrides_dir and
-                              os.path.isfile(os.path.join(overrides_dir, rel)))
+                              os.path.isfile(local_path(overrides_dir, rel)))
             lines.append("   x t4-source/%s/%s%s"
                          % (_safe_comment(env_name or "<env>"), _safe_comment(rel),
                             "  (overridden)" if overridden else ""))
@@ -370,7 +372,7 @@ def build_comment(body, index, overrides_dir=None, env_name=None,
         if href.startswith(("http://", "https://", "//")):
             continue
         rel = href.split("?")[0].lstrip("/")
-        over = bool(overrides_dir and os.path.isfile(os.path.join(overrides_dir, rel)))
+        over = bool(overrides_dir and os.path.isfile(local_path(overrides_dir, rel)))
         assets.append((rel, over))
     if assets:
         lines.append("<!-- ASSETS (%d, %d overridden):"
@@ -406,7 +408,7 @@ def child_layouts(mirror_dir, url_path, limit=25):
     if not mirror_dir:
         return []
     rel = url_path.split("?")[0].strip("/")
-    base = os.path.join(mirror_dir, rel) if rel else mirror_dir
+    base = local_path(mirror_dir, rel) if rel else mirror_dir
     if not os.path.isdir(base):
         return []
 
@@ -486,7 +488,7 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
         if href.startswith(("http://", "https://", "//")):
             continue
         rel = href.split("?")[0].lstrip("/")
-        overridden = bool(overrides_dir and os.path.isfile(os.path.join(overrides_dir, rel)))
+        overridden = bool(overrides_dir and os.path.isfile(local_path(overrides_dir, rel)))
         assets.append((rel, overridden))
 
     children = child_layouts(mirror_dir, url_path)

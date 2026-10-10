@@ -1,5 +1,6 @@
 """Smoke tests that need no network and no T4 instance."""
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -10,6 +11,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from t4sync import extract            # noqa: E402
+from t4sync.extract import local_path   # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
@@ -616,10 +618,11 @@ class TestMediaSources(unittest.TestCase):
                                          "field": "text"}}
             sources = MediaSources(manifest, tmp)
             self.assertTrue(sources.available)
-            self.assertEqual(sources.path_for("/media/web/b3/css/v8.css"),
-                             str(media / "v8.css"))
-            self.assertEqual(sources.path_for("/media/web/b3/css/v8.css?v=2"),
-                             str(media / "v8.css"))
+            expected = os.path.normpath(str(media / "v8.css"))
+            self.assertEqual(sources.path_for("/media/web/b3/css/v8.css"), expected)
+            self.assertEqual(sources.path_for("/media/web/b3/css/v8.css?v=2"), expected)
+            # Separators must be the platform's, not the manifest's.
+            self.assertNotIn("/", sources.path_for("/media/v8.css").replace(os.sep, ""))
 
     def test_unknown_asset_is_not_claimed(self):
         sources = MediaSources({"media/v8.css": {"endpoint": "media"}}, "/nowhere")
@@ -691,6 +694,22 @@ class TestSectionWalk(unittest.TestCase):
         found = sectionlib.walk(Flaky(), 1, "en")
         self.assertIn("1", found)
         self.assertIn("3", found)      # the walk carried on past the failure
+
+
+class TestLocalPath(unittest.TestCase):
+    """Manifest keys use "/" everywhere; filesystem paths use the platform's."""
+
+    def test_separators_are_the_platform_s(self):
+        out = local_path("base", "media/v8.css")
+        self.assertEqual(out, os.path.join("base", "media", "v8.css"))
+        self.assertNotIn("/", out.replace(os.sep, ""))
+
+    def test_single_segment(self):
+        self.assertEqual(local_path("base", "x.css"), os.path.join("base", "x.css"))
+
+    def test_normalised(self):
+        self.assertEqual(local_path("base", "a/../b.css"),
+                         os.path.join("base", "b.css"))
 
 
 class TestWatcher(unittest.TestCase):
