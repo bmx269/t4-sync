@@ -34,12 +34,17 @@ def run(args, project):
         raise T4Error(raise_help)
 
     bar = Progress("  sections", total=args.limit)
+    interrupted = False
     try:
         found = sectionlib.walk(client, root, language, known=known,
                                 limit=args.limit,
                                 progress=lambda _n: bar.update(),
                                 with_contents=not args.no_contents,
                                 content_sink=found_contents)
+    except KeyboardInterrupt:
+        # Whatever was gathered is still worth keeping; the walk resumes.
+        interrupted = True
+        found = known
     finally:
         bar.close()
 
@@ -56,6 +61,8 @@ def run(args, project):
     with_layout = sum(1 for r in found.values() if sectionlib.layout_for(r))
     print("\n%d section(s), %d with a page layout assignment" % (len(found), with_layout))
     print("Saved to %s" % path.relative_to(project.root))
+    if interrupted:
+        print("Interrupted - progress saved, re-run to continue.")
     if args.limit and len(found) >= args.limit:
         print("Stopped at --limit; re-run to continue from here.")
     return 0

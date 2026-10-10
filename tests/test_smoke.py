@@ -22,6 +22,7 @@ from t4sync.render import (LayoutResolver, align,   # noqa: E402
 from t4sync.compare import read_field, remote_path, write_field  # noqa: E402
 from t4sync.contentlayout import format_key, layout_name  # noqa: E402
 from t4sync.commands.pull import media_filename   # noqa: E402
+from t4sync import sections as sectionlib   # noqa: E402
 from t4sync.sections import (ContentItems, MediaSources,   # noqa: E402
                              SectionLayouts, by_url_path, layout_for)
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
@@ -628,6 +629,68 @@ class TestMediaSources(unittest.TestCase):
         sources = MediaSources({"pageLayout/x.header.html":
                                 {"endpoint": "pageLayout"}}, "/tmp")
         self.assertFalse(sources.available)
+
+
+class FakeClient:
+    """A section tree: 1 -> 2,3 ; 2 -> 4 ; others leaf."""
+
+    TREE = {1: [2, 3], 2: [4], 3: [], 4: []}
+
+    def __init__(self):
+        self.calls = []
+
+    def get_json(self, path):
+        self.calls.append(path)
+        parts = path.split("/")
+        section_id = int(parts[1])
+        if path.endswith("/subsections"):
+            return {"children": [{"id": c, "name": "s%d" % c}
+                                 for c in self.TREE.get(section_id, [])]}
+        if path.endswith("/contents"):
+            return {"children": [{"content": {"id": 900 + section_id,
+                                              "name": "item%d" % section_id,
+                                              "contentTypeID": 5,
+                                              "contentTypeName": "Thing"}}]}
+        return {"name": "s%d" % section_id, "channels": [{"id": 13, "pageLayout": 70}],
+                "output-uri": "s%d" % section_id}
+
+
+class TestSectionWalk(unittest.TestCase):
+    def test_walks_the_whole_tree(self):
+        found = sectionlib.walk(FakeClient(), 1, "en")
+        self.assertEqual(sorted(int(k) for k in found), [1, 2, 3, 4])
+
+    def test_limit_counts_this_run_not_the_cache(self):
+        """A limit below the cache size must not make a resume a no-op."""
+        known = {str(i): {"id": i, "name": "s%d" % i, "channels": []}
+                 for i in (1, 2, 3, 4)}
+        client = FakeClient()
+        found = sectionlib.walk(client, 1, "en", known=known, limit=2)
+        self.assertEqual(len(found), 4)
+        self.assertTrue(client.calls, "the walk did nothing despite a cache")
+
+    def test_limit_stops_the_run(self):
+        client = FakeClient()
+        sectionlib.walk(client, 1, "en", limit=1)
+        visited = {c.split("/")[1] for c in client.calls}
+        self.assertEqual(visited, {"1"})
+
+    def test_contents_are_collected_when_asked(self):
+        sink = {}
+        sectionlib.walk(FakeClient(), 1, "en", with_contents=True, content_sink=sink)
+        self.assertEqual(len(sink), 4)
+        self.assertEqual(sink["901"]["contentTypeName"], "Thing")
+
+    def test_a_dropped_request_does_not_end_the_walk(self):
+        class Flaky(FakeClient):
+            def get_json(self, path):
+                if path == "hierarchy/2/en/subsections":
+                    raise OSError("connection reset")
+                return FakeClient.get_json(self, path)
+
+        found = sectionlib.walk(Flaky(), 1, "en")
+        self.assertIn("1", found)
+        self.assertIn("3", found)      # the walk carried on past the failure
 
 
 class TestWatcher(unittest.TestCase):

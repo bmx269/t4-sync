@@ -23,7 +23,9 @@ CONTENT_CACHE = "sectioncontent.json"
 def child_ids(client, section_id, language):
     try:
         data = client.get_json("hierarchy/%s/%s/subsections" % (section_id, language))
-    except urllib.error.HTTPError:
+    except Exception:
+        # Including transport failures: the walk is long and the link to a T4
+        # instance is usually a VPN, so one dropped request must not end it.
         return []
     children = (data or {}).get("children") if isinstance(data, dict) else data
     return [(c["id"], c.get("name")) for c in (children or []) if c.get("id") is not None]
@@ -38,7 +40,7 @@ def contents(client, section_id, language):
     """
     try:
         data = client.get_json("hierarchy/%s/%s/contents" % (section_id, language))
-    except urllib.error.HTTPError:
+    except Exception:
         return []
     children = (data or {}).get("children") if isinstance(data, dict) else data
     found = []
@@ -82,15 +84,20 @@ def walk(client, root_id, language, known=None, limit=None, progress=None,
     found = dict(known or {})
     queue = [(root_id, None, "")]
     seen = set()
+    visited = 0
 
     while queue:
-        if limit and len(found) >= limit:
+        # Count what this run does, not what the cache already holds: a limit
+        # smaller than the cache would otherwise stop the walk before it
+        # started, making a resume silently do nothing.
+        if limit and visited >= limit:
             break
         section_id, name, parent_path = queue.pop(0)
         key = str(section_id)
         if key in seen:
             continue
         seen.add(key)
+        visited += 1
 
         if key in found:
             record = found[key]
