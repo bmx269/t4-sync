@@ -119,11 +119,21 @@ class Job:
                 watcher.put(line)
 
     def watch(self):
-        """A queue fed the backlog, then anything further."""
+        """A queue fed the backlog, then anything further.
+
+        The backlog includes the URL if one has already been found. `t4 serve`
+        prints its address within a second or two of starting -- often before
+        the browser has finished opening the event stream -- and a meta event
+        sent in that gap reached nobody. The symptom was "View site" staying
+        dead until the page was reloaded, which is exactly when the backlog
+        was replayed and the URL finally arrived.
+        """
         channel = queue.Queue()
         with self._lock:
             for line in self.lines:
                 channel.put(line)
+            if self.url:
+                channel.put({"meta": self.summary()})
             if self.done:
                 channel.put(None)
             else:

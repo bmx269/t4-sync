@@ -1695,3 +1695,45 @@ class TestContentPreview(unittest.TestCase):
         self.assertEqual((applied, skipped), (0, 1))
         self.assertEqual(out, page, "the page must be left exactly as published")
         self.assertTrue(problems)
+
+
+class TestServeUrlReachesThePanel(unittest.TestCase):
+    """`View site` must work as soon as the server reports its address."""
+
+    def _drain(self, channel):
+        import queue as _queue
+        found = []
+        while True:
+            try:
+                found.append(channel.get_nowait())
+            except _queue.Empty:
+                return found
+
+    def test_a_watcher_attaching_late_still_gets_the_url(self):
+        # `t4 serve` prints its address a second or two in, often before the
+        # browser has finished opening the event stream. A meta event sent in
+        # that gap reached nobody, and View site stayed dead until a reload.
+        job = app.Job("1", ["serve"], ".")
+        job._emit("URL       http://127.0.0.1:8321/")
+        metas = [i for i in self._drain(job.watch()) if isinstance(i, dict)]
+        self.assertEqual(len(metas), 1)
+        self.assertEqual(metas[0]["meta"]["url"], "http://127.0.0.1:8321/")
+
+    def test_a_watcher_attached_first_gets_it_once(self):
+        job = app.Job("2", ["serve"], ".")
+        channel = job.watch()
+        job._emit("URL       http://127.0.0.1:9999/")
+        metas = [i for i in self._drain(channel) if isinstance(i, dict)]
+        self.assertEqual(len(metas), 1)
+        self.assertEqual(metas[0]["meta"]["url"], "http://127.0.0.1:9999/")
+
+    def test_a_job_with_no_url_sends_no_meta(self):
+        job = app.Job("3", ["pull"], ".")
+        job._emit("Pulled 753 files")
+        self.assertEqual([i for i in self._drain(job.watch())
+                          if isinstance(i, dict)], [])
+
+    def test_the_port_comes_from_the_output_not_a_default(self):
+        job = app.Job("4", ["serve", "--port", "9100"], ".")
+        job._emit("URL       http://127.0.0.1:9100/")
+        self.assertEqual(job.url, "http://127.0.0.1:9100/")
