@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -15,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.extract import local_path   # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
+from t4sync import app, cli   # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
                               InspectorContext, LayoutIndex,
@@ -1258,3 +1260,77 @@ class TestPickMode(unittest.TestCase):
                              proc.stderr.decode("utf-8", errors="replace"))
         finally:
             os.unlink(path)
+
+
+class TestApp(unittest.TestCase):
+    """The control panel: a token gate, and commands it will not run."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / ".t4").mkdir()
+        (self.root / ".t4" / "config.json").write_text(json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"url": "https://cms.example.edu",
+                                      "push_allowed": True},
+                             "prod": {"url": "https://cms.example.edu"}},
+        }), encoding="utf-8")
+        self.project = Project(self.root)
+        self.jobs = app.Jobs(str(self.root))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_state_needs_no_network_or_pull(self):
+        # Opening the panel must not reach for the VPN, or fail on a project
+        # that has not been pulled yet.
+        s = app.state(self.project, self.jobs)
+        self.assertEqual(s["default_env"], "prod")
+        self.assertEqual(sorted(e["name"] for e in s["environments"]),
+                         ["prod", "test"])
+        self.assertEqual([e["tracked"] for e in s["environments"]], [0, 0])
+        self.assertIsNone(s["mirror"])
+
+    def test_push_allowed_is_reported_per_environment(self):
+        allowed = {e["name"]: e["push_allowed"]
+                   for e in app.state(self.project, self.jobs)["environments"]}
+        self.assertEqual(allowed, {"test": True, "prod": False})
+
+    def test_the_page_carries_the_token(self):
+        page = app.PAGE % {"token": "abc123"}
+        self.assertIn('var TOKEN = "abc123"', page)
+
+    def test_config_commands_cannot_be_run_from_the_panel(self):
+        # Setting a URL or storing a credential is a deliberate terminal act,
+        # not something a mis-click should reach.
+        for name in ("env", "token", "init"):
+            self.assertNotIn(name, app.ALLOWED)
+
+    def test_the_commands_it_offers_all_exist(self):
+        known = set(cli.HANDLERS)
+        self.assertEqual(app.ALLOWED - known, set())
+
+    def test_a_job_captures_output_and_exit_code(self):
+        job = self.jobs.start(["--version"])
+        for _ in range(200):
+            if job.done:
+                break
+            time.sleep(0.05)
+        self.assertTrue(job.done, "job did not finish")
+        self.assertEqual(job.returncode, 0)
+        self.assertTrue(any("t4-sync" in line for line in job.lines), job.lines)
+
+    def test_a_watcher_gets_the_backlog_then_the_end(self):
+        job = self.jobs.start(["--version"])
+        for _ in range(200):
+            if job.done:
+                break
+            time.sleep(0.05)
+        channel = job.watch()
+        seen = []
+        while True:
+            line = channel.get(timeout=5)
+            if line is None:
+                break
+            seen.append(line)
+        self.assertEqual(seen, job.lines)

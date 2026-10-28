@@ -141,6 +141,37 @@ git can merge.
 
 `t4 status` shows the repository state alongside everything else.
 
+### The control panel
+
+```sh
+t4 app                      # opens http://127.0.0.1:8320/ in your browser
+```
+
+A page for the commands, for the days you are not living in a terminal. It
+shows the project's state — which environment, whether it is writable, what is
+pulled, whether the repository is clean — and runs pull, mirror, serve, save
+and push as buttons, streaming each command's output into a log pane.
+
+On macOS and Windows there are double-clickable launchers in `launchers/`.
+Copy the one for your platform into your project directory (the one holding
+`.t4/`) and double-click it.
+
+**Every button runs the real command as a subprocess.** Nothing in the panel
+reimplements a command, so nothing in it can quietly disagree with one: the
+per-environment `push_allowed` flag, the uncommitted-source gate and the
+pre-push backups all still apply, because the code enforcing them is the code
+being run. The panel shows a pull-only environment with its push button
+disabled, but the refusal underneath is the same one the CLI gives.
+
+Two things it deliberately will not do: `t4 env` and `t4 token`. Setting an
+environment's URL or storing a credential is a deliberate act that belongs in
+a terminal, not somewhere a mis-click can reach.
+
+**The URL carries a one-time token**, minted when the command starts. Binding
+to loopback is not on its own a boundary — any page in any browser tab can
+POST to `127.0.0.1` — so without the token every request is refused. Open the
+URL the command prints rather than typing the address by hand.
+
 ### The editing loop
 
 ```sh

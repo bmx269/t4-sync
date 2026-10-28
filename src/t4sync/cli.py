@@ -5,7 +5,7 @@ import sys
 from . import __version__
 from .config import Project
 from .errors import T4Error
-from .commands import (compare, diff, doctor, edit, env, init, layouts,
+from .commands import (app, compare, diff, doctor, edit, env, init, layouts,
                        preview, pull, push, save, sections, site, status, sync,
                        token)
 
@@ -161,6 +161,12 @@ def build_parser():
     sp.add_argument("--force", action="store_true", help="reset from the mirror")
     sp.add_argument("--host-dir", help="which mirror, if several")
 
+    sp = add("app", "Open a control panel in your browser.")
+    sp.add_argument("--port", "-p", type=int, default=8320)
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--no-open", action="store_true",
+                    help="print the URL instead of opening a browser")
+
     sp = add("serve", "Serve the mirrored site locally.")
     sp.add_argument("host_dir", nargs="?", help="which mirror to serve")
     sp.add_argument("--port", "-p", type=int, default=8321)
@@ -209,6 +215,7 @@ HANDLERS = {
     "edit": (edit.run, True),
     "mirror": (site.run_mirror, True),
     "serve": (site.run_serve, True),
+    "app": (app.run, True),
 }
 
 
