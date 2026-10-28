@@ -445,6 +445,26 @@ quick experiment on something that is not Media Library source. Overrides are
 local-only and are never deployed; `--no-media-source` turns the behaviour off
 if you want the mirror served as-is.
 
+### Content layout edits
+
+Editing a content layout shows up too, applied to every item on the page that
+uses it — a page with twenty Contact items gets all twenty. Nothing is written
+into the mirror; the splice happens on the way out, so mirrored files stay
+byte-identical to what T4 published.
+
+It needs `t4 sections`, because an edit is only applied inside the output of
+items of its own type. Without that check a short layout's literal markup
+matches wherever it happens to occur, and a false match does not merely fail
+to help — it rewrites part of a page that layout never produced.
+
+**Where it cannot be faithful, it does nothing.** A content layout renders
+once per item, and its optional fields are empty for some of them; a tag that
+produced no output cannot be told apart from any other that produced none, so
+re-emitting would drop real content — names, ids, links. Those occurrences are
+left exactly as published and the page says so in a comment. On a real site
+this lands for roughly half the occurrences: simple structural layouts preview,
+field-heavy ones like a staff profile do not.
+
 ### Previewing a layout edit
 
 Edits to a pulled page layout show up on the local site without a publish

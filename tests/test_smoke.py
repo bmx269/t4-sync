@@ -25,7 +25,7 @@ from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E40
                               page_content, strip_injected, SCRIPT)
 from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
-                           preview, render)
+                           preview, preview_every, render)
 from t4sync.compare import read_field, remote_path, write_field  # noqa: E402
 from t4sync.contentlayout import format_key, layout_name  # noqa: E402
 from t4sync.commands.pull import media_filename   # noqa: E402
@@ -1620,3 +1620,78 @@ class TestUnmappedContentIsDistinguished(unittest.TestCase):
         panel = build_panel('<span id="d.en.900"></span>', self.IDX,
                             content_items=ContentItems({}))
         self.assertIn("not mapped yet", panel)
+
+
+class TestContentPreview(unittest.TestCase):
+    """Content layout edits, applied to every item that uses them."""
+
+    PUBLISHED = '<div class="box"><t4 type="content" name="Title" /></div>'
+    EDITED = '<div class="box new"><t4 type="content" name="Title" /></div>'
+
+    def _page(self, *titles):
+        parts = []
+        for index, title in enumerate(titles, 1):
+            parts.append('<span id="d.en.%d"></span>' % index)
+            parts.append('<div class="box">%s</div>' % title)
+        return "".join(parts)
+
+    def test_an_edit_reaches_every_occurrence(self):
+        page = self._page("One", "Two", "Three")
+        out, applied, skipped, _p = preview_every(page, self.PUBLISHED, self.EDITED)
+        self.assertEqual((applied, skipped), (3, 0))
+        self.assertEqual(out.count('class="box new"'), 3)
+        # The per-item content survives; only the layout markup changed.
+        for title in ("One", "Two", "Three"):
+            self.assertIn(title, out)
+
+    def test_an_unedited_layout_changes_nothing(self):
+        page = self._page("One")
+        out, applied, skipped, _p = preview_every(page, self.PUBLISHED, self.PUBLISHED)
+        self.assertEqual((out, applied, skipped), (page, 0, 0))
+
+    def test_accept_can_reject_a_coincidental_match(self):
+        # A short layout's literal markup turns up where it never rendered.
+        # Rewriting that is worse than not previewing: it looks like it worked.
+        page = self._page("One")
+        out, applied, _s, _p = preview_every(page, self.PUBLISHED, self.EDITED,
+                                             accept=lambda matched: False)
+        self.assertEqual((out, applied), (page, 0))
+
+    def test_crlf_source_still_aligns_against_lf_output(self):
+        # T4 stores layout source with CRLF and publishes it with LF, so the
+        # literal runs never matched byte for byte and every alignment failed.
+        published = '<div class="box">\r\n<t4 type="content" name="T" /></div>'
+        edited = published.replace("box", "box new")
+        page = ('<span id="d.en.1"></span>'
+                + '<div class="box">\n%s</div>' % "One")
+        out, applied, _s, _p = preview_every(page, published, edited)
+        self.assertEqual(applied, 1)
+        self.assertIn('class="box new"', out)
+        self.assertIn("One", out)
+
+    def test_rewrapping_a_whole_inseparable_run_is_still_faithful(self):
+        # Two adjacent tags whose outputs cannot be told apart. Re-emitting
+        # the run as a block is fine -- nothing is being placed inside it.
+        published = ('<i><t4 type="content" name="A" />'
+                     '<t4 type="content" name="B" /></i>')
+        edited = published.replace("<i>", "<i class=x>")
+        page = '<span id="d.en.1"></span><i>one-blob</i>'
+        out, applied, skipped, _p = preview_every(page, published, edited,
+                                                  strict=True)
+        self.assertEqual((applied, skipped), (1, 0))
+        self.assertIn("one-blob", out)
+
+    def test_strict_leaves_an_occurrence_it_cannot_render_faithfully(self):
+        # The edit puts markup *between* two tags whose output could not be
+        # separated, so there is no honest place to put it. Previewing anyway
+        # would show a layout T4 will not publish.
+        published = ('<i><t4 type="content" name="A" />'
+                     '<t4 type="content" name="B" /></i>')
+        edited = ('<i><t4 type="content" name="A" /><hr>'
+                  '<t4 type="content" name="B" /></i>')
+        page = '<span id="d.en.1"></span><i>one-blob</i>'
+        out, applied, skipped, problems = preview_every(
+            page, published, edited, strict=True)
+        self.assertEqual((applied, skipped), (0, 1))
+        self.assertEqual(out, page, "the page must be left exactly as published")
+        self.assertTrue(problems)

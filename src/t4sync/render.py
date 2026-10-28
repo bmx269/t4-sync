@@ -422,7 +422,8 @@ class LayoutResolver:
         return ids
 
 
-def preview_every(page, published_src, edited_src, span_markers=None, limit=200):
+def preview_every(page, published_src, edited_src, span_markers=None,
+                  limit=200, accept=None, strict=False):
     """Apply a content layout edit everywhere its output appears on the page.
 
     Page layouts render once, so `preview` splicing a single occurrence is
@@ -432,27 +433,64 @@ def preview_every(page, published_src, edited_src, span_markers=None, limit=200)
     edit half worked.
 
     Walks forward through the page, aligning from where the last match ended.
+    `accept(matched_html)` vets each match before it is used, so a caller can
+    require that the match really is the layout's own output rather than its
+    literal markup turning up by coincidence -- a short layout's text does
+    appear elsewhere, and rewriting a region the layout never produced is
+    worse than not previewing at all.
+
     Returns (html, applied_count, problems); an alignment failure ends the
     walk rather than failing the page, because the occurrences found so far
     are still correct.
     """
+    # T4 stores layout source with CRLF but publishes output with LF, so the
+    # literal runs never match byte for byte and alignment fails with
+    # "literal chunk not found". Normalised for the comparison only: the files
+    # on disk keep their CRLF, because `t4 push` has to send back what it
+    # pulled rather than rewriting every line of the record.
+    published_src = published_src.replace("\r\n", "\n")
+    edited_src = edited_src.replace("\r\n", "\n")
     if published_src == edited_src:
-        return page, 0, []
+        return page, 0, 0, []
 
-    out, cursor, applied, problems = [], 0, 0, []
+    out, cursor, applied, skipped, problems = [], 0, 0, 0, []
     while applied < limit:
         try:
             start, end, segments = align(published_src, page[cursor:], span_markers)
         except Unalignable:
             break
+        matched = page[cursor + start:cursor + end]
+        if accept is not None and not accept(matched):
+            # Not this layout's output. Keep it verbatim and carry on looking
+            # past it, rather than stopping -- a real occurrence may follow.
+            out.append(page[cursor:cursor + end])
+            cursor += end
+            continue
+
         rendered, found = render(edited_src, segments)
+
+        # A content layout is rendered once per item, and its optional fields
+        # are empty for some of them. A tag that produced no output cannot be
+        # told apart from any other that produced none, so re-emitting drops
+        # whatever it did produce elsewhere -- names, ids, links. The result
+        # looks like the page is broken rather than like the preview is
+        # limited. So an occurrence that cannot be rendered faithfully is left
+        # exactly as published, and counted as skipped.
+        if strict and any(kind in ("unpublished", "inseparable")
+                          for kind, _detail in found):
+            out.append(page[cursor:cursor + end])
+            cursor += end
+            skipped += 1
+            problems.extend(found)
+            continue
+
         out.append(page[cursor:cursor + start])
         out.append(rendered)
         cursor += end
         problems.extend(found)
         applied += 1
     out.append(page[cursor:])
-    return "".join(out), applied, problems
+    return "".join(out), applied, skipped, problems
 
 
 class ContentPreviewEngine:
@@ -532,69 +570,64 @@ class ContentPreviewEngine:
                 found.append((layout_id, rel, published_src, edited_src))
         return found
 
-    def regions(self, page, items):
-        """[(start, end, content_type_id)] -- where each content item rendered.
-
-        T4 emits `<span id="d.en.NNN">` before every content item it renders,
-        so an item's output runs from its own anchor to the next one. Rough at
-        the edges, but it does not need to be exact: it only has to be tight
-        enough that a layout is matched against its own output.
-        """
-        found = []
-        anchors = list(DIRECT_EDIT_ANCHOR.finditer(page))
-        for index, match in enumerate(anchors):
-            record = items.get(match.group("id")) if items else None
-            if not record:
-                continue
+    def item_types(self, items):
+        """{content id: content type id} for everything the map knows."""
+        found = {}
+        for key, record in (getattr(items, "items", None) or {}).items():
             type_id = record.get("contentTypeId")
-            if type_id is None:
-                continue
-            end = anchors[index + 1].start() if index + 1 < len(anchors) else len(page)
-            found.append((match.end(), end, str(type_id)))
+            if type_id is not None:
+                found[str(key)] = str(type_id)
         return found
 
     def apply(self, page, items=None):
         """Return (html, status). `status` is None when nothing was applied.
 
-        Each edit is applied only inside the output of content items of its
-        own type. Aligning against the whole page instead finds false matches
-        -- a seventy-character layout's literal markup turns up by coincidence
-        -- and a false match does not merely fail to help, it rewrites a part
-        of the page that layout never produced. So without the content item
-        map, which `t4 sections` records, this does nothing at all.
+        A match is used only when it contains the Direct Edit anchor of a
+        content item of this layout's own type. Without that check a short
+        layout matches its own literal markup wherever it happens to occur,
+        and the splice rewrites a region the layout never produced -- which
+        is worse than showing nothing, because it looks like it worked.
+
+        So without the content item map, which `t4 sections` records, this
+        does nothing and says so.
         """
         changes = self.edited()
         if not changes:
             return page, None
 
-        if not items or not getattr(items, "available", False):
+        types = self.item_types(items)
+        if not types:
             return page, {"applied": [], "missing": [],
+                          "partial": [],
                           "unmapped": [rel for _i, rel, _p, _e in changes],
                           "problems": []}
 
-        applied, missing, problems = [], [], []
+        applied, missing, partial, problems = [], [], [], []
         for layout_id, rel, published_src, edited_src in changes:
             want = self.type_of.get(layout_id)
-            count = 0
-            # Right to left: splicing changes the length of the page, and
-            # working backwards leaves the offsets ahead of the cursor valid.
-            for start, end, type_id in sorted(self.regions(page, items),
-                                              reverse=True):
-                if want is not None and type_id != want:
-                    continue
-                spliced, found_count, found = preview_every(
-                    page[start:end], published_src, edited_src, self.span_markers)
-                if not found_count:
-                    continue
-                page = page[:start] + spliced + page[end:]
-                count += found_count
-                problems.extend(found)
-            (applied.append((rel, count)) if count else missing.append(rel))
 
-        if not applied and not missing:
+            def accept(matched, want=want):
+                found = DIRECT_EDIT_ANCHOR.search(matched)
+                if not found:
+                    return False
+                type_id = types.get(found.group("id"))
+                return type_id is not None and (want is None or type_id == want)
+
+            page, count, skipped, found = preview_every(
+                page, published_src, edited_src, self.span_markers,
+                accept=accept, strict=True)
+            if count:
+                applied.append((rel, count, skipped))
+            elif skipped:
+                partial.append((rel, skipped))
+            else:
+                missing.append(rel)
+            problems.extend(found)
+
+        if not applied and not missing and not partial:
             return page, None
         return page, {"applied": applied, "missing": missing,
-                      "unmapped": [], "problems": problems}
+                      "partial": partial, "unmapped": [], "problems": problems}
 
 
 def content_status_comment(status, env_name=None):
@@ -604,10 +637,15 @@ def content_status_comment(status, env_name=None):
     lines = []
     if status["applied"]:
         lines.append("<!-- T4 CONTENT PREVIEW: local content layout edits applied -->")
-        for rel, count in status["applied"]:
-            lines.append("<!--   %s x%d  (t4-source/%s/%s) -->"
+        for rel, count, skipped in status["applied"]:
+            lines.append("<!--   %s x%d%s  (t4-source/%s/%s) -->"
                          % (rel.rsplit("/", 1)[-1], count,
+                            ", %d left as published" % skipped if skipped else "",
                             env_name or "<env>", rel))
+    for rel, skipped in status.get("partial", []):
+        lines.append("<!--   NOT previewed: %s -->" % rel)
+        lines.append("<!--   %d occurrence(s) use tags whose output cannot be "
+                     "isolated, so the published version is shown -->" % skipped)
     for rel in status["missing"]:
         lines.append("<!--   edited but not rendered on this page: %s -->" % rel)
     if status.get("unmapped"):
