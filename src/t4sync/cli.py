@@ -156,6 +156,9 @@ def build_parser():
     sp.add_argument("path", nargs="?", help="path as the site serves it")
     sp.add_argument("--list", "-l", action="store_true", help="show current overrides")
     sp.add_argument("--revert", action="store_true", help="drop the override")
+    sp.add_argument("--promote", action="store_true",
+                    help="move an override into the pulled source, so it deploys")
+    sp.add_argument("--env", "-e")
     sp.add_argument("--force", action="store_true", help="reset from the mirror")
     sp.add_argument("--host-dir", help="which mirror, if several")
 

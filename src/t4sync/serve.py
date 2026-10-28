@@ -184,6 +184,25 @@ def rules_for_published_urls(urls):
     return rules
 
 
+def shadowing_overrides(overrides_dir, media_sources):
+    """Overrides that hide a pulled file: the two-copies-of-one-thing case.
+
+    Matched on filename, because that is how the media source is matched when
+    serving -- a published asset URL and the pulled file agree on the name,
+    not on the path.
+    """
+    if not overrides_dir or not media_sources or not media_sources.available:
+        return []
+    found = []
+    for dirpath, _dirnames, filenames in os.walk(overrides_dir):
+        for name in filenames:
+            if name.lower() in media_sources.by_name:
+                full = os.path.join(dirpath, name)
+                found.append(os.path.relpath(full, overrides_dir)
+                             .replace(os.sep, "/"))
+    return sorted(found)
+
+
 def load_rules(path):
     rules = []
     if not path or not os.path.isfile(path):
@@ -487,6 +506,21 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
         if MirrorHandler.media_sources and MirrorHandler.media_sources.available:
             print("Media     %d asset(s) served from t4-source, not the mirror"
                   % len(MirrorHandler.media_sources.by_name))
+            # An override of a pulled file is two copies of one thing: served
+            # identically, but only one of them deploys. Refusing to create
+            # new ones does not find those already there, and this is the
+            # moment someone starts trusting what the browser shows them.
+            shadowed = shadowing_overrides(MirrorHandler.overrides,
+                                           MirrorHandler.media_sources)
+            if shadowed:
+                print("\n  ! %d override(s) shadow pulled source. The browser "
+                      "shows these,\n    but `t4 push` deploys the t4-source "
+                      "copy instead:" % len(shadowed))
+                for rel in shadowed[:10]:
+                    print("      %s" % rel)
+                if len(shadowed) > 10:
+                    print("      ... and %d more" % (len(shadowed) - 10))
+                print("    Collapse one with: t4 edit --promote <path>\n")
         print("Reload    %s" % ("on - edits in overrides/ refresh the browser"
                                 if watcher else "off"))
         print("Preview   %s" % ("on - local layout edits are applied to served pages"

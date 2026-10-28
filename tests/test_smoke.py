@@ -32,6 +32,7 @@ from t4sync.commands.pull import media_filename   # noqa: E402
 from t4sync import sections as sectionlib   # noqa: E402
 from t4sync.sections import (ContentItems, MediaSources,   # noqa: E402
                              SectionLayouts, by_url_path, layout_for)
+from t4sync import serve   # noqa: E402
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 from t4sync.errors import T4Error   # noqa: E402
@@ -1538,3 +1539,53 @@ class TestLayoutGrouping(unittest.TestCase):
         panel = self._panel(self.MANIFEST)
         self.assertIn("Content layout", panel)
         self.assertIn("On this page", panel)
+
+
+class TestOneSourceOfTruth(unittest.TestCase):
+    """An override of a pulled file is two copies; the tool must not help."""
+
+    MANIFEST = {"media/ufv-v.css": {"endpoint": "media", "id": 1,
+                                    "field": "text", "name": "ufv-v.css"},
+                "media/site.js": {"endpoint": "media", "id": 2,
+                                  "field": "text", "name": "site.js"}}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        self.env = self.root / "t4-source" / "test"
+        (self.env / "media").mkdir(parents=True)
+        (self.env / "media" / "ufv-v.css").write_text("a{}", encoding="utf-8")
+        (self.env / "_manifest.json").write_text(json.dumps(self.MANIFEST),
+                                                 encoding="utf-8")
+        self.overrides = self.root / "overrides"
+        self.media = MediaSources(self.MANIFEST, str(self.env))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _override(self, rel, text="b{}"):
+        path = self.overrides / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_an_override_of_a_pulled_file_is_reported(self):
+        self._override("media/web/b3/css/ufv-v.css")
+        self.assertEqual(serve.shadowing_overrides(str(self.overrides), self.media),
+                         ["media/web/b3/css/ufv-v.css"])
+
+    def test_matching_is_by_filename_not_path(self):
+        # The published URL and the pulled file agree on the name, not the
+        # path, which is also how serving resolves it.
+        self._override("totally/different/place/ufv-v.css")
+        self.assertEqual(len(serve.shadowing_overrides(str(self.overrides), self.media)), 1)
+
+    def test_an_override_of_something_not_pulled_is_fine(self):
+        self._override("media/web/vendor/jquery.js")
+        self.assertEqual(serve.shadowing_overrides(str(self.overrides), self.media), [])
+
+    def test_a_pulled_file_with_no_override_is_fine(self):
+        self.assertEqual(serve.shadowing_overrides(str(self.overrides), self.media), [])
+
+    def test_no_overrides_directory_is_not_an_error(self):
+        self.assertEqual(serve.shadowing_overrides(None, self.media), [])

@@ -427,6 +427,19 @@ t4 push media/site.css                  -> deploys it
 
 No second copy to keep in step, and no manual upload.
 
+**One file, not two.** `t4 edit` refuses to override something that has been
+pulled, and points at the pulled file instead. An override of a pulled file is
+a second copy that serves identically and silently never deploys — you can
+lose an afternoon to it while the browser shows your change the whole time. If
+you already have one:
+
+```sh
+t4 edit --promote media/web/b3/css/site.css   # move it into the source, drop the copy
+```
+
+`t4 serve` also reports any override that shadows pulled source at startup,
+since refusing to make new ones does not find the ones already there.
+
 `overrides/` remains for shadowing a mirrored file you have *not* pulled — a
 quick experiment on something that is not Media Library source. Overrides are
 local-only and are never deployed; `--no-media-source` turns the behaviour off
