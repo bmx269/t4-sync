@@ -30,6 +30,7 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import history
 from .compare import load_manifest
 from .vcs import open_repo
 
@@ -108,6 +109,12 @@ class Job:
                     found = URL_LINE.search(line)
                     if found:
                         self.url = found.group(1)
+                        # Tell anyone watching straight away. The URL turns
+                        # up seconds after the job starts, so a UI that only
+                        # learns it when the job *ends* would leave "View
+                        # site" dead for the entire time the site is up.
+                        for watcher in self._watchers:
+                            watcher.put({"meta": self.summary()})
             for watcher in self._watchers:
                 watcher.put(line)
 
@@ -251,14 +258,35 @@ def state(project, jobs):
 
     repo = open_repo(project)
     default = project.default_env() if project.env_names() else None
+
+    # What happened here, and when. Per environment, because "last pushed"
+    # means nothing if it cannot say pushed to where.
+    events = {}
+    for name in project.env_names():
+        latest = history.latest(project, name)
+        edited_at, edited_file = history.last_edit(project, name)
+        if edited_at:
+            latest["edit"] = {"time": edited_at, "file": edited_file}
+        events[name] = {
+            action: dict(entry, ago=history.ago(entry.get("time")))
+            for action, entry in latest.items()
+        }
+
+    sha, branch = repo.head() if repo.available else (None, None)
     return {
         "root": str(project.root),
         "default_env": default,
         "environments": envs,
         "mirror": mirror_stats(project),
+        "events": events,
+        "recent": [dict(e, ago=history.ago(e.get("time")))
+                   for e in history.read(project)[-12:]][::-1],
         "repo": {"available": repo.available,
                  "summary": repo.describe(
-                     [project.env_dir(default)] if default else None)},
+                     [project.env_dir(default)] if default else None),
+                 "branch": branch, "sha": sha[:8] if sha else None,
+                 "dirty": (len(repo.dirty([project.env_dir(default)]))
+                           if repo.available and default else 0)},
         # Running jobs first: a page reload has to pick the streams back up,
         # and a serve started ten minutes ago must not vanish from the UI.
         "jobs": [j.summary() for j in jobs.items.values()],
@@ -378,6 +406,11 @@ class AppHandler(BaseHTTPRequestHandler):
                                      % json.dumps(job.summary()).encode("utf-8"))
                     self.wfile.flush()
                     return
+                if isinstance(line, dict):            # a summary update
+                    self.wfile.write(b"event: meta\ndata: %s\n\n"
+                                     % json.dumps(line["meta"]).encode("utf-8"))
+                    self.wfile.flush()
+                    continue
                 self.wfile.write(b"data: %s\n\n"
                                  % json.dumps(line).encode("utf-8"))
                 self.wfile.flush()
@@ -468,6 +501,23 @@ button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 button.primary:hover:not(:disabled){filter:brightness(1.1);color:#fff}
 button.danger{border-color:var(--warn);color:var(--warn)}
 .actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
+/* One action per row, with what it does beside it: the buttons are not
+   self-explanatory and a tooltip is no use to someone deciding. */
+.acts{display:grid;gap:.5rem}
+.act{display:grid;grid-template-columns:10.5rem minmax(0,1fr);gap:.7rem;
+ align-items:start;padding:.35rem 0;border-top:1px solid var(--line)}
+.act:first-child{border-top:0}
+.act button{width:100%%}
+.act p{margin:.1rem 0;color:var(--dim);font-size:12px;line-height:1.5}
+@media (max-width:560px){.act{grid-template-columns:minmax(0,1fr)}
+ .act button{width:auto;justify-self:start}}
+.when{display:flex;gap:.5rem;align-items:baseline;padding:.25rem 0;
+ border-top:1px solid var(--line)}
+.when:first-child{border-top:0}
+.when .what{flex:0 0 6.5rem;color:var(--dim)}
+.when .ago{flex:1 1 auto}
+.when .detail{color:var(--dim);font-size:12px}
+.never{color:var(--dim);font-style:italic}
 code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
  border-radius:6px;max-height:26rem;overflow:auto;font-size:12px;
@@ -504,31 +554,80 @@ footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
     <h2>Project</h2>
     <div id="summary"></div>
 
-    <h2 style="margin-top:1rem">Get</h2>
-    <div class="actions">
-      <button data-run='["pull"]'>Pull source</button>
-      <button data-run='["mirror"]'>Mirror site</button>
-      <button data-run='["sections"]'>Map sections</button>
-      <button data-run='["sync"]'>Sync</button>
+    <h2 style="margin-top:1rem">1 &middot; Get the files</h2>
+    <div class="acts">
+      <div class="act">
+        <button data-run='["pull"]'>Pull source</button>
+        <p>Downloads the templates from the CMS — page layouts, content
+           layouts, content types and the Media Library CSS and JS. These are
+           the files you edit. Needs the CMS reachable.</p>
+      </div>
+      <div class="act">
+        <button data-run='["mirror"]'>Mirror site</button>
+        <p>Crawls the <em>published</em> site and saves the finished pages, so
+           there is something real to look at. Different server from the pull,
+           and only needed when pages have changed a lot.</p>
+      </div>
+      <div class="act">
+        <button data-run='["sections"]'>Map sections</button>
+        <p>Walks the site tree to record which layout each section uses, so
+           the inspector can name files exactly instead of guessing. Slow —
+           thousands of requests — but only needed occasionally.</p>
+      </div>
+      <div class="act">
+        <button data-run='["sync"]'>Sync</button>
+        <p>Pulls, then reports what changed on each side. Never writes to the
+           CMS. The usual way to start a session.</p>
+      </div>
     </div>
 
-    <h2 style="margin-top:1rem">Look</h2>
-    <div class="actions">
-      <button data-run='["serve"]' data-keep>Start local site</button>
-      <button id="openserve" disabled>Open it</button>
-      <button data-run='["status"]'>Status</button>
-      <button data-run='["diff"]'>What differs</button>
+    <h2 style="margin-top:1rem">2 &middot; Work on it</h2>
+    <div class="acts">
+      <div class="act">
+        <button data-run='["serve"]'>Start local site</button>
+        <p>Runs the site on your own machine from the mirrored pages, with
+           your edits applied and the inspector switched on. Keeps running
+           until you stop it; everything else still works meanwhile.</p>
+      </div>
+      <div class="act">
+        <button id="openserve" disabled>View site</button>
+        <p>Opens the local site in a new tab. Becomes available a moment after
+           the server starts.</p>
+      </div>
+      <div class="act">
+        <button data-run='["status"]'>Status</button>
+        <p>What is pending, grouped by kind, with the repository state. Read
+           only — it changes nothing.</p>
+      </div>
+      <div class="act">
+        <button data-run='["diff"]'>What differs</button>
+        <p>Compares your files against what the CMS holds right now, and lists
+           every one that differs. Read only.</p>
+      </div>
     </div>
 
-    <h2 style="margin-top:1rem">Deploy</h2>
-    <div class="actions">
-      <button data-run='["save"]'>Commit to git</button>
-      <button id="push" class="primary">Push to T4</button>
+    <h2 style="margin-top:1rem">3 &middot; Ship it</h2>
+    <div class="acts">
+      <div class="act">
+        <button data-run='["save"]'>Commit to git</button>
+        <p>Records your edits in the repository with a message naming the CMS
+           record behind each file. Do this before pushing — a push of
+           uncommitted work is refused.</p>
+      </div>
+      <div class="act">
+        <button id="push" class="primary">Push to T4</button>
+        <p>Sends every differing file to the CMS, backing up each record
+           first. Only environments marked writable accept it; production is
+           pull-only unless deliberately changed.</p>
+      </div>
     </div>
-    <p class="dim" style="margin:.5rem 0 0;font-size:12px">
-      Push runs the same command a terminal would, so it still refuses an
-      environment that is not writable and source that is not committed.
-    </p>
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    <div id="events"></div>
+    <h2 style="margin-top:1rem">Recent activity</h2>
+    <div id="recent"></div>
   </section>
 
   <section class="card">
@@ -617,6 +716,8 @@ function render() {
 
   el("push").title = env.push_allowed ? ""
     : "Pushing is disabled for this environment in .t4/config.json";
+
+  renderHistory(env.name);
   el("foot").textContent = "Every button runs the matching t4 command as a "
     + "subprocess in " + state.root + ". Tasks run side by side; only "
     + "commands writing the same files wait for each other.";
@@ -639,6 +740,78 @@ function load() {
     render();
     syncButtons();
     renderTasks();
+  });
+}
+
+// "When did we last pull?" is the question people actually ask, and neither
+// the CLI nor T4 could answer it before. One line per kind of event, so it
+// says which of them it was rather than collapsing to "last activity".
+var EVENTS = [
+  ["pull", "Pulled", function (e) {
+    return e.files ? e.files + " files tracked" : null; }],
+  ["push", "Pushed", function (e) {
+    return (e.files || 0) + " deployed"
+         + (e.commit ? " from " + e.commit.slice(0, 8) : "")
+         + (e.failures ? ", " + e.failures + " failed" : ""); }],
+  ["save", "Committed", function (e) {
+    return (e.commit ? e.commit.slice(0, 8) + " - " : "")
+         + (e.message || e.files + " files"); }],
+  ["edit", "Edited", function (e) { return e.file || null; }],
+  ["mirror", "Mirrored", function (e) {
+    return e.pages ? e.pages + " pages" : null; }],
+  ["sections", "Mapped", function (e) {
+    return e.sections ? e.sections + " sections" : null; }]
+];
+
+function whenRow(label, when, detail) {
+  var d = document.createElement("div"); d.className = "when";
+  var k = document.createElement("span"); k.className = "what";
+  k.appendChild(text(label));
+  var v = document.createElement("span"); v.className = "ago";
+  if (when) {
+    v.appendChild(text(when));
+    if (detail) {
+      var small = document.createElement("div");
+      small.className = "detail"; small.appendChild(text(detail));
+      v.appendChild(small);
+    }
+  } else {
+    var never = document.createElement("span");
+    never.className = "never"; never.appendChild(text("never"));
+    v.appendChild(never);
+  }
+  d.appendChild(k); d.appendChild(v);
+  return d;
+}
+
+function renderHistory(envName) {
+  var events = (state.events || {})[envName] || {};
+  var box = el("events");
+  box.innerHTML = "";
+  EVENTS.forEach(function (spec) {
+    var entry = events[spec[0]];
+    box.appendChild(whenRow(spec[1], entry && entry.ago,
+                            entry ? spec[2](entry) : null));
+  });
+
+  var recent = el("recent");
+  recent.innerHTML = "";
+  var rows = (state.recent || []).filter(function (e) {
+    return !e.env || e.env === envName;
+  });
+  if (!rows.length) {
+    var p = document.createElement("p");
+    p.className = "dim"; p.style.margin = ".2rem 0";
+    p.appendChild(text("Nothing recorded yet. Actions you run here and in the "
+                     + "terminal both show up."));
+    recent.appendChild(p);
+    return;
+  }
+  rows.forEach(function (e) {
+    var spec = null;
+    EVENTS.forEach(function (s) { if (s[0] === e.action) spec = s; });
+    recent.appendChild(whenRow(spec ? spec[1] : e.action, e.ago,
+                               spec ? spec[2](e) : null));
   });
 }
 
@@ -674,6 +847,9 @@ function syncButtons() {
   var open = el("openserve");
   open.disabled = !(serving && serving.url);
   open.dataset.url = serving && serving.url ? serving.url : "";
+  open.title = serving
+    ? (serving.url ? "Open " + serving.url : "Waiting for the server to report its address")
+    : "Start the local site first";
 
   var env = envByName(selected()) || {};
   el("push").disabled = !env.push_allowed || !!busy[laneFor("push")];
@@ -754,6 +930,12 @@ function stream(id) {
       if (atBottom) log.scrollTop = log.scrollHeight;
     }
   };
+  source.addEventListener("meta", function (e) {
+    // The serve URL arrives a second or two after the job starts; without
+    // this the View site button stays dead for as long as the site is up.
+    entry.summary = JSON.parse(e.data);
+    syncButtons(); renderTasks();
+  });
   source.addEventListener("end", function (e) {
     source.close(); entry.source = null;
     entry.summary = JSON.parse(e.data);

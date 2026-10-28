@@ -7,6 +7,7 @@ import json
 
 from ..api import Client
 from ..progress import Progress
+from .. import history
 from .. import sections as sectionlib
 
 
@@ -67,6 +68,7 @@ def run(args, project):
 
     with_layout = sum(1 for r in found.values() if sectionlib.layout_for(r))
     print("\n%d section(s), %d with a page layout assignment" % (len(found), with_layout))
+    history.record(project, "sections", env=env_name, sections=len(found))
     print("Saved to %s" % path.relative_to(project.root))
     if interrupted:
         print("Interrupted - progress saved, re-run to continue.")

@@ -6,6 +6,7 @@ import sys
 from ..api import Client
 from ..compare import compare, load_manifest, remote_path, unified, write_field
 from ..errors import T4Error
+from .. import history
 from ..vcs import require_clean
 
 DEPLOY_LOG = "deployed.jsonl"
@@ -133,4 +134,7 @@ def run(args, project):
             failed += 1
 
     print("\n%d pushed, %d skipped, %d failed." % (pushed, skipped, failed))
+    if pushed or failed:
+        history.record(project, "push", env=env_name, files=pushed,
+                       failures=failed or None, commit=sha)
     return 1 if failed else 0

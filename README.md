@@ -134,12 +134,33 @@ A project that is not a git repository is not blocked — the tool predates this
 but it says so rather than deploying untracked work silently.
 
 Each successful push appends a line to `.t4/deployed.jsonl` recording the
-file, the T4 record, and the commit it was deployed from. That makes "what is
-on test, and where did it come from" answerable without asking T4. It is
-append-only so two people deploying from different checkouts produce a file
-git can merge.
+file, the T4 record, and the commit it was deployed from, and `.t4/history.jsonl`
+records what was pulled, pushed, committed and mirrored, and when. Both are
+local to your checkout — `.t4/` is not committed — so they answer "what did
+*this machine* do", which is the question they can answer honestly.
 
 `t4 status` shows the repository state alongside everything else.
+
+### What the repository tracks
+
+**Only `t4-source/`.** `.t4/` holds the CMS URLs you work against, your API
+token, and the local logs above. Committing it means a clone carries someone
+else's environment, and eventually a credential however careful the ignore
+rules are. `t4 init` writes a `.gitignore` that keeps it out, along with the
+mirror and the raw API responses — all regenerable, and the mirror is large.
+
+So a colleague starting from a clone does:
+
+```sh
+git clone <repo> && cd <repo>
+t4 init                                  # their own .t4/
+t4 env add test https://myweb-test.example.edu
+t4 token set test                        # their own credential
+t4 serve                                 # mirrors, then serves
+```
+
+The source is already there from the clone, so there is nothing to pull before
+they can look at it — a pull only becomes necessary when T4 has moved on.
 
 ### The control panel
 

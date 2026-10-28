@@ -20,13 +20,19 @@ from .extract import local_path
 # Grouped rather than passed positionally: this is handed from the request
 # handler through transform_html to build_panel, and a bare tuple made that
 # chain easy to get wrong.
-InspectorContext = collections.namedtuple(
-    "InspectorContext",
+INSPECTOR_FIELDS = (
     "index overrides_dir env_name mirror_dir url_path mode "
     "content_types component_markers resolver sections content_items "
-    "content_layouts")
-InspectorContext.__new__.__defaults__ = (None, None, None, "/", "both",
-                                         None, None, None, None, None, None)
+    "content_layouts media").split()
+
+InspectorContext = collections.namedtuple("InspectorContext", INSPECTOR_FIELDS)
+
+# Derived from the field list rather than written out: a positional tuple of
+# Nones has to be recounted every time a field is added, and getting it wrong
+# fails as a missing attribute far from the cause.
+InspectorContext.__new__.__defaults__ = tuple(
+    {"url_path": "/", "mode": "both"}.get(name)
+    for name in INSPECTOR_FIELDS[1:])
 
 LAYOUT_META = re.compile(
     r'<meta\s+name=["\']t4-layout["\']\s+content=["\']([^"\']*)["\']', re.I)
@@ -357,6 +363,11 @@ class LayoutIndex:
 # Everything this tool injects is fenced, so it can be removed exactly.
 # Without a fence, stripping means guessing at comment boundaries, and the
 # annotations themselves contain "->" and ">" which trip naive patterns.
+# Where the inspector asks the server to open a file. Defined here rather
+# than in serve.py because the script that calls it is here; serve.py imports
+# it, so the two cannot drift.
+OPEN_PATH = "/__t4_open"
+
 MARK_BEGIN = "<!--T4SYNC:BEGIN-->"
 MARK_END = "<!--T4SYNC:END-->"
 
@@ -383,6 +394,20 @@ def strip_injected(html):
 
 def _esc(value):
     return html.escape(str(value), quote=True)
+
+
+def _json_island(data):
+    """JSON safe to drop inside a <script> tag.
+
+    A content type is named by whoever created it in T4, so `<` can appear in
+    one. Inside a script element the parser looks for `</script`, and nothing
+    else is escaped for it -- so the angle brackets are encoded rather than
+    trusted. `\\u003c` is still the same string once parsed.
+    """
+    return (json.dumps(data)
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026"))
 
 
 def _safe_comment(text):
@@ -552,7 +577,8 @@ def child_layouts(mirror_dir, url_path, limit=25):
 
 def build_panel(body, index, overrides_dir=None, env_name=None,
                 mirror_dir=None, url_path="/", resolver=None, sections=None,
-                content_items=None, content_types=None, content_layouts=None):
+                content_items=None, content_types=None, content_layouts=None,
+                media=None):
     """Return the overlay markup for this page, or '' if there is nothing to say."""
     layout = LAYOUT_META.search(body)
     layout_id = LAYOUT_ID_META.search(body)
@@ -560,13 +586,14 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
     layout_id = layout_id.group(1) if layout_id else None
 
     rows = []
+    files = []          # also read below, for the click-to-source map
     if layout_name or layout_id:
         label = layout_name or "(unnamed)"
         if layout_id:
             label += '  <span class="t4i-dim">#%s</span>' % _esc(layout_id)
         rows.append(("Page layout", label, None))
 
-        files, note = [], None
+        note = None
         # T4's own assignment when the section tree has been pulled: exact,
         # so preferred over inferring the layout from the page.
         if sections is not None and getattr(sections, "available", False):
@@ -610,7 +637,35 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
     have_items = bool(content_items and getattr(content_items, "available", False))
 
     children = child_layouts(mirror_dir, url_path)
-    return _render(rows, assets, children, url_path, groups, have_items, env_name)
+    data = page_data(env_name, layout_name, files, groups, assets, media)
+    return _render(rows, assets, children, url_path, groups, have_items,
+                   env_name, data)
+
+
+def page_data(env_name, layout_name, layout_files, groups, assets, media=None):
+    """The file-to-output map, for the script to resolve a click against.
+
+    Emitted as one JSON island rather than as attributes scattered over the
+    panel: clicking an element has to answer "every local file behind this",
+    and reading that back out of rendered markup would mean the answer
+    depended on how the panel happened to be laid out.
+    """
+    media_map = dict(getattr(media, "by_name", None) or {})
+    # An asset with no pulled source still names the served path, which is
+    # what `t4 edit` takes, so it is worth reporting either way.
+    for rel, _over in assets or []:
+        media_map.setdefault(rel.rsplit("/", 1)[-1].lower(), None)
+
+    return {
+        "env": env_name or "<env>",
+        "layout": ({"name": layout_name or "(unnamed)",
+                    "files": [rel for rel, _meta in layout_files]}
+                   if layout_files or layout_name else None),
+        "types": {g["type"]: ([rel for rel, _l in g["layouts"]]
+                              + ([g["type_file"]] if g["type_file"] else []))
+                  for g in groups},
+        "media": media_map,
+    }
 
 
 def _hue(name):
@@ -619,6 +674,32 @@ def _hue(name):
     for char in str(name):
         value = (value * 31 + ord(char)) % 360
     return value
+
+
+# The format a web channel publishes. T4 picks a content layout by matching
+# the format the page layout's content tag asks for, and that tag is usually
+# in a navigation object this tool does not resolve -- so this is a strong
+# convention, not a lookup, and the panel says so rather than asserting it.
+WEB_FORMAT = "text/html"
+
+
+def _file_row(parts, rel, env_name, label=None, note=None):
+    """One source file, with the ways of getting at it."""
+    full = "t4-source/%s/%s" % (env_name or "<env>", rel)
+    parts.append('<div class="t4i-row t4i-file">')
+    parts.append('<span class="t4i-val"><code>%s</code></span>' % _esc(rel))
+    if label:
+        parts.append('<span class="t4i-dim t4i-fmt">%s</span>' % _esc(label))
+    if note:
+        parts.append('<span class="t4i-badge">%s</span>' % _esc(note))
+    parts.append('<span class="t4i-tools">')
+    parts.append('<button class="t4i-copy" data-open="edit" data-path="%s" '
+                 'title="Open in your editor">edit</button>' % _esc(full))
+    parts.append('<button class="t4i-copy" data-open="reveal" data-path="%s" '
+                 'title="Show in Finder / Explorer">folder</button>' % _esc(full))
+    parts.append('<button class="t4i-copy" data-copy="%s" '
+                 'title="Copy the path">copy</button>' % _esc(full))
+    parts.append('</span></div>')
 
 
 def _render_content(parts, groups, have_items, env_name):
@@ -646,37 +727,63 @@ def _render_content(parts, groups, have_items, env_name):
         parts.append('<span class="t4i-dim">x%d</span>' % len(group["items"]))
         parts.append('</div>')
 
-        for rel, label in group["layouts"]:
-            parts.append('<div class="t4i-row t4i-sub">')
-            parts.append('<span class="t4i-val"><code>%s</code>%s</span>'
-                         % (_esc(rel),
-                            ' <span class="t4i-dim">%s</span>' % _esc(label) if label else ""))
-            parts.append('<button class="t4i-copy" data-copy="t4-source/%s/%s">path</button>'
-                         % (_esc(env_name or "<env>"), _esc(rel)))
-            parts.append('</div>')
-        if not group["layouts"]:
+        # A content type usually has several layouts, one per output format,
+        # and only one of them rendered this page. Listing them as equals
+        # leaves you to guess which file to edit -- which is the question the
+        # panel exists to answer. So the web format leads, and the rest fold
+        # away behind a count.
+        layouts = group["layouts"]
+        primary = [(rel, fmt) for rel, fmt in layouts
+                   if (fmt or "").strip().lower() == WEB_FORMAT]
+        others = [pair for pair in layouts if pair not in primary]
+        if not primary and layouts:
+            # No text/html: nothing to prefer, so show them all as equals
+            # rather than promoting an arbitrary one.
+            primary, others = layouts, []
+
+        if layouts:
+            parts.append('<div class="t4i-row t4i-label">Content layout%s</div>'
+                         % (" <span class=\"t4i-dim\">renders this</span>"
+                            if len(primary) == 1 and others else ""))
+            for rel, fmt in primary:
+                _file_row(parts, rel, env_name, fmt,
+                          "likely" if others else None)
+            if others:
+                parts.append('<details class="t4i-more"><summary>'
+                             '%d other format%s</summary>'
+                             % (len(others), "" if len(others) == 1 else "s"))
+                for rel, fmt in others:
+                    _file_row(parts, rel, env_name, fmt)
+                parts.append('<div class="t4i-row t4i-sub"><span class="t4i-dim">'
+                             'T4 picks by the format the page layout asks for; '
+                             '%s is the web default.</span></div>' % WEB_FORMAT)
+                parts.append('</details>')
+        else:
             parts.append('<div class="t4i-row t4i-sub"><span class="t4i-dim">'
                          'no content layout pulled for this type</span></div>')
-        if group["type_file"]:
-            parts.append('<div class="t4i-row t4i-sub">')
-            parts.append('<span class="t4i-val"><code>%s</code></span>'
-                         % _esc(group["type_file"]))
-            parts.append('<button class="t4i-copy" data-copy="t4-source/%s/%s">path</button>'
-                         % (_esc(env_name or "<env>"), _esc(group["type_file"])))
-            parts.append('</div>')
 
+        if group["type_file"]:
+            parts.append('<div class="t4i-row t4i-label">Content type '
+                         '<span class="t4i-dim">fields, not markup</span></div>')
+            _file_row(parts, group["type_file"], env_name)
+
+        parts.append('<div class="t4i-row t4i-label">On this page '
+                     '<span class="t4i-dim">%d</span></div>' % len(group["items"]))
         parts.append('<div class="t4i-row t4i-sub t4i-items">')
         for content_id, name in group["items"]:
             parts.append('<a class="t4i-item" data-item="%s" href="#d.en.%s" '
-                         'title="#%s">%s</a>'
+                         'title="Content item #%s - click to find it on the page">'
+                         '%s</a>'
                          % (_esc(content_id), _esc(content_id),
                             _esc(content_id), _esc(name)))
         parts.append('</div>')
 
 
 def _render(rows, assets, children=(), url_path="/", content_groups=(),
-            have_items=False, env_name=None):
-    parts = ['<div id="t4-inspector" data-collapsed="1">',
+            have_items=False, env_name=None, data=None):
+    parts = ['<script type="application/json" id="t4i-data">%s</script>'
+             % _json_island(data or {}),
+             '<div id="t4-inspector" data-collapsed="1">',
              '<button type="button" id="t4i-toggle" title="T4 inspector">T4</button>',
              '<div id="t4i-body">',
              '<div class="t4i-row t4i-controls">',
@@ -695,9 +802,7 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
              'Select on click <span class="t4i-dim">(links off)</span></label>',
              '</div>',
              '<div id="t4i-legend" class="t4i-legend"></div>',
-             '<div class="t4i-row" id="t4i-picked">'
-             '<span class="t4i-key">Selected</span>'
-             '<span class="t4i-val" id="t4i-picked-val"></span></div>']
+             '<div id="t4i-picked"></div>']
 
     for label, value, copy_target in rows:
         parts.append('<div class="t4i-row">')
@@ -708,6 +813,11 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
                          % _esc(copy_target))
         parts.append('</div>')
 
+    # Everything on the page, which is the right answer until you have
+    # picked something. Once you have, the script hides this and shows only
+    # the chain behind what you clicked -- the way an element inspector
+    # works, and the reason you clicked in the first place.
+    parts.append('<div id="t4i-all">')
     _render_content(parts, content_groups, have_items, env_name)
 
     if assets:
@@ -740,8 +850,9 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
             parts.append('<span class="t4i-dim">%s</span>' % _esc(label))
             parts.append('</div>')
 
+    parts.append('</div>')          # #t4i-all
     parts.append('</div></div>')
-    return STYLE + "".join(parts) + SCRIPT
+    return STYLE + "".join(parts) + SCRIPT.replace("__OPEN_PATH__", OPEN_PATH)
 
 
 STYLE = """
@@ -775,9 +886,31 @@ STYLE = """
 .t4i-type{align-items:center}
 .t4i-dot{flex:0 0 auto;width:10px;height:10px;border-radius:2px;display:inline-block}
 .t4i-sub{padding-left:18px;border-top:0}
-.t4i-items{flex-wrap:wrap;gap:4px 8px}
-a.t4i-item{color:#9fb4ff;text-decoration:none;border-bottom:1px dotted #44506e}
-a.t4i-item:hover{color:#fff}
+
+/* A group heading inside a content type: which of these files is what. */
+.t4i-label{padding-left:18px;border-top:0;color:#8b93a7;font-size:11px;
+ text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.t4i-label .t4i-dim{text-transform:none;letter-spacing:0;font-size:11px}
+
+.t4i-file{padding-left:18px;border-top:0;gap:6px;align-items:center}
+.t4i-fmt{flex:0 0 auto;font-size:11px}
+.t4i-badge{flex:0 0 auto;font-size:10px;padding:0 5px;border-radius:999px;
+ background:#1d2a1f;color:#8ff0a6;border:1px solid #2a4030}
+.t4i-tools{flex:0 0 auto;display:flex;gap:3px}
+.t4i-tools .t4i-copy{padding:1px 5px}
+
+/* Folded-away formats that did not render this page. */
+.t4i-more{padding-left:18px;font-size:11px}
+.t4i-more summary{cursor:pointer;color:#8b93a7;padding:2px 0}
+.t4i-more summary:hover{color:#9fb4ff}
+.t4i-more .t4i-file{padding-left:8px}
+
+/* Chips, not a run of underlined words: these are separate items. */
+.t4i-items{flex-wrap:wrap;gap:4px}
+a.t4i-item{color:#9fb4ff;text-decoration:none;border:1px solid #2c3240;
+ border-radius:4px;padding:1px 6px;font-size:11px;background:#0f1218;
+ max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+a.t4i-item:hover{color:#fff;border-color:#9fb4ff}
 /* Flashed when a panel item is clicked, so the row and the page agree. */
 html .t4c-flash{outline:3px solid #ffd34d!important;outline-offset:-3px}
 .t4i-flash{background:rgba(255,211,77,.22);border-radius:3px}
@@ -792,8 +925,14 @@ html [data-t4c-sel]::after{content:attr(data-t4c-sel);position:absolute;
  top:0;right:0;z-index:2147483646;background:#ffd34d;color:#0b0d12;
  font:600 10px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
  padding:1px 5px;border-radius:0 0 0 3px;pointer-events:none;white-space:nowrap}
-#t4i-picked{display:none;gap:8px}
-#t4i-picked.on{display:flex}
+/* With something selected the panel shows that and nothing else, the way an
+   element inspector does. The full listing is still there, one click away. */
+#t4-inspector[data-focus="1"] #t4i-all{display:none}
+#t4i-picked:empty{display:none}
+.t4i-back{all:unset;cursor:pointer;color:#9fb4ff;font-size:11px;
+ border:1px solid #2c3240;border-radius:4px;padding:1px 6px}
+.t4i-back:hover{background:#222a3a}
+.t4i-hint{color:#8b93a7;font-size:11px;padding:2px 0 4px}
 .t4i-legend{display:none;flex-wrap:wrap;gap:4px 10px;padding:4px 0 2px}
 .t4i-legend.on{display:flex}
 .t4i-legend span{display:flex;align-items:center;gap:5px;font-size:11px}
@@ -812,7 +951,9 @@ html.t4c-on.t4c-labels [data-t4c-hl]::before{content:attr(data-t4c-hl);position:
  .t4i-key,.t4i-dim{color:#5a6376}
  .t4i-asset.t4i-on code{background:#e6f7ec;color:#17603a}
  #t4i-hl{background:#fff;border-color:#d4d8e0}
- a.t4i-item{color:#2b4bbf}
+ a.t4i-item{color:#2b4bbf;background:#fff;border-color:#d4d8e0}
+ a.t4i-item:hover{color:#12205c;border-color:#2b4bbf}
+ .t4i-badge{background:#e6f7ec;color:#17603a;border-color:#bfe3cd}
 }
 </style>
 """
@@ -964,16 +1105,59 @@ SCRIPT = """
 
   // Clicking a content item in the panel takes you to it on the page. The
   // anchor T4 published is always there, highlighting on or off.
+  function flashOnPage(elements, scroll) {
+    if (!elements.length) return;
+    if (scroll) elements[0].scrollIntoView({behavior: "smooth", block: "center"});
+    elements.forEach(function (el) {
+      el.classList.add("t4c-flash");
+      setTimeout(function () { el.classList.remove("t4c-flash"); }, 1800);
+    });
+  }
+
+  // Panel -> page. The same question as pick mode, asked the other way: you
+  // are reading the file list and want to see where on the page it landed.
   root.addEventListener("click", function (e) {
+    if (e.target.closest(".t4i-copy")) return;        // handled below
+
+    if (e.target.closest("#t4i-back")) { clearPick(); return; }
+
     var link = e.target.closest("a.t4i-item");
-    if (!link) return;
-    var anchor = document.getElementById("d.en." + link.getAttribute("data-item"));
-    if (!anchor) return;
-    e.preventDefault();
-    var target = anchor.nextElementSibling || anchor;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-    target.classList.add("t4c-flash");
-    setTimeout(function () { target.classList.remove("t4c-flash"); }, 1600);
+    if (link) {
+      e.preventDefault();
+      var anchor = document.getElementById("d.en." + link.getAttribute("data-item"));
+      if (anchor) flashOnPage([anchor.nextElementSibling || anchor], true);
+      return;
+    }
+
+    // A content type: show every item of that type at once.
+    var typeRow = e.target.closest(".t4i-type[data-type]");
+    if (typeRow) {
+      var want = typeRow.getAttribute("data-type");
+      var found = collect().filter(function (item) { return item.group === want; });
+      flashOnPage(found.map(function (item) { return item.el; }), true);
+      return;
+    }
+
+    // An asset: every element that pulls that file in.
+    var assetRow = e.target.closest(".t4i-asset");
+    if (assetRow) {
+      var code = assetRow.querySelector("code");
+      if (!code) return;
+      var base = code.textContent.split("/").pop().toLowerCase();
+      var using = [].slice.call(document.querySelectorAll("[src],[href]"))
+        .filter(function (el) {
+          if (el.closest("#t4-inspector")) return false;
+          var url = el.getAttribute("src") || el.getAttribute("href") || "";
+          return url.split("?")[0].split("/").pop().toLowerCase() === base;
+        });
+      // A stylesheet has no box to flash, so say how many referenced it
+      // rather than appearing to do nothing.
+      flashOnPage(using.filter(function (el) {
+        return el.getBoundingClientRect().height > 0;
+      }), true);
+      assetRow.classList.add("t4i-flash");
+      setTimeout(function () { assetRow.classList.remove("t4i-flash"); }, 1200);
+    }
   });
 
   // -- pick mode: click an element on the page to select its component ----
@@ -983,6 +1167,12 @@ SCRIPT = """
   // thing on screen and want to know what produced it.
 
   var picked = null;
+
+  var DATA = (function () {
+    var tag = document.getElementById("t4i-data");
+    try { return JSON.parse(tag ? tag.textContent : "{}"); }
+    catch (e) { return {}; }
+  })();
 
   function componentAt(node) {
     // Nearest enclosing element that collect() recognised. Walking up rather
@@ -997,6 +1187,53 @@ SCRIPT = """
     return null;
   }
 
+  function assetAt(node) {
+    // An element that pulls in a file of its own -- an image, a stylesheet,
+    // a script. These have local sources too, and are the obvious thing to
+    // click on when what you want to change is the picture or the CSS.
+    var el = node.closest && node.closest("[src],[href],[data-src]");
+    if (!el) return null;
+    var url = el.getAttribute("src") || el.getAttribute("href") ||
+              el.getAttribute("data-src") || "";
+    if (!url || url.charAt(0) === "#") return null;
+    var base = url.split("?")[0].split("#")[0].split("/").pop().toLowerCase();
+    if (!base || !(DATA.media || {}).hasOwnProperty(base)) return null;
+    var rel = DATA.media[base];
+    return {
+      kind: "asset", el: el, label: base,
+      files: rel ? [rel] : [],
+      note: rel ? null : "served from the mirror; not a pulled Media Library item"
+    };
+  }
+
+  // Every local file behind one element, innermost first. The page layout is
+  // always the last entry: whatever you clicked, it is inside one.
+  function chainAt(node) {
+    var chain = [];
+    var asset = assetAt(node);
+    if (asset) chain.push(asset);
+
+    var component = componentAt(node);
+    if (component) {
+      chain.push({
+        kind: component.kind, el: component.el, id: component.id,
+        label: component.label,
+        files: (DATA.types || {})[component.group] || [],
+        note: ((DATA.types || {})[component.group] || []).length ? null
+              : "no content layout pulled for this type"
+      });
+    }
+
+    if (DATA.layout) {
+      chain.push({kind: "layout", el: null,
+                  label: "page layout " + DATA.layout.name,
+                  files: DATA.layout.files,
+                  note: DATA.layout.files.length ? null
+                        : "not in the local pull - run t4 pull"});
+    }
+    return chain;
+  }
+
   function flashPanel(el) {
     if (!el) return;
     if (root.dataset.collapsed === "1") root.dataset.collapsed = "0";
@@ -1009,32 +1246,113 @@ SCRIPT = """
     if (picked) picked.removeAttribute("data-t4c-sel");
     picked = null;
     var box = document.getElementById("t4i-picked");
-    if (box) box.classList.remove("on");
+    if (box) box.innerHTML = "";
+    root.dataset.focus = "0";          // back to everything on the page
   }
 
-  function select(item) {
+  function fileRow(rel) {
+    var full = "t4-source/" + (DATA.env || "<env>") + "/" + rel;
+    var row = document.createElement("div");
+    row.className = "t4i-row t4i-file";
+    var val = document.createElement("span");
+    val.className = "t4i-val";
+    var code = document.createElement("code");
+    code.textContent = rel;
+    val.appendChild(code);
+    row.appendChild(val);
+
+    var tools = document.createElement("span");
+    tools.className = "t4i-tools";
+    [["edit", "data-open", "edit"], ["folder", "data-open", "reveal"],
+     ["copy", "data-copy", full]].forEach(function (spec) {
+      var b = document.createElement("button");
+      b.className = "t4i-copy";
+      b.textContent = spec[0];
+      b.setAttribute(spec[1], spec[2]);
+      if (spec[1] === "data-open") b.setAttribute("data-path", full);
+      tools.appendChild(b);
+    });
+    row.appendChild(tools);
+    return row;
+  }
+
+  function select(chain, clicked) {
     clearPick();
-    picked = item.el;
-    picked.setAttribute("data-t4c-sel", item.label);
+    if (!chain.length) return;
+
+    // Outline the innermost thing that has a box of its own. The page layout
+    // has none -- it is the page -- so a click that resolves only to it
+    // marks what was actually clicked, which is still the honest answer.
+    var frame = null;
+    for (var i = 0; i < chain.length; i++) { if (chain[i].el) { frame = chain[i]; break; } }
+    picked = frame ? frame.el : clicked;
+    if (picked) picked.setAttribute("data-t4c-sel", (frame || chain[0]).label);
 
     var box = document.getElementById("t4i-picked");
-    var val = document.getElementById("t4i-picked-val");
-    if (box && val) {
-      val.textContent = item.label;
-      box.classList.add("on");
-    }
+    if (!box) return;
+    box.innerHTML = "";
 
-    // Point at the panel row that lists the files for it. The item link is
-    // the more precise of the two, so prefer it and fall back to the type.
-    var row = null;
-    if (item.id) row = root.querySelector('a.t4i-item[data-item="' + item.id + '"]');
-    if (!row) {
-      var rows = root.querySelectorAll(".t4i-type");
-      for (var i = 0; i < rows.length; i++) {
-        if (rows[i].getAttribute("data-type") === item.group) { row = rows[i]; break; }
+    // Only the selection, until you ask for the rest back.
+    root.dataset.focus = "1";
+
+    var head = document.createElement("div");
+    head.className = "t4i-row t4i-head";
+    head.appendChild(document.createTextNode("Selected "));
+    var back = document.createElement("button");
+    back.className = "t4i-back";
+    back.id = "t4i-back";
+    back.textContent = "show whole page";
+    head.appendChild(back);
+    box.appendChild(head);
+
+    chain.forEach(function (entry) {
+      var row = document.createElement("div");
+      row.className = "t4i-row t4i-type";
+      var dot = document.createElement("i");
+      dot.className = "t4i-dot";
+      dot.style.background = entry.kind === "layout" ? "#8b93a7"
+        : "hsl(" + hue(entry.label) + " 85% 62%)";
+      var val = document.createElement("span");
+      val.className = "t4i-val";
+      val.textContent = entry.label;
+      var kind = document.createElement("span");
+      kind.className = "t4i-dim";
+      kind.textContent = entry.kind;
+      row.appendChild(dot); row.appendChild(val); row.appendChild(kind);
+      box.appendChild(row);
+
+      entry.files.forEach(function (rel) { box.appendChild(fileRow(rel)); });
+      if (entry.note) {
+        var note = document.createElement("div");
+        note.className = "t4i-row t4i-sub";
+        var dim = document.createElement("span");
+        dim.className = "t4i-dim";
+        dim.textContent = entry.note;
+        note.appendChild(dim);
+        box.appendChild(note);
+      }
+    });
+
+    var hint = document.createElement("div");
+    hint.className = "t4i-hint";
+    hint.textContent = "Innermost first. Click another element to move the "
+                     + "selection, or Escape to clear it.";
+    box.appendChild(hint);
+
+    if (root.dataset.collapsed === "1") root.dataset.collapsed = "0";
+    box.scrollIntoView({block: "nearest"});
+
+    // And point at the matching row further down the panel, so the two
+    // halves of the answer line up.
+    var component = null;
+    for (var j = 0; j < chain.length; j++) {
+      if (chain[j].kind === "content" || chain[j].kind === "component") {
+        component = chain[j]; break;
       }
     }
-    flashPanel(row);
+    if (component && component.id) {
+      flashPanel(root.querySelector('a.t4i-item[data-item="' + component.id + '"]'));
+    }
   }
 
   function pickOn() {
@@ -1049,8 +1367,7 @@ SCRIPT = """
     if (e.target.closest && e.target.closest("#t4-inspector")) return;
     e.preventDefault();
     e.stopPropagation();
-    var item = componentAt(e.target);
-    if (item) select(item); else clearPick();
+    select(chainAt(e.target), e.target);
   }, true);
 
   // A link reached by keyboard would otherwise still navigate.
@@ -1064,10 +1381,12 @@ SCRIPT = """
   document.addEventListener("mouseover", function (e) {
     if (!pickOn()) return;
     if (e.target.closest && e.target.closest("#t4-inspector")) return;
-    var item = componentAt(e.target);
     var previous = document.querySelector("[data-t4c-hover]");
     if (previous) previous.removeAttribute("data-t4c-hover");
-    if (item) item.el.setAttribute("data-t4c-hover", "");
+    var chain = chainAt(e.target);
+    for (var i = 0; i < chain.length; i++) {
+      if (chain[i].el) { chain[i].el.setAttribute("data-t4c-hover", ""); return; }
+    }
   }, true);
 
   var PICKKEY = "t4-inspector-pick";
@@ -1094,15 +1413,34 @@ SCRIPT = """
     root.dataset.collapsed = open ? "0" : "1";
     try { localStorage.setItem(KEY, open ? "1" : "0"); } catch (e) {}
   });
+  function flashButton(btn, word) {
+    var old = btn.textContent;
+    btn.textContent = word;
+    setTimeout(function () { btn.textContent = old; }, 1400);
+  }
+
   root.addEventListener("click", function (e) {
     var btn = e.target.closest(".t4i-copy");
     if (!btn) return;
+
+    // Open or reveal: the browser cannot launch an application, so the
+    // server that served this page does it.
+    var how = btn.getAttribute("data-open");
+    if (how) {
+      fetch("__OPEN_PATH__", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({path: btn.getAttribute("data-path"), action: how})
+      }).then(function (r) { return r.json().then(function (d) {
+        flashButton(btn, r.ok ? "opened" : "failed");
+        if (!r.ok && d.error) console.warn("t4 inspector:", d.error);
+      }); }).catch(function () { flashButton(btn, "failed"); });
+      return;
+    }
+
     var text = btn.getAttribute("data-copy");
-    var done = function () {
-      var old = btn.textContent;
-      btn.textContent = "copied";
-      setTimeout(function () { btn.textContent = old; }, 1200);
-    };
+    if (text === null) return;
+    var done = function () { flashButton(btn, "copied"); };
     if (navigator.clipboard) { navigator.clipboard.writeText(text).then(done, done); }
     else { done(); }
   });

@@ -4,9 +4,20 @@ import pathlib
 from ..config import CONFIG_DIR, CONFIG_FILE, DEFAULT_CONFIG, Project
 import json
 
+# The repository holds the source and nothing else.
+#
+# `.t4/` is local: the CMS URLs someone works against, their credentials, and
+# a log of what this machine did. Committing it means a clone carries another
+# person's environment -- and a token, eventually, however careful the
+# .gitignore. So the shared artefact is `{source}/`, and a fresh clone runs
+# `t4 init` to set up its own.
+#
+# The mirror and the raw responses are left out for a plainer reason: both are
+# regenerable, and the mirror is large.
 GITIGNORE = """\
-# t4-sync
-.t4/tokens/
+# t4-sync -- the repository tracks {source}/ and nothing else.
+# Run `t4 init` after cloning to create your own .t4/ configuration.
+.t4/
 {source}/*/_raw/
 {source}/*/_backup/
 {mirror}/
@@ -33,7 +44,7 @@ def run(args, project=None):
     block = GITIGNORE.format(source=config["source_dir"], mirror=config["mirror_dir"])
     gitignore = root / ".gitignore"
     existing = gitignore.read_text(encoding="utf-8") if gitignore.is_file() else ""
-    if ".t4/tokens/" not in existing:
+    if "# t4-sync" not in existing:
         with open(gitignore, "a", encoding="utf-8") as fh:
             if existing and not existing.endswith("\n"):
                 fh.write("\n")

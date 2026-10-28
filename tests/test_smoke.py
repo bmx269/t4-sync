@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.extract import local_path   # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
-from t4sync import app, cli   # noqa: E402
+from t4sync import app, cli, history, opener   # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
                               InspectorContext, LayoutIndex,
@@ -473,6 +473,9 @@ class TestPanelEscaping(unittest.TestCase):
         self.assertIn("Boxes &lt;b&gt;", panel)       # data is escaped
         self.assertIn("A &amp; B", panel)
         self.assertNotIn("Boxes <b>", panel)          # and not emitted raw
+        # Including in the JSON island, where `<` would otherwise be raw and
+        # a content type named by a T4 author could close the script tag.
+        self.assertIn("Boxes \\u003cb\\u003e", panel)
 
 
 class TestNestedFields(unittest.TestCase):
@@ -1407,3 +1410,131 @@ class TestJobLanes(unittest.TestCase):
         self.assertIsNone(job.url)
         job._emit("URL       http://127.0.0.1:9999/")
         self.assertEqual(job.url, "http://127.0.0.1:9999/")
+
+
+class TestOpener(unittest.TestCase):
+    """Opening a file locally: the path check is the whole security story."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name) / "proj"
+        (self.root / "t4-source" / "test").mkdir(parents=True)
+        self.file = self.root / "t4-source" / "test" / "a.html"
+        self.file.write_text("x", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_file_inside_the_project_resolves(self):
+        self.assertEqual(opener.safe_path(self.root, "t4-source/test/a.html"),
+                         os.path.realpath(str(self.file)))
+
+    def test_traversal_is_refused(self):
+        with self.assertRaises(opener.Refused):
+            opener.safe_path(self.root, "../../../../etc/passwd")
+
+    def test_an_absolute_path_is_refused(self):
+        with self.assertRaises(opener.Refused):
+            opener.safe_path(self.root, "/etc/passwd")
+
+    def test_a_symlink_pointing_out_is_refused(self):
+        outside = pathlib.Path(self.tmp.name) / "secret.txt"
+        outside.write_text("nope", encoding="utf-8")
+        link = self.root / "escape"
+        try:
+            link.symlink_to(outside)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not available")
+        # Resolved before the check, so a link inside the project pointing
+        # out of it is caught rather than followed.
+        with self.assertRaises(opener.Refused):
+            opener.safe_path(self.root, "escape")
+
+    def test_a_missing_file_is_refused(self):
+        with self.assertRaises(opener.Refused):
+            opener.safe_path(self.root, "t4-source/test/nope.html")
+
+    def test_an_unknown_action_is_refused_before_any_path_work(self):
+        with self.assertRaises(opener.Refused):
+            opener.open_path(self.root, "t4-source/test/a.html", "rm -rf")
+
+    def test_every_platform_offers_a_command(self):
+        for action in ("edit", "reveal"):
+            found = opener.commands(action, "/tmp/x.html")
+            self.assertTrue(found, action)
+            self.assertTrue(all(isinstance(c, list) and c for c in found))
+
+
+class TestInspectorFocus(unittest.TestCase):
+    """Selecting an element narrows the panel to that element's sources."""
+
+    PANEL = build_panel(
+        '<span id="d.en.5"></span>', LayoutIndex({}), env_name="test",
+        content_items=ContentItems({"5": {"id": 5, "name": "Box A",
+                                          "contentTypeName": "Action boxes"}}),
+        content_layouts=ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST))
+
+    def test_the_full_listing_is_hideable(self):
+        self.assertIn('id="t4i-all"', self.PANEL)
+        self.assertIn('[data-focus="1"] #t4i-all{display:none}', self.PANEL)
+
+    def test_there_is_a_way_back_to_the_whole_page(self):
+        self.assertIn("show whole page", self.PANEL)
+
+    def test_each_file_offers_edit_and_reveal(self):
+        self.assertIn('data-open="edit"', self.PANEL)
+        self.assertIn('data-open="reveal"', self.PANEL)
+
+
+class TestLayoutGrouping(unittest.TestCase):
+    """A content type has several layouts; only one rendered the page."""
+
+    MANIFEST = {
+        "contentLayout/t--texthtml.html": {
+            "endpoint": "layout", "contentType": "T", "name": "text/html"},
+        "contentLayout/t--textrss.html": {
+            "endpoint": "layout", "contentType": "T", "name": "text/rss"},
+        "contentLayout/t--textcode.html": {
+            "endpoint": "layout", "contentType": "T", "name": "text/code"},
+    }
+
+    def _panel(self, manifest):
+        return build_panel(
+            '<span id="d.en.1"></span>', LayoutIndex({}), env_name="test",
+            content_items=ContentItems({"1": {"id": 1, "name": "x",
+                                              "contentTypeName": "T"}}),
+            content_layouts=ContentLayoutIndex(manifest))
+
+    def test_the_web_format_leads_and_the_rest_fold_away(self):
+        panel = self._panel(self.MANIFEST)
+        html_at = panel.index("t--texthtml.html")
+        details_at = panel.index("<details")
+        self.assertLess(html_at, details_at, "text/html should come first")
+        self.assertIn("2 other formats", panel)
+
+    def test_the_guess_is_labelled_as_one(self):
+        panel = self._panel(self.MANIFEST)
+        self.assertIn("likely", panel)
+        self.assertIn("T4 picks by the format the page layout asks for", panel)
+
+    def test_a_single_layout_is_not_dressed_up_as_a_choice(self):
+        panel = self._panel({"contentLayout/t--texthtml.html": {
+            "endpoint": "layout", "contentType": "T", "name": "text/html"}})
+        self.assertNotIn("<details", panel)
+        self.assertNotIn("likely", panel)
+
+    def test_with_no_web_format_nothing_is_promoted(self):
+        # Nothing to prefer, so they are shown as equals rather than one
+        # being picked arbitrarily.
+        panel = self._panel({
+            "contentLayout/t--textrss.html": {
+                "endpoint": "layout", "contentType": "T", "name": "text/rss"},
+            "contentLayout/t--textcode.html": {
+                "endpoint": "layout", "contentType": "T", "name": "text/code"}})
+        self.assertNotIn("<details", panel)
+        self.assertNotIn("likely", panel)
+
+    def test_files_are_grouped_under_what_they_are(self):
+        panel = self._panel(self.MANIFEST)
+        self.assertIn("Content layout", panel)
+        self.assertIn("On this page", panel)

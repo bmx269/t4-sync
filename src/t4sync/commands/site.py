@@ -4,6 +4,7 @@ import pathlib
 
 from .. import mirror as mirror_mod
 from .. import serve as serve_mod
+from .. import history
 from ..errors import T4Error
 
 DEFAULT_REJECT = ["pdf", "docx", "xlsx", "pptx", "doc", "xls", "ppt"]
@@ -33,6 +34,8 @@ def run_mirror(args, project):
     pages, assets, errors = mirror_mod.crawl(
         url, dest, reject_ext=reject, limit=args.limit, timeout=args.timeout)
     print("\n%d pages, %d assets, %d errors" % (pages, assets, errors))
+    history.record(project, "mirror", env=env_name, pages=pages,
+                   assets=assets, failures=errors or None)
     if pages and not getattr(args, "quiet_hint", False):
         print("Serve it: t4 serve")
     return 0
@@ -143,6 +146,7 @@ def run_serve(args, project):
                     preview_edits=not args.no_preview,
                     span_markers=project.config.get("span_markers"),
                     serve_media_source=not args.no_media_source,
+                    project_root=str(project.root),
                     published_urls=[e.get("published_url")
                                     for e in project.config.get("environments", {}).values()
                                     if e.get("published_url")])

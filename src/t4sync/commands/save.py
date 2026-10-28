@@ -8,6 +8,7 @@ teaches people to ignore them.
 import json
 
 from ..compare import load_manifest
+from .. import history
 from ..errors import T4Error
 from ..vcs import message_for, open_repo
 
@@ -42,12 +43,10 @@ def run(args, project):
             "  git init && git add . && git commit -m \"Initial pull from T4\""
             % repo.reason)
 
-    # Scope: the environment's pulled source, plus the project config, which
-    # is where a channel or environment change lives. Tokens are gitignored by
-    # `t4 init` and are never staged here.
+    # Scope: the environment's pulled source, and only that. `.t4/` is
+    # deliberately not committed -- it holds the URLs one person works
+    # against and the credentials for them -- so a save cannot reach it.
     targets = [project.env_dir(env_name)]
-    if args.config:
-        targets.append(project.root / ".t4" / "config.json")
     if args.paths:
         targets = [project.root / p for p in args.paths]
 
@@ -84,6 +83,8 @@ def run(args, project):
         return 0
 
     _, branch = repo.head()
+    history.record(project, "save", env=env_name, files=len(entries),
+                   commit=sha, message=args.message)
     print("\nCommitted %s on %s." % (sha[:8], branch or "(detached)"))
     print("Deploy it with: t4 push -e %s" % env_name)
     return 0

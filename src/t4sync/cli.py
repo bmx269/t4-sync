@@ -99,8 +99,6 @@ def build_parser():
                     help="limit the commit to these paths")
     sp.add_argument("--env", "-e", help="environment whose source to commit")
     sp.add_argument("--message", "-m", help="commit subject line")
-    sp.add_argument("--config", action="store_true",
-                    help="include .t4/config.json (never tokens)")
     sp.add_argument("--dry-run", action="store_true",
                     help="list what would be committed")
 

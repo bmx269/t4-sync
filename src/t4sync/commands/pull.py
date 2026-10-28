@@ -4,6 +4,7 @@ import os
 import re
 import urllib.error
 
+from .. import history
 from .. import contentlayout
 from ..api import Client, describe_http_error
 from ..endpoints import ENDPOINTS, ID_FIELDS, MEDIA_TEXT_FIELD
@@ -385,7 +386,14 @@ def run(args, project):
         if args.all and not project.read_token(name):
             print("Skipping %s: no token stored (t4 token set %s)" % (name, name))
             continue
-        failures += pull_env(project, name, only=args.only,
-                             detail=not args.no_detail, timeout=args.timeout,
-                             force=args.force, binary=args.binary)
+        failed = pull_env(project, name, only=args.only,
+                          detail=not args.no_detail, timeout=args.timeout,
+                          force=args.force, binary=args.binary)
+        failures += failed
+        try:
+            tracked = len(load_manifest(project, name))
+        except Exception:                             # noqa: BLE001
+            tracked = None
+        history.record(project, "pull", env=name, files=tracked,
+                       failures=failed or None)
     return 1 if failures else 0

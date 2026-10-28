@@ -29,7 +29,7 @@ import threading
 import time
 
 from .inspector import (ContentLayoutIndex, ContentTypeIndex, InspectorContext,
-                        LayoutIndex, LAYOUT_ID_META, LAYOUT_META,
+                        LayoutIndex, LAYOUT_ID_META, LAYOUT_META, OPEN_PATH,
                         annotate_components, annotate_content_items,
                         build_comment, build_panel, fence)
 from .render import PreviewEngine, status_comment
@@ -97,7 +97,8 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
                 body, inspector.index,
                 content_items=inspector.content_items,
                 content_types=(inspector.content_types or {}).get("contenttype"),
-                content_layouts=inspector.content_layouts, **kwargs))
+                content_layouts=inspector.content_layouts,
+                media=inspector.media, **kwargs))
     if inject_reload:
         extra += fence(RELOAD_SCRIPT)
 
@@ -212,6 +213,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
     watcher = None
     inspector = None
     previewer = None
+    project_root = None
 
     def translate_path(self, path):
         mirrored = super().translate_path(path)
@@ -279,6 +281,45 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         if self.watcher and self.path.split("?")[0] == RELOAD_PATH:
             return self._reload_stream()
         return super().do_GET()
+
+    def do_POST(self):
+        if self.path.split("?")[0] != OPEN_PATH:
+            return self.send_error(404)
+        return self._open_source()
+
+    def _open_source(self):
+        """Open a source file locally, on behalf of the inspector.
+
+        The browser cannot launch an editor; this process can. The path is
+        resolved under the project root and refused if it escapes -- see
+        opener.py for why that check is the whole of the security here.
+        """
+        import json as _json
+        from .opener import Refused, open_path
+
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = _json.loads(self.rfile.read(length).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+
+        def reply(code, payload):
+            raw = _json.dumps(payload).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        if not self.project_root:
+            return reply(503, {"error": "no project root; serve was started "
+                                        "outside a project"})
+        try:
+            argv = open_path(self.project_root, body.get("path") or "",
+                             body.get("action") or "edit")
+        except Refused as exc:
+            return reply(400, {"error": str(exc)})
+        return reply(200, {"ok": True, "ran": argv[0]})
 
     def _reload_stream(self):
         """Hold the connection open and emit an event whenever a file changes."""
@@ -378,13 +419,17 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
           proxy_origin=None, proxy_cache=True, reload=True,
           source_dir=None, env_name=None, inspect="both",
           component_markers=None, preview_edits=True, span_markers=None,
-          published_urls=None, serve_media_source=True):
+          published_urls=None, serve_media_source=True,
+          project_root=None):
     MirrorHandler.overrides = os.path.abspath(overrides) if overrides else None
     # File rules first, so a project can override the derived ones.
     derived = rules_for_published_urls(published_urls)
     MirrorHandler.rules = load_rules(rules_file) + derived
     MirrorHandler.proxy_origin = proxy_origin
     MirrorHandler.proxy_cache = proxy_cache
+    # So the inspector's edit/folder buttons can resolve a path, and refuse
+    # anything outside the project.
+    MirrorHandler.project_root = str(project_root) if project_root else None
 
     index = LayoutIndex.from_project_dir(source_dir)
 
@@ -415,6 +460,7 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
             sections=SectionLayouts.from_env_dir(source_dir),
             content_items=ContentItems.from_env_dir(source_dir),
             content_layouts=ContentLayoutIndex.from_env_dir(source_dir),
+            media=MirrorHandler.media_sources or MediaSources.from_env_dir(source_dir),
             resolver=(MirrorHandler.previewer.resolver()
                       if MirrorHandler.previewer else None),
             content_types={
