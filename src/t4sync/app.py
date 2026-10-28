@@ -674,24 +674,31 @@ header{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
 h1{font-size:15px;margin:0;letter-spacing:.02em}
 h2{font-size:13px;margin:0 0 .5rem;color:var(--dim);font-weight:600;
  text-transform:uppercase;letter-spacing:.06em}
-/* Columns use the width; the page does the scrolling. Panes that scroll
-   inside a page that also scrolls mean the wheel does different things
-   depending on where the pointer is, which is worse than a long page. */
+/* What you can do, across the top; what changed beside what happened; the
+   log across the bottom where a long one does no harm. The page does the
+   scrolling -- panes that scroll inside a scrolling page make the wheel
+   behave differently depending on where the pointer is. */
 main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
- grid-template-columns:20rem minmax(0,1.4fr) minmax(0,1fr)}
-.col{min-width:0;display:flex;flex-direction:column;gap:.75rem}
-/* What to do stays in view while reading a long change list. */
-@media (min-width:981px){
- .col-side{position:sticky;top:3.4rem}
-}
-@media (max-width:1500px){
- main{grid-template-columns:20rem minmax(0,1fr)}
- .col-log{grid-column:2}
-}
+ grid-template-columns:minmax(0,70fr) minmax(0,30fr);
+ grid-template-areas:"project project" "changes history" "tasks tasks"}
+.area-project h2{margin-top:.6rem}
+.area-project{grid-area:project}
+.area-changes{grid-area:changes}
+.area-history{grid-area:history}
+.area-tasks{grid-area:tasks}
 @media (max-width:980px){
- main{grid-template-columns:minmax(0,1fr)}
- .col-log{grid-column:auto}
+ main{grid-template-columns:minmax(0,1fr);
+  grid-template-areas:"project" "changes" "history" "tasks"}
 }
+
+/* Project details are reference, not the thing you came for. */
+#details summary{cursor:pointer;list-style:none;display:flex;gap:.5rem;
+ align-items:baseline;padding:.1rem 0 .3rem}
+#details summary::-webkit-details-marker{display:none}
+#details summary::before{content:"\25b8";color:var(--dim);
+ display:inline-block;transition:transform .15s}
+#details[open] summary::before{transform:rotate(90deg)}
+#details[open] #summary{padding-bottom:.4rem;border-bottom:1px solid var(--line)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;
  padding:.7rem .85rem}
 .row{display:flex;gap:.6rem;align-items:baseline;padding:.25rem 0;
@@ -710,7 +717,8 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
 /* One action per row, with what it does beside it: the buttons are not
    self-explanatory and a tooltip is no use to someone deciding. */
-.acts{display:flex;flex-direction:column;gap:.25rem}
+.acts{display:grid;gap:.3rem;
+ grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}
 /* Button plus a ? that opens what it does. The explanations were worth
    having but not worth a third of the column every time. */
 .act{position:relative;display:flex;gap:.4rem;align-items:center}
@@ -808,10 +816,11 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
 </header>
 
 <main>
- <div class="col col-side">
-  <section class="card">
-    <h2>Project</h2>
-    <div id="summary"></div>
+  <section class="card area-project">
+    <details id="details">
+      <summary><b>Project</b> <span id="detailsline" class="dim"></span></summary>
+      <div id="summary"></div>
+    </details>
 
     <h2 style="margin-top:1rem">1 &middot; Get the files</h2>
     <div class="acts">
@@ -876,16 +885,7 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
     </div>
   </section>
 
-  <section class="card">
-    <h2>History</h2>
-    <div id="events"></div>
-    <h2 style="margin-top:1rem">Recent activity</h2>
-    <div id="recent"></div>
-  </section>
- </div>
-
- <div class="col col-main">
-  <section class="card">
+  <section class="card area-changes">
     <h2>Changes
       <span id="changecount" class="pill"></span>
       <button id="rescan" style="float:right">Rescan</button>
@@ -898,10 +898,15 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
     </p>
     <div id="changes"></div>
   </section>
- </div>
 
- <div class="col col-log">
-  <section class="card">
+  <section class="card area-history">
+    <h2>History</h2>
+    <div id="events"></div>
+    <h2 style="margin-top:1rem">Recent activity</h2>
+    <div id="recent"></div>
+  </section>
+
+  <section class="card area-tasks">
     <h2>Tasks</h2>
     <div id="tasks"><p class="dim" style="margin:.2rem 0">Nothing running.</p></div>
     <h2 style="margin-top:1rem">Output
@@ -910,7 +915,6 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
     </h2>
     <pre id="log">Pick an action to begin.</pre>
   </section>
- </div>
 </main>
 
 <footer id="foot"></footer>
@@ -994,6 +998,15 @@ function render() {
 
   el("push").title = env.push_allowed ? ""
     : "Pushing is disabled for this environment in .t4/config.json";
+
+  var line = el("detailsline");
+  if (line) {
+    line.textContent = [
+      env.tracked ? env.tracked + " files" : "nothing pulled",
+      state.mirror ? state.mirror.pages + " pages mirrored" : "no mirror",
+      state.repo.available ? state.repo.summary : "no repository"
+    ].join("  \u00b7  ");
+  }
 
   renderHistory(env.name);
   el("foot").textContent = "Every button runs the matching t4 command as a "
