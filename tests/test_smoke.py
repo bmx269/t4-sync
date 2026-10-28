@@ -1334,3 +1334,76 @@ class TestApp(unittest.TestCase):
                 break
             seen.append(line)
         self.assertEqual(seen, job.lines)
+
+
+class TestJobLanes(unittest.TestCase):
+    """Tasks run side by side; only writers to the same thing wait."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.jobs = app.Jobs(self.tmp.name)
+
+    def tearDown(self):
+        for job in self.jobs.running():
+            job.stop()
+        self.tmp.cleanup()
+
+    def _pretend(self, argv):
+        """Register a job as running without launching anything."""
+        self.jobs._next += 1
+        job = app.Job(str(self.jobs._next), argv, self.tmp.name)
+        self.jobs.items[job.id] = job
+        return job
+
+    def test_serving_blocks_nothing_but_another_serve(self):
+        self._pretend(["serve"])
+        for argv in (["pull"], ["push"], ["save"], ["mirror"], ["status"],
+                     ["sections"], ["diff"]):
+            self.assertIsNone(self.jobs.blocker(argv), argv[0])
+        self.assertIsNotNone(self.jobs.blocker(["serve"]))
+
+    def test_source_writers_wait_for_each_other(self):
+        self._pretend(["pull"])
+        for argv in (["push"], ["save"], ["sync"], ["sections"], ["pull"]):
+            self.assertIsNotNone(self.jobs.blocker(argv), argv[0])
+
+    def test_readers_are_never_blocked(self):
+        self._pretend(["pull"])
+        self._pretend(["mirror"])
+        self._pretend(["serve"])
+        for argv in (["status"], ["diff"], ["doctor"], ["layouts"], ["compare"]):
+            self.assertIsNone(self.jobs.blocker(argv), argv[0])
+
+    def test_a_finished_job_stops_blocking(self):
+        job = self._pretend(["pull"])
+        self.assertIsNotNone(self.jobs.blocker(["save"]))
+        job.done = True
+        self.assertIsNone(self.jobs.blocker(["save"]))
+
+    def test_the_conflict_names_the_task_in_the_way(self):
+        self._pretend(["pull", "--env", "test"])
+        with self.assertRaises(app.Conflict) as caught:
+            self.jobs.start(["push"])
+        # The label, not the raw argv: flags are noise in a UI message.
+        self.assertIn("t4 pull test", str(caught.exception))
+        self.assertNotIn("--env", str(caught.exception))
+
+    def test_busy_lanes_reports_what_is_in_use(self):
+        self._pretend(["serve"])
+        self._pretend(["pull"])
+        self.assertEqual(self.jobs.busy_lanes(), ["serve", "source"])
+
+    def test_every_lane_has_a_reason_to_show(self):
+        self.assertEqual(set(app.LANES.values()), set(app.LANE_REASON))
+
+    def test_lanes_only_name_commands_the_panel_offers(self):
+        self.assertEqual(set(app.LANES) - app.ALLOWED, set())
+
+    def test_the_served_url_is_read_from_the_output(self):
+        # serve takes --port, so a hardcoded 8321 would send you to the wrong
+        # place exactly when you had a reason to change it.
+        job = self._pretend(["serve", "--port", "9999"])
+        job._emit("Serving   /tmp/site")
+        self.assertIsNone(job.url)
+        job._emit("URL       http://127.0.0.1:9999/")
+        self.assertEqual(job.url, "http://127.0.0.1:9999/")

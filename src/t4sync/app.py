@@ -22,6 +22,7 @@ import html
 import json
 import os
 import queue
+import re
 import secrets
 import subprocess
 import sys
@@ -35,6 +36,9 @@ from .vcs import open_repo
 # Deliberately not serve's 8321: running the panel and the site at once is the
 # normal case, not a clash to resolve.
 DEFAULT_PORT = 8320
+
+# `t4 serve` prints "URL       http://127.0.0.1:8321/".
+URL_LINE = re.compile(r"\b(https?://(?:127\.0\.0\.1|localhost)(?::\d+)?/\S*)")
 
 
 def child_env():
@@ -66,6 +70,10 @@ class Job:
         self.done = False
         self.returncode = None
         self.proc = None
+        # Read out of the command's own output rather than assumed: serve
+        # takes --port, so the panel guessing 8321 would send you to the
+        # wrong place exactly when you had a reason to change it.
+        self.url = None
         self._watchers = []
         self._lock = threading.Lock()
 
@@ -96,6 +104,10 @@ class Job:
         with self._lock:
             if line is not None:
                 self.lines.append(line)
+                if self.url is None:
+                    found = URL_LINE.search(line)
+                    if found:
+                        self.url = found.group(1)
             for watcher in self._watchers:
                 watcher.put(line)
 
@@ -117,7 +129,44 @@ class Job:
 
     def summary(self):
         return {"id": self.id, "argv": self.argv, "done": self.done,
-                "returncode": self.returncode, "lines": len(self.lines)}
+                "returncode": self.returncode, "lines": len(self.lines),
+                "lane": LANES.get(self.argv[0]), "label": self.label(),
+                "url": self.url}
+
+    def label(self):
+        return "t4 " + " ".join(a for a in self.argv if not a.startswith("--"))
+
+
+# What a command writes, and therefore what it cannot run beside.
+#
+# Serving the site is a long-running task, so anything that blocks on it
+# blocks for the whole session -- and there is no reason it should. Pulling
+# while the site is served is the normal way to work. The only real conflicts
+# are between commands writing the same thing:
+#
+#   source   pull, sync, sections write t4-source; save and push read it and
+#            write the git index and _backup. Two at once race.
+#   mirror   two crawls into one directory.
+#   serve    one server, one port.
+#
+# Everything absent from this table is read-only and never blocked.
+LANES = {
+    "pull": "source", "sync": "source", "sections": "source",
+    "save": "source", "push": "source",
+    "mirror": "mirror",
+    "serve": "serve",
+}
+
+LANE_REASON = {
+    "source": "%s is already running, and both write the pulled source. "
+              "Let it finish first.",
+    "mirror": "%s is already running, into the same directory.",
+    "serve": "%s is already running. Stop it to start another.",
+}
+
+
+class Conflict(Exception):
+    """A command cannot start because one it would race with is running."""
 
 
 class Jobs:
@@ -127,8 +176,27 @@ class Jobs:
         self._next = 0
         self._lock = threading.Lock()
 
+    def blocker(self, argv):
+        """The running job `argv` would race with, or None.
+
+        Separate from `start` so the answer can be had without launching
+        anything -- the UI asks it to decide what to grey out, and it is the
+        part worth testing on its own.
+        """
+        lane = LANES.get(argv[0])
+        if not lane:
+            return None
+        for other in self.items.values():
+            if not other.done and LANES.get(other.argv[0]) == lane:
+                return other
+        return None
+
     def start(self, argv):
         with self._lock:
+            blocking = self.blocker(argv)
+            if blocking is not None:
+                raise Conflict(LANE_REASON[LANES[argv[0]]]
+                               % ("`%s`" % blocking.label()))
             self._next += 1
             job = Job(str(self._next), argv, self.cwd)
             self.items[job.id] = job
@@ -139,6 +207,10 @@ class Jobs:
 
     def running(self):
         return [j for j in self.items.values() if not j.done]
+
+    def busy_lanes(self):
+        return sorted({LANES[j.argv[0]] for j in self.running()
+                       if j.argv[0] in LANES})
 
 
 def mirror_stats(project):
@@ -187,7 +259,11 @@ def state(project, jobs):
         "repo": {"available": repo.available,
                  "summary": repo.describe(
                      [project.env_dir(default)] if default else None)},
+        # Running jobs first: a page reload has to pick the streams back up,
+        # and a serve started ten minutes ago must not vanish from the UI.
         "jobs": [j.summary() for j in jobs.items.values()],
+        "busy": jobs.busy_lanes(),
+        "lanes": LANES,
     }
 
 
@@ -272,7 +348,11 @@ class AppHandler(BaseHTTPRequestHandler):
                 return self._json(
                     {"error": "%r is not one of %s"
                               % (argv[0], ", ".join(sorted(ALLOWED)))}, 400)
-            return self._json(self.jobs.start(argv).summary())
+            try:
+                return self._json(self.jobs.start(argv).summary())
+            except Conflict as exc:
+                # 409, not 400: the request is fine, the timing is not.
+                return self._json({"error": str(exc), "conflict": True}, 409)
         if path.startswith("/api/jobs/") and path.endswith("/stop"):
             job = self.jobs.get(path.split("/")[3])
             if not job:
@@ -397,6 +477,15 @@ pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
 .warn{color:var(--warn)}
 .pill{display:inline-block;padding:.05rem .45rem;border-radius:999px;
  border:1px solid var(--line);font-size:11px;color:var(--dim)}
+.task{cursor:pointer;align-items:center}
+.task:hover{color:var(--accent)}
+.task.on{font-weight:600}
+.task button{padding:.1rem .5rem;font-size:11px}
+.dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%%;background:var(--dim)}
+.dot.ok{background:var(--ok)}
+.dot.bad{background:var(--warn)}
+.dot.live{background:var(--accent);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%%,100%%{opacity:1}50%%{opacity:.25}}
 footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
 </style>
 
@@ -443,7 +532,10 @@ footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
   </section>
 
   <section class="card">
-    <h2>Output <span id="jobstate" class="pill"></span>
+    <h2>Tasks</h2>
+    <div id="tasks"><p class="dim" style="margin:.2rem 0">Nothing running.</p></div>
+    <h2 style="margin-top:1rem">Output
+      <span id="jobstate" class="pill"></span>
       <button id="stop" class="danger" style="float:right" disabled>Stop</button>
     </h2>
     <pre id="log">Pick an action to begin.</pre>
@@ -455,8 +547,12 @@ footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
 <script>
 var TOKEN = "%(token)s";
 var state = null;
-var current = null;
-var serveJob = null;
+
+// Tasks run side by side. A long `t4 serve` must not stop you pulling,
+// committing or pushing while it runs -- that is the normal way to work.
+// Each job keeps its own log; the pane shows whichever is selected.
+var jobs = {};          // id -> {summary, lines, source}
+var shown = null;       // id of the job whose log is on screen
 
 function api(path, options) {
   options = options || {};
@@ -519,31 +615,153 @@ function render() {
     : "none - Mirror site, or just start the local site"));
   box.appendChild(row("Repository", state.repo.summary));
 
-  el("push").disabled = !env.push_allowed;
   el("push").title = env.push_allowed ? ""
     : "Pushing is disabled for this environment in .t4/config.json";
   el("foot").textContent = "Every button runs the matching t4 command as a "
-    + "subprocess in " + state.root + ".";
+    + "subprocess in " + state.root + ". Tasks run side by side; only "
+    + "commands writing the same files wait for each other.";
 }
 
 function load() {
-  return api("/api/state").then(function (s) { state = s; render(); });
+  return api("/api/state").then(function (s) {
+    state = s;
+    // Reloading the page must not lose a serve started ten minutes ago, nor
+    // orphan its log: re-attach to anything still running.
+    s.jobs.forEach(function (summary) {
+      var entry = jobs[summary.id];
+      if (!entry) {
+        if (summary.done) return;       // finished before we ever saw it
+        track(summary);
+      } else {
+        entry.summary = summary;
+      }
+    });
+    render();
+    syncButtons();
+    renderTasks();
+  });
 }
 
-function setRunning(job) {
-  current = job;
-  var running = job && !job.done;
-  document.querySelectorAll("button[data-run]").forEach(function (b) {
-    b.disabled = !!running;
+function busyLanes() {
+  var busy = {};
+  Object.keys(jobs).forEach(function (id) {
+    var j = jobs[id].summary;
+    if (!j.done && j.lane) busy[j.lane] = j.label;
   });
-  el("push").disabled = !!running || !(envByName(selected()) || {}).push_allowed;
-  el("stop").disabled = !running;
-  el("jobstate").textContent = job
-    ? (running ? "running: t4 " + job.argv.join(" ")
-               : "t4 " + job.argv.join(" ") + " - exit " + job.returncode)
-    : "";
-  el("jobstate").className = "pill" + (job && job.done
-    ? (job.returncode === 0 ? " ok" : " warn") : "");
+  return busy;
+}
+
+function laneFor(command) { return (state && state.lanes || {})[command]; }
+
+// A button is disabled only when something writing the same thing is
+// running. Serving the site blocks nothing but another serve.
+function syncButtons() {
+  var busy = busyLanes();
+  document.querySelectorAll("button[data-run]").forEach(function (b) {
+    var command = JSON.parse(b.getAttribute("data-run"))[0];
+    var lane = laneFor(command);
+    var blocker = lane && busy[lane];
+    b.disabled = !!blocker;
+    b.title = blocker ? blocker + " is running, and both write the same files"
+                      : "";
+  });
+
+  var serving = null;
+  Object.keys(jobs).forEach(function (id) {
+    var j = jobs[id].summary;
+    if (!j.done && j.argv[0] === "serve") serving = j;
+  });
+  var open = el("openserve");
+  open.disabled = !(serving && serving.url);
+  open.dataset.url = serving && serving.url ? serving.url : "";
+
+  var env = envByName(selected()) || {};
+  el("push").disabled = !env.push_allowed || !!busy[laneFor("push")];
+
+  var start = document.querySelector('button[data-run=\'["serve"]\']');
+  if (start) start.textContent = serving ? "Site is running" : "Start local site";
+}
+
+function renderTasks() {
+  var box = el("tasks");
+  box.innerHTML = "";
+  var ids = Object.keys(jobs).sort(function (a, b) { return b - a; });
+  var live = ids.filter(function (id) { return !jobs[id].summary.done; });
+  if (!ids.length) {
+    var p = document.createElement("p");
+    p.className = "dim"; p.style.margin = ".2rem 0";
+    p.appendChild(text("Nothing running."));
+    box.appendChild(p);
+    return;
+  }
+  ids.slice(0, 8).forEach(function (id) {
+    var j = jobs[id].summary;
+    var d = document.createElement("div");
+    d.className = "row task" + (id === shown ? " on" : "");
+    d.dataset.job = id;
+
+    var dot = document.createElement("span");
+    dot.className = "dot " + (!j.done ? "live" : (j.returncode === 0 ? "ok" : "bad"));
+    var name = document.createElement("span");
+    name.className = "val"; name.appendChild(text(j.label));
+    var status = document.createElement("span");
+    status.className = "pill " + (!j.done ? "" : (j.returncode === 0 ? "ok" : "warn"));
+    status.appendChild(text(!j.done ? "running" : "exit " + j.returncode));
+
+    d.appendChild(dot); d.appendChild(name); d.appendChild(status);
+    if (!j.done) {
+      var stop = document.createElement("button");
+      stop.className = "danger"; stop.dataset.stop = id;
+      stop.appendChild(text("stop"));
+      d.appendChild(stop);
+    }
+    box.appendChild(d);
+  });
+  el("jobstate").textContent = live.length
+    ? live.length + " running" : "idle";
+}
+
+function showLog(id) {
+  shown = id;
+  var entry = jobs[id];
+  el("log").textContent = entry ? entry.lines.join("\n") : "";
+  el("log").scrollTop = el("log").scrollHeight;
+  el("stop").disabled = !(entry && !entry.summary.done);
+  renderTasks();
+}
+
+function track(summary) {
+  var entry = jobs[summary.id];
+  if (!entry) {
+    entry = jobs[summary.id] = {summary: summary, lines: [], source: null};
+  } else {
+    entry.summary = summary;
+  }
+  if (!entry.source && !summary.done) stream(summary.id);
+  return entry;
+}
+
+function stream(id) {
+  var entry = jobs[id];
+  var source = new EventSource("/api/jobs/" + id + "/stream?t=" + TOKEN);
+  entry.source = source;
+  source.onmessage = function (e) {
+    entry.lines.push(JSON.parse(e.data));
+    if (shown === id) {
+      var log = el("log");
+      var atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
+      log.appendChild(text(entry.lines[entry.lines.length - 1] + "\n"));
+      if (atBottom) log.scrollTop = log.scrollHeight;
+    }
+  };
+  source.addEventListener("end", function (e) {
+    source.close(); entry.source = null;
+    entry.summary = JSON.parse(e.data);
+    syncButtons(); renderTasks();
+    if (shown === id) el("stop").disabled = true;
+    load();
+  });
+  source.onerror = function () { source.close(); entry.source = null; };
 }
 
 function run(argv, opts) {
@@ -556,40 +774,34 @@ function run(argv, opts) {
   }
   if (opts.extra) argv = argv.concat(opts.extra);
 
-  el("log").textContent = "";
   return api("/api/run", {method: "POST", body: JSON.stringify({argv: argv})})
-    .then(function (job) {
-      setRunning(job);
-      if (argv[0] === "serve") { serveJob = job; el("openserve").disabled = false; }
-      stream(job);
-      return job;
+    .then(function (summary) {
+      track(summary);
+      showLog(summary.id);
+      syncButtons();
+      return summary;
     })
-    .catch(function (e) { el("log").textContent = "Error: " + e.message; });
-}
-
-function stream(job) {
-  var log = el("log");
-  var source = new EventSource("/api/jobs/" + job.id + "/stream?t=" + TOKEN);
-  source.onmessage = function (e) {
-    log.appendChild(text(JSON.parse(e.data) + "\n"));
-    log.scrollTop = log.scrollHeight;
-  };
-  source.addEventListener("end", function (e) {
-    source.close();
-    var done = JSON.parse(e.data);
-    setRunning(done);
-    if (serveJob && done.id === serveJob.id) {
-      serveJob = null; el("openserve").disabled = true;
-    }
-    load();
-  });
-  source.onerror = function () { source.close(); };
+    .catch(function (e) {
+      // A conflict is a timing problem, not a failure: say so without
+      // throwing away the log of whatever is already running.
+      el("jobstate").textContent = e.message;
+      el("jobstate").className = "pill warn";
+    });
 }
 
 document.addEventListener("click", function (e) {
   var b = e.target.closest("button[data-run]");
-  if (!b) return;
-  run(JSON.parse(b.getAttribute("data-run")));
+  if (b) { run(JSON.parse(b.getAttribute("data-run"))); return; }
+
+  var stop = e.target.closest("button[data-stop]");
+  if (stop) {
+    e.stopPropagation();
+    api("/api/jobs/" + stop.dataset.stop + "/stop", {method: "POST"});
+    return;
+  }
+
+  var task = e.target.closest(".task");
+  if (task) showLog(task.dataset.job);
 });
 
 el("push").addEventListener("click", function () {
@@ -601,16 +813,16 @@ el("push").addEventListener("click", function () {
 });
 
 el("stop").addEventListener("click", function () {
-  if (!current) return;
-  api("/api/jobs/" + current.id + "/stop", {method: "POST"});
+  if (shown) api("/api/jobs/" + shown + "/stop", {method: "POST"});
 });
 
 el("openserve").addEventListener("click", function () {
-  window.open("http://127.0.0.1:8321/", "_blank");
+  var url = el("openserve").dataset.url;
+  if (url) window.open(url, "_blank");
 });
 
 el("refresh").addEventListener("click", load);
-el("env").addEventListener("change", render);
+el("env").addEventListener("change", function () { render(); syncButtons(); });
 
 load();
 </script>
