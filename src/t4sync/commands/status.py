@@ -45,7 +45,9 @@ def run(args, project):
     print("Project     %s" % project.root)
     print("Environment %s" % env["label"])
     print("Push        %s" % ("allowed" if env.get("push_allowed") else "disabled"))
-    print("Repository  %s\n" % open_repo(project).describe())
+    source = project.env_dir(env_name)
+    print("Repository  %s\n"
+          % open_repo(project).describe([source] if source.is_dir() else None))
 
     try:
         manifest = load_manifest(project, env_name)

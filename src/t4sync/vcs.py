@@ -108,12 +108,18 @@ class Repo:
             branch = None
         return sha, branch or None
 
-    def describe(self):
-        """A one-line summary for `t4 status`."""
+    def describe(self, paths=None):
+        """A one-line summary for `t4 status`.
+
+        `paths` scopes the pending count. A project repository usually holds
+        more than the pulled source -- notes, exports, a scratch directory --
+        and counting those as "uncommitted" would report a number that has
+        nothing to do with what is about to be deployed.
+        """
         if not self.available:
             return self.reason
         sha, branch = self.head()
-        pending = len(self.dirty())
+        pending = len(self.dirty(paths))
         return "%s at %s, %s" % (
             branch or "(detached)", sha[:8] if sha else "no commits yet",
             "clean" if not pending else "%d file(s) uncommitted" % pending)
