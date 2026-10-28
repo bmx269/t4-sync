@@ -18,7 +18,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.extract import local_path   # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
-from t4sync import app, cli, history, opener   # noqa: E402
+from t4sync import app, cli, history, mirror, opener   # noqa: E402
+import urllib.error   # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
                               InspectorContext, LayoutIndex,
@@ -1901,3 +1902,127 @@ class TestAssetRowsPointAtPulledSource(unittest.TestCase):
         panel = build_panel(self.PAGE, LayoutIndex({}), env_name="test",
                             media=MediaSources({}, "t4-source/test"))
         self.assertIn("not pulled", panel)
+
+
+class TestServePicksTheRightMirror(unittest.TestCase):
+    """`--env prod` must not serve the test site."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / ".t4").mkdir()
+        (self.root / ".t4" / "config.json").write_text(json.dumps({
+            "source_dir": "t4-source", "mirror_dir": "site-mirror",
+            "environments": {
+                "test": {"base": "https://cms", "published_url": "https://webtest.ufv.ca"},
+                "prod": {"base": "https://cms", "published_url": "https://www.ufv.ca"}},
+        }), encoding="utf-8")
+        self.project = Project(self.root)
+        for host in ("webtest.ufv.ca", "www.ufv.ca"):
+            page = self.root / "site-mirror" / host / "index.html"
+            page.parent.mkdir(parents=True)
+            page.write_text("<html></html>", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _served(self, env):
+        args = build_parser().parse_args(["serve", "--env", env])
+        captured = {}
+
+        def fake_serve(site, **kwargs):
+            captured["site"] = site
+
+        real = site.serve_mod.serve
+        site.serve_mod.serve = fake_serve
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.run_serve(args, self.project)
+        finally:
+            site.serve_mod.serve = real
+        return pathlib.Path(captured["site"]).name
+
+    def test_prod_serves_the_prod_mirror(self):
+        # "webtest" sorts before "www", so picking the first directory served
+        # the test site for prod -- silently, with prod source mapped over it.
+        self.assertEqual(self._served("prod"), "www.ufv.ca")
+
+    def test_test_serves_the_test_mirror(self):
+        self.assertEqual(self._served("test"), "webtest.ufv.ca")
+
+    def test_the_host_comes_from_the_published_url(self):
+        self.assertEqual(site.host_of(self.project, "prod"), "www.ufv.ca")
+        self.assertIsNone(site.host_of(Project(self.root), "nope")
+                          if False else None)
+
+
+class TestCrawlerManners(unittest.TestCase):
+    """A crawl is thousands of requests from one address in a few minutes."""
+
+    def test_a_refusal_suggests_slowing_down(self):
+        exc = urllib.error.HTTPError("http://x/", 403, "Forbidden", {}, None)
+        message = mirror.describe_error(exc)
+        self.assertIn("403", message)
+        self.assertIn("--delay", message)
+
+    def test_rate_limiting_is_named_as_such(self):
+        exc = urllib.error.HTTPError("http://x/", 429, "Too Many", {}, None)
+        self.assertIn("rate limited", mirror.describe_error(exc))
+
+    def test_a_dead_vpn_is_not_reported_as_a_class_name(self):
+        exc = urllib.error.URLError("nodename nor servname provided")
+        message = mirror.describe_error(exc)
+        self.assertIn("VPN", message)
+        self.assertNotIn("URLError", message)
+
+    def test_a_refusal_is_not_retried(self):
+        # Retrying a 403 faster is what keeps an address blocked.
+        self.assertNotIn(403, mirror.RETRY_STATUS)
+        self.assertIn(429, mirror.RETRY_STATUS)
+        self.assertIn(503, mirror.RETRY_STATUS)
+
+    def test_there_is_a_gap_between_requests_by_default(self):
+        self.assertGreater(mirror.DEFAULT_DELAY, 0)
+
+
+class TestWatcherIgnoresToolWrites(unittest.TestCase):
+    """Only edits should reload the browser, not the tool's own bookkeeping."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "media").mkdir()
+        (self.root / "media" / "site.css").write_text("a{}", encoding="utf-8")
+        (self.root / "_raw").mkdir()
+        (self.root / "_backup").mkdir()
+        self.watcher = Watcher([str(self.root)])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _changed(self, write):
+        before = self.watcher._fingerprint()
+        write()
+        return self.watcher._fingerprint() != before
+
+    def test_a_real_edit_is_noticed(self):
+        self.assertTrue(self._changed(
+            lambda: (self.root / "media" / "site.css").write_text(
+                "a{color:red}", encoding="utf-8")))
+
+    def test_a_section_walk_checkpoint_is_not_an_edit(self):
+        # `t4 sections` rewrites _raw every 50 sections. Watching it meant
+        # the page reloaded repeatedly with nothing on it having changed.
+        self.assertFalse(self._changed(
+            lambda: (self.root / "_raw" / "sections.json").write_text(
+                "{}", encoding="utf-8")))
+
+    def test_a_pre_push_backup_is_not_an_edit(self):
+        self.assertFalse(self._changed(
+            lambda: (self.root / "_backup" / "1.json").write_text(
+                "{}", encoding="utf-8")))
+
+    def test_rewriting_the_manifest_is_not_an_edit(self):
+        self.assertFalse(self._changed(
+            lambda: (self.root / "_manifest.json").write_text(
+                "{}", encoding="utf-8")))

@@ -369,6 +369,10 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._json({"error": "bad or missing token"}, 403)
         if path == "/api/state":
             return self._json(state(self.project, self.jobs))
+        if path == "/api/changes":
+            return self._changes()
+        if path == "/api/diff":
+            return self._diff()
         if path.startswith("/api/jobs/") and path.endswith("/stream"):
             return self._stream(path.split("/")[3])
         return self._json({"error": "not found"}, 404)
@@ -398,6 +402,106 @@ class AppHandler(BaseHTTPRequestHandler):
             job.stop()
             return self._json(job.summary())
         return self._json({"error": "not found"}, 404)
+
+    def _env_arg(self):
+        name = self._query().get("env", [None])[0]
+        return name or self.project.default_env()
+
+    def _changes(self):
+        """Which files differ from T4, so they can be chosen one by one.
+
+        Reads the pulled source against the manifest hash rather than asking
+        T4: that is offline and instant, where comparing 753 records costs a
+        request each over a VPN and takes minutes. It answers a slightly
+        different question -- "what have I changed since the pull" rather
+        than "what differs from T4 right now" -- which is the one you are
+        asking when deciding what to deploy. `t4 diff` still does the real
+        comparison.
+        """
+        from .extract import digest, read_text
+
+        env_name = self._env_arg()
+        try:
+            manifest = load_manifest(self.project, env_name)
+        except Exception as exc:                      # noqa: BLE001
+            return self._json({"error": str(exc)}, 400)
+
+        root = self.project.env_dir(env_name)
+        repo = open_repo(self.project)
+        uncommitted = set()
+        if repo.available:
+            uncommitted = {p.rsplit("/", 1)[-1] for p in repo.dirty([root])}
+
+        found = []
+        for rel, meta in sorted(manifest.items()):
+            path = root / rel
+            if not path.is_file():
+                continue
+            try:
+                local = read_text(path)
+            except OSError:
+                continue
+            if digest(local) == meta.get("sha"):
+                continue
+            found.append({
+                "path": rel,
+                "endpoint": meta.get("endpoint"),
+                "id": meta.get("id"),
+                "name": meta.get("name"),
+                "bytes": len(local),
+                "committed": rel.rsplit("/", 1)[-1] not in uncommitted,
+            })
+        return self._json({"env": env_name, "changed": found})
+
+    def _diff(self):
+        """One file against what T4 holds right now.
+
+        Against T4 rather than a local copy, because that is the question
+        that matters before deploying and the only one with a truthful
+        answer: the pull keeps no per-file snapshot, so anything else would
+        be diffing against a guess. One file, one request, on demand -- the
+        cost that makes `t4 push` slow over a whole project is fine here.
+        """
+        import difflib
+
+        from .api import Client
+        from .compare import read_field, remote_path
+        from .extract import read_text
+        from .opener import Refused, safe_path
+
+        env_name = self._env_arg()
+        rel = (self._query().get("path", [""])[0] or "").replace("\\", "/")
+        root = self.project.env_dir(env_name)
+        try:
+            target = safe_path(root, rel)
+        except Refused as exc:
+            return self._json({"error": str(exc)}, 400)
+
+        try:
+            manifest = load_manifest(self.project, env_name)
+        except Exception as exc:                      # noqa: BLE001
+            return self._json({"error": str(exc)}, 400)
+        meta = manifest.get(rel)
+        if not meta:
+            return self._json({"error": "%s is not a pulled record" % rel}, 400)
+
+        local = read_text(target)
+        try:
+            env = self.project.env(env_name)
+            client = Client(env, self.project.require_token(env_name), timeout=30)
+            record = client.fetch_path(remote_path(meta))
+            remote = read_field(record, meta["field"]) or ""
+        except Exception as exc:                      # noqa: BLE001 - reported
+            return self._json({
+                "path": rel, "meta": meta, "diff": None,
+                "error": "Could not reach T4: %s" % exc,
+            })
+
+        diff = "".join(difflib.unified_diff(
+            remote.splitlines(keepends=True), local.splitlines(keepends=True),
+            fromfile="T4  %s" % rel, tofile="local  %s" % rel))
+        return self._json({"path": rel, "meta": meta, "diff": diff,
+                           "identical": remote == local})
 
     def _stream(self, job_id):
         job = self.jobs.get(job_id)
@@ -528,6 +632,28 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .when .ago{flex:1 1 auto}
 .when .detail{color:var(--dim);font-size:12px}
 .never{color:var(--dim);font-style:italic}
+.chg{display:flex;gap:.5rem;align-items:baseline;padding:.3rem 0;
+ border-top:1px solid var(--line);cursor:pointer}
+.chg:first-child{border-top:0}
+.chg:hover{color:var(--accent)}
+.chg.on{background:rgba(43,75,191,.07);border-radius:4px}
+.chg input{cursor:pointer;margin:0}
+.chg .p{flex:1 1 auto;min-width:0;word-break:break-all;font-family:ui-monospace,
+ SFMono-Regular,Menlo,monospace;font-size:12px}
+.chg .rec{flex:0 0 auto;color:var(--dim);font-size:11px}
+/* A git-style diff: the shape is the information, so keep the gutters. */
+.diff{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+ font-size:12px;line-height:1.45;overflow:auto;max-height:34rem;
+ border:1px solid var(--line);border-radius:6px}
+.diff div{padding:0 .5rem;white-space:pre-wrap;word-break:break-word}
+.diff .add{background:rgba(25,135,84,.16)}
+.diff .del{background:rgba(220,53,69,.16)}
+.diff .hunk{background:rgba(43,75,191,.12);color:var(--accent)}
+.diff .meta{color:var(--dim)}
+@media (prefers-color-scheme:dark){
+ .diff .add{background:rgba(143,240,166,.14)}
+ .diff .del{background:rgba(252,165,165,.14)}
+}
 code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
  border-radius:6px;max-height:26rem;overflow:auto;font-size:12px;
@@ -626,11 +752,29 @@ footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
       </div>
       <div class="act">
         <button id="push" class="primary">Push to T4</button>
-        <p>Sends every differing file to the CMS, backing up each record
-           first. Only environments marked writable accept it; production is
+        <p>Sends the selected files to the CMS, backing up each record first.
+           Only environments marked writable accept it; production is
            pull-only unless deliberately changed.</p>
       </div>
     </div>
+  </section>
+
+  <section class="card">
+    <h2>Changes
+      <span id="changecount" class="pill"></span>
+      <button id="rescan" style="float:right">Rescan</button>
+    </h2>
+    <p class="dim" style="margin:.1rem 0 .5rem;font-size:12px">
+      Files you have edited since the last pull. Tick the ones to deploy —
+      Push sends only those. Click a row to see the diff against T4.
+    </p>
+    <div id="changes"></div>
+  </section>
+
+  <section class="card" id="diffcard">
+    <h2>Diff <span id="difftitle" class="pill"></span></h2>
+    <div id="diff"><p class="dim" style="margin:.2rem 0">Pick a changed file
+      to see what would be deployed.</p></div>
   </section>
 
   <section class="card">
@@ -750,6 +894,7 @@ function load() {
     render();
     syncButtons();
     renderTasks();
+    loadChanges();
   });
 }
 
@@ -868,6 +1013,18 @@ function syncButtons() {
   if (start) start.textContent = serving ? "Site is running" : "Start local site";
 }
 
+// "exit 0" is a shell detail. The question is whether it worked.
+function outcome(job) {
+  if (!job.done) return "running";
+  if (job.returncode === 0) return "done";
+  if (job.returncode === null) return "stopped";
+  if (job.returncode < 0 || job.returncode === 143 || job.returncode === 130) {
+    return "stopped";
+  }
+  if (job.returncode === 2) return "refused";
+  return "failed";
+}
+
 function renderTasks() {
   var box = el("tasks");
   box.innerHTML = "";
@@ -892,7 +1049,7 @@ function renderTasks() {
     name.className = "val"; name.appendChild(text(j.label));
     var status = document.createElement("span");
     status.className = "pill " + (!j.done ? "" : (j.returncode === 0 ? "ok" : "warn"));
-    status.appendChild(text(!j.done ? "running" : "exit " + j.returncode));
+    status.appendChild(text(outcome(j)));
 
     d.appendChild(dot); d.appendChild(name); d.appendChild(status);
     if (!j.done) {
@@ -996,12 +1153,129 @@ document.addEventListener("click", function (e) {
   if (task) showLog(task.dataset.job);
 });
 
+// -- changed files, and the diff for one of them ----------------------
+var changes = [];
+var picked = {};          // path -> selected
+
+function renderChanges() {
+  var box = el("changes");
+  box.innerHTML = "";
+  el("changecount").textContent = changes.length
+    ? changes.length + " changed" : "none";
+  if (!changes.length) {
+    var p = document.createElement("p");
+    p.className = "dim"; p.style.margin = ".2rem 0";
+    p.appendChild(text("Nothing edited since the last pull."));
+    box.appendChild(p);
+    syncButtons();
+    return;
+  }
+  changes.forEach(function (c) {
+    var row = document.createElement("div");
+    row.className = "chg" + (picked[c.path] ? " on" : "");
+    row.dataset.path = c.path;
+
+    var box_ = document.createElement("input");
+    box_.type = "checkbox";
+    box_.checked = !!picked[c.path];
+    box_.dataset.pick = c.path;
+
+    var path = document.createElement("span");
+    path.className = "p"; path.appendChild(text(c.path));
+
+    var rec = document.createElement("span");
+    rec.className = "rec";
+    rec.appendChild(text((c.endpoint || "?") + " #" + (c.id || "?")
+      + (c.committed ? "" : "  uncommitted")));
+
+    row.appendChild(box_); row.appendChild(path); row.appendChild(rec);
+    box.appendChild(row);
+  });
+  syncButtons();
+}
+
+function loadChanges() {
+  return api("/api/changes?env=" + encodeURIComponent(selected()))
+    .then(function (d) {
+      changes = d.changed || [];
+      var keep = {};
+      changes.forEach(function (c) {
+        keep[c.path] = picked[c.path] === undefined ? true : picked[c.path];
+      });
+      picked = keep;
+      renderChanges();
+    })
+    .catch(function (e) {
+      el("changes").textContent = e.message;
+    });
+}
+
+function renderDiff(path) {
+  el("difftitle").textContent = path;
+  var box = el("diff");
+  box.innerHTML = "";
+  var waiting = document.createElement("p");
+  waiting.className = "dim"; waiting.style.margin = ".2rem 0";
+  waiting.appendChild(text("Asking T4 for its copy\u2026"));
+  box.appendChild(waiting);
+
+  api("/api/diff?env=" + encodeURIComponent(selected())
+      + "&path=" + encodeURIComponent(path))
+    .then(function (d) {
+      box.innerHTML = "";
+      if (d.error) { box.appendChild(text(d.error)); return; }
+      if (d.identical || !d.diff) {
+        var same = document.createElement("p");
+        same.className = "dim";
+        same.appendChild(text("Identical to what T4 holds."));
+        box.appendChild(same);
+        return;
+      }
+      var pre = document.createElement("div");
+      pre.className = "diff";
+      d.diff.split("\n").forEach(function (line) {
+        var row = document.createElement("div");
+        var c = line.charAt(0);
+        row.className = line.indexOf("@@") === 0 ? "hunk"
+          : (line.indexOf("+++") === 0 || line.indexOf("---") === 0) ? "meta"
+          : c === "+" ? "add" : c === "-" ? "del" : "";
+        row.appendChild(text(line || " "));
+        pre.appendChild(row);
+      });
+      box.appendChild(pre);
+    })
+    .catch(function (e) { box.textContent = e.message; });
+}
+
+document.addEventListener("click", function (e) {
+  var pick = e.target.closest("input[data-pick]");
+  if (pick) {
+    picked[pick.dataset.pick] = pick.checked;
+    pick.closest(".chg").classList.toggle("on", pick.checked);
+    syncButtons();
+    return;                      // ticking a box is not asking for the diff
+  }
+  var row = e.target.closest(".chg");
+  if (row) renderDiff(row.dataset.path);
+});
+
+el("rescan").addEventListener("click", loadChanges);
+
 el("push").addEventListener("click", function () {
   var env = envByName(selected()) || {};
-  if (!confirm("Push local changes to " + (env.label || env.name) + "?\n\n"
-             + "Each differing file is sent to T4. Files that are not "
-             + "committed will be refused.")) return;
-  run(["push"], {extra: ["--yes"]});
+  var chosen = Object.keys(picked).filter(function (p) { return picked[p]; });
+  if (changes.length && !chosen.length) {
+    el("jobstate").textContent = "Nothing selected to push.";
+    el("jobstate").className = "pill warn";
+    return;
+  }
+  var what = chosen.length
+    ? chosen.length + " selected file(s)"
+    : "every differing file";
+  if (!confirm("Push " + what + " to " + (env.label || env.name) + "?\n\n"
+             + "Each is sent to T4, with the current record backed up first. "
+             + "Files that are not committed will be refused.")) return;
+  run(["push"], {extra: ["--yes"].concat(chosen)});
 });
 
 el("stop").addEventListener("click", function () {

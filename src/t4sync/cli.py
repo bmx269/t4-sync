@@ -116,6 +116,12 @@ def build_parser():
     sp.add_argument("--env", "-e")
     sp.add_argument("--limit", type=int, help="stop after this many files")
     sp.add_argument("--timeout", type=int, default=30)
+    sp.add_argument("--delay", type=float, default=None, metavar="SECONDS",
+                    help="pause between requests; raise it if a firewall or "
+                         "rate limiter is blocking the crawl")
+    sp.add_argument("--retries", type=int, default=3,
+                    help="how many times to wait out a 429/503 or a dropped "
+                         "connection")
     sp.add_argument("--include-documents", action="store_true",
                     help="also download PDFs and Office files")
 

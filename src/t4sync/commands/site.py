@@ -31,14 +31,29 @@ def run_mirror(args, project):
     print("Mirroring %s -> %s" % (url, dest))
     if reject:
         print("Skipping documents: %s" % ", ".join(reject))
+    if delay:
+        print("Pacing:   %.2fs between requests" % delay)
+    delay = getattr(args, "delay", None)
+    if delay is None:
+        delay = mirror_mod.DEFAULT_DELAY
     pages, assets, errors = mirror_mod.crawl(
-        url, dest, reject_ext=reject, limit=args.limit, timeout=args.timeout)
+        url, dest, reject_ext=reject, limit=args.limit, timeout=args.timeout,
+        delay=delay, retries=getattr(args, "retries", 3))
     print("\n%d pages, %d assets, %d errors" % (pages, assets, errors))
     history.record(project, "mirror", env=env_name, pages=pages,
                    assets=assets, failures=errors or None)
     if pages and not getattr(args, "quiet_hint", False):
         print("Serve it: t4 serve")
     return 0
+
+
+def host_of(project, env_name):
+    """The mirror directory name for an environment, from its published URL."""
+    try:
+        url = project.env(env_name).get("published_url") or ""
+    except T4Error:
+        return None
+    return url.split("//", 1)[-1].split("/", 1)[0].strip() or None
 
 
 def has_pages(path):
@@ -69,7 +84,8 @@ def bootstrap_mirror(args, project, root, env_name):
     print("  skip it  t4 serve --no-setup, or cap it with --setup-limit N\n")
     run_mirror(argparse.Namespace(url=url, env=env_name, timeout=30,
                                   limit=getattr(args, "setup_limit", None),
-                                  include_documents=False, quiet_hint=True),
+                                  include_documents=False, quiet_hint=True,
+                                  delay=None, retries=3),
                project)
     print()
 
@@ -86,6 +102,21 @@ def run_serve(args, project):
 
         candidates = mirrors()
         tried = False
+        # Match the environment first. Picking the alphabetically first
+        # directory meant `t4 serve --env prod` served webtest.ufv.ca,
+        # because "webtest" sorts before "www" -- the wrong site, silently,
+        # with the prod source and inspector mapped over it.
+        wanted = host_of(project, env_name)
+        if wanted:
+            preferred = [p for p in candidates if p.name == wanted]
+            if preferred:
+                candidates = preferred
+            elif candidates and not args.no_setup:
+                # The right mirror is simply absent; fetch it rather than
+                # serving someone else's.
+                bootstrap_mirror(args, project, root, env_name)
+                candidates = [p for p in mirrors() if p.name == wanted] or mirrors()
+
         if not candidates and not args.no_setup:
             bootstrap_mirror(args, project, root, env_name)
             candidates = mirrors()
@@ -103,6 +134,11 @@ def run_serve(args, project):
             print("Several mirrors present; using %s" % candidates[0].name)
             print("Pick another with: t4 serve <host>")
         site = candidates[0]
+        if wanted and site.name != wanted:
+            print("! Serving %s, but %s publishes to %s."
+                  % (site.name, env_name, wanted))
+            print("  The inspector will map %s source onto another site's "
+                  "pages." % env_name)
 
     if not site.is_dir():
         raise T4Error("No mirror at %s\nRun `t4 mirror` first." % site)

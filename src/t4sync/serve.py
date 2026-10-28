@@ -127,12 +127,22 @@ class Watcher:
         self._lock = threading.Condition()
         self._stop = threading.Event()
 
+    # Directories written by the tool itself, not by anyone editing. A pull
+    # or a section walk rewrites `_raw` and a push fills `_backup`, and both
+    # live inside the watched source tree -- so without this the browser
+    # reloads every time a long-running command checkpoints, with nothing on
+    # the page having changed. `_manifest.json` is rewritten by a pull for
+    # the same reason.
+    IGNORE_DIRS = frozenset(["_raw", "_backup", ".git", "__pycache__"])
+    IGNORE_FILES = frozenset(["_manifest.json"])
+
     def _fingerprint(self):
         latest = []
         for root in self.paths:
-            for dirpath, _dirnames, filenames in os.walk(root):
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames if d not in self.IGNORE_DIRS]
                 for name in filenames:
-                    if name.startswith("."):
+                    if name.startswith(".") or name in self.IGNORE_FILES:
                         continue
                     full = os.path.join(dirpath, name)
                     try:
