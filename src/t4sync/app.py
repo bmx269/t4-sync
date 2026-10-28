@@ -659,10 +659,19 @@ PAGE = r"""<!doctype html>
 <title>t4-sync</title>
 <style>
 :root{color-scheme:light dark;--bg:#fff;--fg:#1a1d25;--dim:#5a6376;
- --line:#e2e5ec;--card:#f7f8fa;--accent:#2b4bbf;--warn:#9a3412;--ok:#17603a}
+ --line:#e2e5ec;--card:#f7f8fa;--accent:#2b4bbf;--warn:#9a3412;--ok:#17603a;
+ /* Buttons get their own tokens, measured rather than eyeballed: the
+    border carries the affordance, so it clears 3:1 against the card it
+    sits on (WCAG 1.4.11), and the label clears 4.5:1 on the face. With a
+    1.19:1 boundary they read as disabled text inputs, which is what they
+    looked like. */
+ --btn:#e9edf6;--btn-edge:#6f7c9c;--btn-fg:#15181f;
+ --btn-hover:#dbe3f4;--btn-active:#ccd7ee;--on-accent:#fff}
 @media (prefers-color-scheme:dark){:root{--bg:#12141a;--fg:#e8eaf0;
  --dim:#8b93a7;--line:#262b36;--card:#191c24;--accent:#9fb4ff;--warn:#fca5a5;
- --ok:#8ff0a6}}
+ --ok:#8ff0a6;
+ --btn:#252b38;--btn-edge:#687490;--btn-fg:#e8eaf0;
+ --btn-hover:#2f374a;--btn-active:#39435a;--on-accent:#12141a}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
  font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -707,14 +716,27 @@ main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
 .row:first-of-type{border-top:0}
 .key{flex:0 0 7.5rem;color:var(--dim)}
 .val{flex:1 1 auto;min-width:0;word-break:break-word}
-button,select{font:inherit;color:inherit;background:var(--bg);
- border:1px solid var(--line);border-radius:6px;padding:.3rem .7rem;
- cursor:pointer}
-button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
-button:disabled{opacity:.45;cursor:default}
-button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-button.primary:hover:not(:disabled){filter:brightness(1.1);color:#fff}
+button{font:inherit;font-weight:500;color:var(--btn-fg);background:var(--btn);
+ border:1px solid var(--btn-edge);border-radius:6px;padding:.3rem .7rem;
+ cursor:pointer;line-height:1.3}
+button:hover:not(:disabled){background:var(--btn-hover);
+ border-color:var(--accent);color:var(--btn-fg)}
+button:active:not(:disabled){background:var(--btn-active)}
+/* Never only a colour change: disabled is also flatter and unclickable. */
+button:disabled{opacity:.5;cursor:not-allowed;background:transparent;
+ border-style:dashed}
+button.primary{background:var(--accent);color:var(--on-accent);
+ border-color:var(--accent)}
+button.primary:hover:not(:disabled){background:var(--accent);
+ color:var(--on-accent);filter:brightness(1.12)}
 button.danger{border-color:var(--warn);color:var(--warn)}
+button.danger:hover:not(:disabled){color:var(--warn)}
+/* Keyboard focus has to be visible on every surface, including the fills. */
+button:focus-visible,select:focus-visible,input:focus-visible,
+summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select{font:inherit;color:var(--fg);background:var(--bg);
+ border:1px solid var(--btn-edge);border-radius:6px;padding:.3rem .5rem;
+ cursor:pointer}
 .actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
 /* One action per row, with what it does beside it: the buttons are not
    self-explanatory and a tooltip is no use to someone deciding. */
@@ -730,9 +752,9 @@ button.danger{border-color:var(--warn);color:var(--warn)}
    having but not worth a third of the column every time. */
 .act{position:relative;display:flex;gap:.25rem;align-items:stretch}
 .act > button:first-child{flex:1 1 auto;text-align:left;padding:.25rem .5rem}
-.qm{flex:0 0 auto;width:1.5rem;padding:.25rem 0;text-align:center;
- color:var(--dim);line-height:1}
-.qm:hover{color:var(--accent);border-color:var(--accent)}
+.qm{flex:0 0 auto;width:1.6rem;padding:.25rem 0;text-align:center;
+ color:var(--btn-fg);line-height:1;font-weight:700}
+.qm:hover:not(:disabled){color:var(--accent)}
 .act.open .qm{background:var(--accent);color:#fff;border-color:var(--accent)}
 .help{display:none;position:absolute;top:calc(100%% + .3rem);left:0;right:0;
  z-index:20;background:var(--bg);border:1px solid var(--accent);
@@ -758,8 +780,7 @@ button.danger{border-color:var(--warn);color:var(--warn)}
  SFMono-Regular,Menlo,monospace;font-size:12px}
 .chg .rec{flex:0 0 auto;color:var(--dim);font-size:11px}
 .chg .tog{flex:0 0 auto;padding:.1rem .5rem;font-size:11px}
-.chg .one{color:var(--accent);border-color:var(--line)}
-.chg .one:hover:not(:disabled){border-color:var(--accent)}
+.chg .one{color:var(--accent);font-weight:600}
 .chg .tog .caret{display:inline-block;transition:transform .15s}
 .chg.open .tog .caret{transform:rotate(90deg)}
 .dwrap{padding:0 0 .5rem 1.6rem}
@@ -769,10 +790,14 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .dbar .dnote{flex:1 1 auto;min-width:0}
 .hist{margin-top:.5rem;border-top:1px solid var(--line)}
 .histhead{font-size:11px;padding:.35rem 0 .2rem}
+/* A log row is a list item you can click, not a control to press. */
 .histrow{display:flex;gap:.5rem;align-items:baseline;width:100%%;
- text-align:left;background:none;border:0;border-radius:4px;padding:.2rem .3rem;
- font-size:11.5px;cursor:pointer}
-.histrow:hover{background:rgba(43,75,191,.08);color:inherit}
+ text-align:left;background:none;border:0;border-left:2px solid transparent;
+ border-radius:0;padding:.2rem .3rem;font-size:11.5px;cursor:pointer;
+ color:var(--fg);font-weight:400}
+.histrow:hover{background:rgba(43,75,191,.1);color:var(--fg);
+ border-left-color:var(--accent);border-color:transparent;
+ border-left-color:var(--accent)}
 .histrow.on{background:rgba(43,75,191,.14)}
 .histrow .when{flex:0 0 5.5rem;font-family:ui-monospace,monospace}
 .histrow .subj{flex:1 1 auto;min-width:0;overflow:hidden;

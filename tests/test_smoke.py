@@ -2229,3 +2229,70 @@ class TestFileHistory(unittest.TestCase):
         for index in range(5):
             self._write_and_commit("a%d{}\n" % index, "commit %d" % index)
         self.assertEqual(len(self.repo.log(self.file, limit=2)), 2)
+
+
+class TestButtonContrast(unittest.TestCase):
+    """Buttons must look like buttons, and be readable in both themes.
+
+    Checked rather than eyeballed: the palette that made them look like
+    disabled text inputs had a 1.19:1 boundary against the card, which is
+    invisible but perfectly plausible in a diff.
+    """
+
+    @staticmethod
+    def _luminance(value):
+        value = value.lstrip("#")
+        if len(value) == 3:
+            value = "".join(c * 2 for c in value)
+        parts = [int(value[i:i+2], 16) / 255 for i in (0, 2, 4)]
+        adj = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+               for c in parts]
+        return 0.2126 * adj[0] + 0.7152 * adj[1] + 0.0722 * adj[2]
+
+    @classmethod
+    def _ratio(cls, first, second):
+        a, b = cls._luminance(first), cls._luminance(second)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+    @classmethod
+    def setUpClass(cls):
+        css = (app.PAGE % {"token": "x"}).split("<style>")[1].split("</style>")[0]
+        grab = lambda block: dict(
+            re.findall(r"--([a-z-]+):\s*(#[0-9a-fA-F]{3,6})", block))
+        cls.themes = {
+            "light": grab(css.split(":root{")[1].split("}")[0]),
+            "dark": grab(
+                css.split("prefers-color-scheme:dark){:root{")[1].split("}")[0]),
+        }
+
+    def _check(self, label, first, second, need):
+        for theme, tokens in self.themes.items():
+            got = self._ratio(tokens[first], tokens[second])
+            self.assertGreaterEqual(
+                got, need,
+                "%s in %s theme: %.2f, need %.1f" % (label, theme, got, need))
+
+    def test_the_border_makes_it_a_button(self):
+        # WCAG 1.4.11: the boundary identifying a control needs 3:1.
+        self._check("border vs card", "btn-edge", "card", 3.0)
+        self._check("border vs page", "btn-edge", "bg", 3.0)
+
+    def test_the_label_is_readable_in_every_state(self):
+        for face in ("btn", "btn-hover", "btn-active"):
+            self._check("label on %s" % face, "btn-fg", face, 4.5)
+
+    def test_the_primary_button_is_readable(self):
+        self._check("primary label", "on-accent", "accent", 4.5)
+
+    def test_the_focus_ring_is_visible(self):
+        self._check("focus ring vs card", "accent", "card", 3.0)
+
+    def test_supporting_text_is_readable(self):
+        self._check("dim on card", "dim", "card", 4.5)
+        self._check("danger label", "warn", "btn", 4.5)
+
+    def test_disabled_is_not_signalled_by_colour_alone(self):
+        css = (app.PAGE % {"token": "x"}).split("<style>")[1].split("</style>")[0]
+        rule = css.split("button:disabled{")[1].split("}")[0]
+        self.assertIn("cursor:not-allowed", rule)
+        self.assertIn("border-style:dashed", rule)
