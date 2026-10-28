@@ -309,6 +309,9 @@ class LayoutIndex:
         self.by_id = {}
         self.by_name = {}
         self.source_dir = source_dir
+        # Kept whole as well as indexed: the content layout previewer needs
+        # the `layout` entries, which this index filters out.
+        self.manifest = dict(manifest or {})
         for rel, meta in (manifest or {}).items():
             if meta.get("endpoint") != "pageLayout":
                 continue
@@ -635,11 +638,12 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
         else content_types,
         content_layouts))
     have_items = bool(content_items and getattr(content_items, "available", False))
+    anchor_count = len(set(m.group("id") for m in DIRECT_EDIT_ANCHOR.finditer(body)))
 
     children = child_layouts(mirror_dir, url_path)
     data = page_data(env_name, layout_name, files, groups, assets, media)
     return _render(rows, assets, children, url_path, groups, have_items,
-                   env_name, data)
+                   env_name, data, anchor_count)
 
 
 def page_data(env_name, layout_name, layout_files, groups, assets, media=None):
@@ -702,7 +706,7 @@ def _file_row(parts, rel, env_name, label=None, note=None):
     parts.append('</span></div>')
 
 
-def _render_content(parts, groups, have_items, env_name):
+def _render_content(parts, groups, have_items, env_name, anchors=0):
     if not have_items:
         parts.append('<div class="t4i-row t4i-head">Content</div>')
         parts.append('<div class="t4i-row"><span class="t4i-dim">content items '
@@ -710,8 +714,20 @@ def _render_content(parts, groups, have_items, env_name):
         return
     if not groups:
         parts.append('<div class="t4i-row t4i-head">Content</div>')
-        parts.append('<div class="t4i-row"><span class="t4i-dim">no content item '
-                     'anchors on this page</span></div>')
+        if anchors:
+            # The difference matters: "nothing here" and "I cannot see what is
+            # here" look identical in a panel and mean opposite things. A
+            # partial section walk leaves most pages in the second state, and
+            # reporting it as the first sends you looking for a bug in the
+            # page instead of finishing the walk.
+            parts.append('<div class="t4i-row"><span class="t4i-dim">'
+                         '%d content item(s) on this page, none of them in the '
+                         'local map.<br>This page\'s section has not been '
+                         'walked yet — run <code>t4 sections</code> to cover '
+                         'it.</span></div>' % anchors)
+        else:
+            parts.append('<div class="t4i-row"><span class="t4i-dim">no content '
+                         'item anchors on this page</span></div>')
         return
 
     total = sum(len(g["items"]) for g in groups)
@@ -780,7 +796,7 @@ def _render_content(parts, groups, have_items, env_name):
 
 
 def _render(rows, assets, children=(), url_path="/", content_groups=(),
-            have_items=False, env_name=None, data=None):
+            have_items=False, env_name=None, data=None, anchor_count=0):
     parts = ['<script type="application/json" id="t4i-data">%s</script>'
              % _json_island(data or {}),
              '<div id="t4-inspector" data-collapsed="1">',
@@ -818,7 +834,8 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
     # the chain behind what you clicked -- the way an element inspector
     # works, and the reason you clicked in the first place.
     parts.append('<div id="t4i-all">')
-    _render_content(parts, content_groups, have_items, env_name)
+    _render_content(parts, content_groups, have_items, env_name,
+                    anchor_count)
 
     if assets:
         overridden = sum(1 for _rel, over in assets if over)

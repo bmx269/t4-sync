@@ -32,7 +32,8 @@ from .inspector import (ContentLayoutIndex, ContentTypeIndex, InspectorContext,
                         LayoutIndex, LAYOUT_ID_META, LAYOUT_META, OPEN_PATH,
                         annotate_components, annotate_content_items,
                         build_comment, build_panel, fence)
-from .render import PreviewEngine, status_comment
+from .render import (ContentPreviewEngine, PreviewEngine,
+                     content_status_comment, status_comment)
 from .sections import ContentItems, MediaSources, SectionLayouts
 import urllib.error
 import urllib.parse
@@ -232,6 +233,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
     watcher = None
     inspector = None
     previewer = None
+    content_previewer = None
     project_root = None
 
     def translate_path(self, path):
@@ -371,7 +373,8 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         # script whenever the watcher is running. Gating on rules alone meant
         # live reload silently did nothing for a project with no rewrites.
         needs_transform = (bool(self.rules) or bool(self.watcher)
-                           or bool(self.inspector) or bool(self.previewer))
+                           or bool(self.inspector) or bool(self.previewer)
+                           or bool(self.content_previewer))
         if not (needs_transform and path.endswith((".html", ".htm"))):
             return super().send_head()
         try:
@@ -389,6 +392,7 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
         # Apply locally-edited layouts before anything else looks at the page,
         # so the debug output describes what is actually being served.
         preview_status = None
+        content_status = None
         if self.previewer:
             name = LAYOUT_META.search(body)
             found_id = LAYOUT_ID_META.search(body)
@@ -396,13 +400,19 @@ class MirrorHandler(http.server.SimpleHTTPRequestHandler):
                 body, name.group(1) if name else None,
                 found_id.group(1) if found_id else None)
 
+        content_status = None
+        if self.content_previewer:
+            body, content_status = self.content_previewer.apply(
+                body, self.inspector.content_items if self.inspector else None)
+
         body = transform_html(body, self.rules,
                               inject_reload=bool(self.watcher),
                               inspector=inspector)
+        env_label = self.inspector.env_name if self.inspector else None
+        if content_status:
+            body = fence(content_status_comment(content_status, env_label)) + body
         if preview_status:
-            body = fence(status_comment(
-                preview_status,
-                self.inspector.env_name if self.inspector else None)) + body
+            body = fence(status_comment(preview_status, env_label)) + body
         encoded = body.encode("utf-8")
 
         self.send_response(200)
@@ -460,6 +470,12 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
                                env_name=env_name)
         if engine.available:
             MirrorHandler.previewer = engine
+
+        content_engine = ContentPreviewEngine(
+            source_dir, manifest=index.manifest, span_markers=span_markers,
+            env_name=env_name)
+        if content_engine.available:
+            MirrorHandler.content_previewer = content_engine
 
     watcher = None
     if reload:

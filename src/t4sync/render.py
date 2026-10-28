@@ -22,6 +22,7 @@ import collections
 import re
 
 from .extract import local_path
+from .inspector import DIRECT_EDIT_ANCHOR
 
 # A T4 tag's attributes can contain `>` inside quotes, e.g.
 #   format="<p>Email: $value</p>"
@@ -419,3 +420,204 @@ class LayoutResolver:
                 if found:
                     ids.add(found.group(1))
         return ids
+
+
+def preview_every(page, published_src, edited_src, span_markers=None, limit=200):
+    """Apply a content layout edit everywhere its output appears on the page.
+
+    Page layouts render once, so `preview` splicing a single occurrence is
+    enough for them. A content layout renders once per content item placed
+    with it -- a page can hold twenty -- so the same edit has to be applied at
+    every occurrence or the page shows a mix of old and new and looks like the
+    edit half worked.
+
+    Walks forward through the page, aligning from where the last match ended.
+    Returns (html, applied_count, problems); an alignment failure ends the
+    walk rather than failing the page, because the occurrences found so far
+    are still correct.
+    """
+    if published_src == edited_src:
+        return page, 0, []
+
+    out, cursor, applied, problems = [], 0, 0, []
+    while applied < limit:
+        try:
+            start, end, segments = align(published_src, page[cursor:], span_markers)
+        except Unalignable:
+            break
+        rendered, found = render(edited_src, segments)
+        out.append(page[cursor:cursor + start])
+        out.append(rendered)
+        cursor += end
+        problems.extend(found)
+        applied += 1
+    out.append(page[cursor:])
+    return "".join(out), applied, problems
+
+
+class ContentPreviewEngine:
+    """Applies locally-edited content layouts to mirrored pages as served.
+
+    The counterpart to PreviewEngine, which only ever handled page layouts --
+    so editing a content layout changed nothing in the browser, and the only
+    way to see it was to push and publish. That is the loop this tool exists
+    to shorten.
+
+    Nothing is written back into the mirror. Mirrored files stay byte-identical
+    to what T4 published, which is what makes markup copied out of them safe
+    to paste into a layout; the splice happens on the way out instead.
+    """
+
+    FIELD_PREFIX = "formatcode"
+
+    def __init__(self, env_dir, manifest=None, span_markers=None, env_name=None):
+        self.env_dir = env_dir
+        self.span_markers = span_markers
+        self.env_name = env_name
+        self.published = {}        # layout id -> published source
+        self.files = {}            # layout id -> (rel, field)
+        self.type_of = {}          # layout id -> content type id
+        self._load(manifest or {})
+
+    def _load(self, manifest):
+        import json
+        import os
+
+        path = os.path.join(self.env_dir or "", "_raw", "contentLayout.json")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                records = json.load(fh)
+        except (OSError, ValueError):
+            return
+        for record in records or []:
+            elements = record.get("elements") or {}
+            for key, value in elements.items():
+                if key.split("#", 1)[0] == self.FIELD_PREFIX and isinstance(value, str):
+                    layout_id = str(record.get("id"))
+                    self.published[layout_id] = value
+                    type_id = record.get("_contentTypeId", record.get("contentTypeID"))
+                    if type_id is not None:
+                        self.type_of[layout_id] = str(type_id)
+                    break
+
+        for rel, meta in manifest.items():
+            if meta.get("endpoint") == "layout" and meta.get("id") is not None:
+                self.files[str(meta["id"])] = (rel, meta.get("field"))
+
+    @property
+    def available(self):
+        return bool(self.published and self.files)
+
+    def edited(self):
+        """[(layout_id, rel, published_src, edited_src)] for changed files.
+
+        Read from disk on every call rather than cached: the point is that an
+        edit shows on the next reload, and a cache would have to be invalidated
+        by the same watcher that triggers the reload -- two things to keep in
+        step where one suffices.
+        """
+        found = []
+        for layout_id, published_src in self.published.items():
+            entry = self.files.get(layout_id)
+            if not entry:
+                continue
+            rel = entry[0]
+            try:
+                with open(local_path(self.env_dir, rel), encoding="utf-8",
+                          newline="") as fh:
+                    edited_src = fh.read()
+            except OSError:
+                continue
+            if edited_src != published_src:
+                found.append((layout_id, rel, published_src, edited_src))
+        return found
+
+    def regions(self, page, items):
+        """[(start, end, content_type_id)] -- where each content item rendered.
+
+        T4 emits `<span id="d.en.NNN">` before every content item it renders,
+        so an item's output runs from its own anchor to the next one. Rough at
+        the edges, but it does not need to be exact: it only has to be tight
+        enough that a layout is matched against its own output.
+        """
+        found = []
+        anchors = list(DIRECT_EDIT_ANCHOR.finditer(page))
+        for index, match in enumerate(anchors):
+            record = items.get(match.group("id")) if items else None
+            if not record:
+                continue
+            type_id = record.get("contentTypeId")
+            if type_id is None:
+                continue
+            end = anchors[index + 1].start() if index + 1 < len(anchors) else len(page)
+            found.append((match.end(), end, str(type_id)))
+        return found
+
+    def apply(self, page, items=None):
+        """Return (html, status). `status` is None when nothing was applied.
+
+        Each edit is applied only inside the output of content items of its
+        own type. Aligning against the whole page instead finds false matches
+        -- a seventy-character layout's literal markup turns up by coincidence
+        -- and a false match does not merely fail to help, it rewrites a part
+        of the page that layout never produced. So without the content item
+        map, which `t4 sections` records, this does nothing at all.
+        """
+        changes = self.edited()
+        if not changes:
+            return page, None
+
+        if not items or not getattr(items, "available", False):
+            return page, {"applied": [], "missing": [],
+                          "unmapped": [rel for _i, rel, _p, _e in changes],
+                          "problems": []}
+
+        applied, missing, problems = [], [], []
+        for layout_id, rel, published_src, edited_src in changes:
+            want = self.type_of.get(layout_id)
+            count = 0
+            # Right to left: splicing changes the length of the page, and
+            # working backwards leaves the offsets ahead of the cursor valid.
+            for start, end, type_id in sorted(self.regions(page, items),
+                                              reverse=True):
+                if want is not None and type_id != want:
+                    continue
+                spliced, found_count, found = preview_every(
+                    page[start:end], published_src, edited_src, self.span_markers)
+                if not found_count:
+                    continue
+                page = page[:start] + spliced + page[end:]
+                count += found_count
+                problems.extend(found)
+            (applied.append((rel, count)) if count else missing.append(rel))
+
+        if not applied and not missing:
+            return page, None
+        return page, {"applied": applied, "missing": missing,
+                      "unmapped": [], "problems": problems}
+
+
+def content_status_comment(status, env_name=None):
+    """Render a content-layout preview status as HTML comments."""
+    if not status:
+        return ""
+    lines = []
+    if status["applied"]:
+        lines.append("<!-- T4 CONTENT PREVIEW: local content layout edits applied -->")
+        for rel, count in status["applied"]:
+            lines.append("<!--   %s x%d  (t4-source/%s/%s) -->"
+                         % (rel.rsplit("/", 1)[-1], count,
+                            env_name or "<env>", rel))
+    for rel in status["missing"]:
+        lines.append("<!--   edited but not rendered on this page: %s -->" % rel)
+    if status.get("unmapped"):
+        lines.append("<!-- T4 CONTENT PREVIEW: %d edited content layout(s) NOT "
+                     "applied -->" % len(status["unmapped"]))
+        lines.append("<!--   content items are not mapped, so an edit cannot be "
+                     "placed safely -->")
+        lines.append("<!--   run `t4 sections` to enable this -->")
+        for rel in status["unmapped"][:10]:
+            lines.append("<!--   waiting: %s -->" % rel)
+    for kind, detail in status["problems"]:
+        lines.append("<!--   %s: %s -->" % (kind, str(detail)[:120]))
+    return ("\n".join(lines) + "\n") if lines else ""

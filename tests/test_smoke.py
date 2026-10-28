@@ -1589,3 +1589,34 @@ class TestOneSourceOfTruth(unittest.TestCase):
 
     def test_no_overrides_directory_is_not_an_error(self):
         self.assertEqual(serve.shadowing_overrides(None, self.media), [])
+
+
+class TestUnmappedContentIsDistinguished(unittest.TestCase):
+    """"Nothing here" and "I cannot see what is here" are opposite answers."""
+
+    IDX = LayoutIndex({})
+    ITEMS = ContentItems({"1": {"id": 1, "name": "known",
+                                "contentTypeName": "T"}})
+
+    def test_a_page_with_no_anchors_says_so(self):
+        panel = build_panel("<html></html>", self.IDX, content_items=self.ITEMS)
+        self.assertIn("no content item anchors on this page", panel)
+
+    def test_anchors_the_map_does_not_cover_are_reported_as_unmapped(self):
+        # A partial `t4 sections` walk leaves most pages here. Reporting it as
+        # "no content" sends you looking for a bug in the page instead.
+        page = ('<span id="d.en.900"></span><span id="d.en.901"></span>')
+        panel = build_panel(page, self.IDX, content_items=self.ITEMS)
+        self.assertIn("2 content item(s) on this page", panel)
+        self.assertIn("t4 sections", panel)
+        self.assertNotIn("no content item anchors", panel)
+
+    def test_a_repeated_anchor_is_counted_once(self):
+        page = '<span id="d.en.900"></span><span id="d.en.900"></span>'
+        panel = build_panel(page, self.IDX, content_items=self.ITEMS)
+        self.assertIn("1 content item(s) on this page", panel)
+
+    def test_no_map_at_all_is_its_own_message(self):
+        panel = build_panel('<span id="d.en.900"></span>', self.IDX,
+                            content_items=ContentItems({}))
+        self.assertIn("not mapped yet", panel)
