@@ -517,7 +517,10 @@ def build_comment(body, index, overrides_dir=None, env_name=None,
                      % (len(assets), sum(1 for _r, o in assets if o)))
         for rel, over in assets:
             lines.append("   %s %s" % ("x" if over else "*", _safe_comment(rel)))
-        lines.append("   * not overridden - copy it in with: t4 edit <path>")
+        lines.append("   * not overridden. CSS and JS are Media Library items: "
+                     "edit t4-source/<env>/media/<name>")
+        lines.append("     directly - that file is served here and is what "
+                     "t4 push deploys.")
         lines.append("-->")
 
     children = child_layouts(mirror_dir, url_path)

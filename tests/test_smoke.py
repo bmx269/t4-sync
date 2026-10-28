@@ -1,5 +1,7 @@
 """Smoke tests that need no network and no T4 instance."""
 import argparse
+import contextlib
+import io
 import json
 import os
 import pathlib
@@ -37,7 +39,7 @@ from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 from t4sync.errors import T4Error   # noqa: E402
 from t4sync.vcs import Repo, message_for, require_clean   # noqa: E402
-from t4sync.commands import site   # noqa: E402
+from t4sync.commands import edit, site   # noqa: E402
 
 
 class TestExtract(unittest.TestCase):
@@ -1737,3 +1739,61 @@ class TestServeUrlReachesThePanel(unittest.TestCase):
         job = app.Job("4", ["serve", "--port", "9100"], ".")
         job._emit("URL       http://127.0.0.1:9100/")
         self.assertEqual(job.url, "http://127.0.0.1:9100/")
+
+
+class TestEditRedirectsToPulledSource(unittest.TestCase):
+    """The documented loop: edit the pulled file, not a copy of it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / ".t4").mkdir()
+        (self.root / ".t4" / "config.json").write_text(json.dumps({
+            "source_dir": "t4-source", "mirror_dir": "site-mirror",
+            "overrides_dir": "overrides",
+            "environments": {"test": {"base": "https://cms.example.edu"}},
+        }), encoding="utf-8")
+        env = self.root / "t4-source" / "test"
+        (env / "media").mkdir(parents=True)
+        (env / "media" / "site.css").write_text("a{}", encoding="utf-8")
+        (env / "_manifest.json").write_text(json.dumps({
+            "media/site.css": {"endpoint": "media", "id": 1, "field": "text",
+                               "name": "site.css"}}), encoding="utf-8")
+        mirror = self.root / "site-mirror" / "www.example.edu" / "media" / "css"
+        mirror.mkdir(parents=True)
+        (mirror / "site.css").write_text("a{}", encoding="utf-8")
+        (mirror / "vendor.js").write_text("x", encoding="utf-8")
+        self.project = Project(self.root)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _run(self, path, **over):
+        args = build_parser().parse_args(["edit", path])
+        for key, value in over.items():
+            setattr(args, key, value)
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            edit.run(args, self.project)
+        return buffer.getvalue()
+
+    def test_a_pulled_file_is_not_copied_into_overrides(self):
+        out = self._run("media/css/site.css")
+        self.assertIn("this is the file that deploys", out)
+        self.assertFalse(
+            (self.root / "overrides" / "media" / "css" / "site.css").exists(),
+            "a second copy of a pulled file must not be created")
+
+    def test_it_names_the_file_to_edit(self):
+        self.assertIn("t4-source", self._run("media/css/site.css"))
+
+    def test_force_still_allows_a_local_only_override(self):
+        self._run("media/css/site.css", force=True)
+        self.assertTrue(
+            (self.root / "overrides" / "media" / "css" / "site.css").exists())
+
+    def test_something_not_pulled_is_copied_as_before(self):
+        out = self._run("media/css/vendor.js")
+        self.assertIn("Copied into overrides", out)
+        self.assertTrue(
+            (self.root / "overrides" / "media" / "css" / "vendor.js").exists())

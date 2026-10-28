@@ -196,11 +196,17 @@ URL the command prints rather than typing the address by hand.
 ### The editing loop
 
 ```sh
-t4 s                                  # start the local site (alias for serve)
-t4 edit media/css/site.css            # copy a file in to edit it
-# edit overrides/media/css/site.css — the browser refreshes on save
-t4 st                                 # what is pending, both file sets
+t4 s                                      # start the local site (alias for serve)
+# edit t4-source/<env>/media/site.css     — the browser refreshes on save
+t4 st                                     # what is pending
+t4 save -m "Tighten the footer spacing"   # commit it
+t4 push                                   # deploy it
 ```
+
+**You edit the pulled source directly.** A site's CSS and JS are Media Library
+items, so `t4 pull` already brought them down, `t4 serve` serves those files
+in place of the mirrored copies, and `t4 push` deploys them. One file: the one
+you edit is the one you see and the one that ships.
 
 `t4 serve` sets up what it needs. If there is no mirror yet it fetches one
 from the environment's `published_url` before serving — so a fresh checkout is
@@ -212,12 +218,17 @@ for assets you chose not to mirror. `--no-setup` makes it fail instead, and
 
 `serve`, `status` and `diff` have the short forms `s`, `st` and `d`.
 
-`t4 edit` copies a mirrored file into `overrides/` at the right path, so you
-do not have to reproduce a deep path by hand. `--list` shows what is
-overridden, `--revert` drops one, and a wrong path suggests near matches.
+`t4 edit` is for the rest — a mirrored page, a third-party script, anything
+the pull does not cover and you want to experiment on locally. It copies the
+file into `overrides/` at the right path so you do not have to reproduce a
+deep one by hand; `--list` shows what is overridden, `--revert` drops one, and
+a wrong path suggests near matches. It **refuses to override something already
+pulled** and points at the pulled file instead; see
+[One file, not two](#one-file-not-two).
 
-`t4 serve` watches `overrides/` and refreshes the browser on save, via an
-injected server-sent-events listener. `--no-reload` turns it off.
+`t4 serve` watches both `t4-source/` and `overrides/` and refreshes the
+browser on save, via an injected server-sent-events listener. `--no-reload`
+turns it off.
 
 ### Finding the source file
 
@@ -239,7 +250,8 @@ Drupal-style theme-debug comments in the served HTML:
 <!-- ASSETS (23, 1 overridden):
    x media/web/css/brand.css
    * media/web/css/site.css
-   * not overridden - copy it in with: t4 edit <path>
+   * not overridden. CSS and JS are Media Library items: edit t4-source/<env>/media/<name>
+     directly - that file is served here and is what t4 push deploys.
 -->
 <!-- CHILD PAGES (25):
    u_webpage: admissions, advising, aging, agriculture, ...
@@ -367,8 +379,10 @@ exact file on disk rather than leaving you to guess which of 58 layouts with
 names like `u_webpage.production` and `m_open_alt_no_menu` produced the page.
 Layout *names* are not reliably unique after slugging; the id is.
 
-Each row's **edit** button copies the matching `t4 edit …` command. Assets
-already overridden are highlighted and read **editing**.
+Every file row carries **edit**, **folder** and **copy**: open it in your
+editor, show it in Finder or Explorer, or copy the path. A browser cannot
+launch an application, so the serving process does it — and refuses any path
+that resolves outside the project. Assets already overridden are highlighted.
 
 A **Content** section lists what the page is made of, grouped by content type,
 with the files behind each one:
@@ -427,7 +441,9 @@ t4 push media/site.css                  -> deploys it
 
 No second copy to keep in step, and no manual upload.
 
-**One file, not two.** `t4 edit` refuses to override something that has been
+#### One file, not two
+
+`t4 edit` refuses to override something that has been
 pulled, and points at the pulled file instead. An override of a pulled file is
 a second copy that serves identically and silently never deploys — you can
 lose an afternoon to it while the browser shows your change the whole time. If
@@ -628,9 +644,10 @@ t4 serve --no-proxy             # serve only what is mirrored
 t4 serve --no-proxy-cache       # proxy without writing into the mirror
 ```
 
-Files in `overrides/` shadow the mirror, so you can iterate on CSS and JS
-against real published markup with no publish cycle. Responses are sent
-`Cache-Control: no-store`, so a plain reload picks up edits.
+Files in `overrides/` shadow the mirror for anything the pull does not cover.
+CSS and JS do not belong here — they are Media Library items served straight
+from `t4-source/`, so you edit those directly and they deploy. Responses are
+sent `Cache-Control: no-store`, so a plain reload picks up edits.
 
 ## What this does not do
 
