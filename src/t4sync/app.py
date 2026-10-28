@@ -682,6 +682,7 @@ main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
  grid-template-columns:minmax(0,70fr) minmax(0,30fr);
  grid-template-areas:"project project" "changes history" "tasks tasks"}
 .area-project h2{margin-top:.6rem}
+.area-project{padding-bottom:.85rem}
 .area-project{grid-area:project}
 .area-changes{grid-area:changes}
 .area-history{grid-area:history}
@@ -717,13 +718,19 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
 /* One action per row, with what it does beside it: the buttons are not
    self-explanatory and a tooltip is no use to someone deciding. */
-.acts{display:grid;gap:.3rem;
- grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}
+/* Three columns, one per stage, each a stack of what you do at that stage.
+   The order is the order you work in, so the eye has somewhere to start. */
+.phases{display:grid;gap:.9rem;margin-top:.4rem;
+ grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:760px){.phases{grid-template-columns:minmax(0,1fr)}}
+.phase h3{margin:0 0 .3rem;font-size:11px;color:var(--dim);font-weight:600;
+ text-transform:uppercase;letter-spacing:.06em}
+.acts{display:flex;flex-direction:column;gap:.25rem}
 /* Button plus a ? that opens what it does. The explanations were worth
    having but not worth a third of the column every time. */
-.act{position:relative;display:flex;gap:.4rem;align-items:center}
-.act > button:first-child{flex:1 1 auto;text-align:left}
-.qm{flex:0 0 auto;width:1.6rem;padding:.3rem 0;text-align:center;
+.act{position:relative;display:flex;gap:.25rem;align-items:stretch}
+.act > button:first-child{flex:1 1 auto;text-align:left;padding:.25rem .5rem}
+.qm{flex:0 0 auto;width:1.5rem;padding:.25rem 0;text-align:center;
  color:var(--dim);line-height:1}
 .qm:hover{color:var(--accent);border-color:var(--accent)}
 .act.open .qm{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -822,8 +829,10 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
       <div id="summary"></div>
     </details>
 
-    <h2 style="margin-top:1rem">1 &middot; Get the files</h2>
-    <div class="acts">
+    <div class="phases">
+      <div class="phase">
+        <h3>1 &middot; Get the files</h3>
+        <div class="acts">
       <div class="act">
         <button data-run='["pull"]'>Pull source</button>
         <button class="qm" type="button" aria-label="What this does">?</button>
@@ -845,9 +854,10 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
         <div class="help">Pulls, then reports what changed on each side. Never writes to the CMS. The usual way to start a session.</div>
       </div>
     </div>
-
-    <h2 style="margin-top:1rem">2 &middot; Work on it</h2>
-    <div class="acts">
+      </div>
+      <div class="phase">
+        <h3>2 &middot; Work on it</h3>
+        <div class="acts">
       <div class="act">
         <button data-run='["serve"]'>Start local site</button>
         <button class="qm" type="button" aria-label="What this does">?</button>
@@ -869,9 +879,10 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
         <div class="help">Compares every file against what the CMS holds right now and lists those that differ. Read only, and slow over a VPN: one request per record. For a single file, use the diff button in the Changes list.</div>
       </div>
     </div>
-
-    <h2 style="margin-top:1rem">3 &middot; Ship it</h2>
-    <div class="acts">
+      </div>
+      <div class="phase">
+        <h3>3 &middot; Ship it</h3>
+        <div class="acts">
       <div class="act">
         <button data-run='["save"]'>Commit to git</button>
         <button class="qm" type="button" aria-label="What this does">?</button>
@@ -881,6 +892,8 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
         <button id="push" class="primary">Push to T4</button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Sends the ticked files to the CMS, backing up each record first. Only environments marked writable accept it. To send one file on its own, use the push button on its row in Changes.</div>
+      </div>
+    </div>
       </div>
     </div>
   </section>
