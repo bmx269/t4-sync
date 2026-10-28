@@ -20,6 +20,7 @@ is useful. Every call is explicit about its working directory, so the tool is
 never at the mercy of where it was invoked from.
 """
 import os
+import re
 import subprocess
 
 from .errors import T4Error
@@ -128,6 +129,42 @@ class Repo:
             # case here; the diff is still on stdout.
             out = (exc.output or b"").decode("utf-8", errors="replace")
         return out, "untracked"
+
+    # A record separator no commit subject will contain, so the log can be
+    # parsed without guessing where one entry ends.
+    LOG_FORMAT = "%H%x1f%h%x1f%aI%x1f%an%x1f%s%x1e"
+
+    def log(self, path, limit=20):
+        """Commits that touched `path`, newest first.
+
+        "No uncommitted changes" is a dead end: the file plainly changed at
+        some point, and the useful answer is when and why. --follow so a
+        rename does not truncate the story.
+        """
+        try:
+            out = _run(["git", "log", "--follow", "-n", str(limit),
+                        "--format=" + self.LOG_FORMAT, "--", self.rel(path)],
+                       self.root)
+        except subprocess.CalledProcessError:
+            return []
+        found = []
+        for record in out.split("\x1e"):
+            record = record.strip("\n")
+            if not record:
+                continue
+            parts = record.split("\x1f")
+            if len(parts) < 5:
+                continue
+            found.append({"sha": parts[0], "short": parts[1], "date": parts[2],
+                          "author": parts[3], "subject": parts[4]})
+        return found
+
+    def show(self, sha, path, context=3):
+        """What one commit did to one file."""
+        if not re.fullmatch(r"[0-9a-fA-F]{4,40}", sha or ""):
+            raise ValueError("not a commit id: %r" % sha)
+        return _run(["git", "show", "--no-color", "--format=", "-U%d" % context,
+                     sha, "--", self.rel(path)], self.root)
 
     def head(self):
         """(sha, branch) for the current commit, or (None, branch) if unborn."""

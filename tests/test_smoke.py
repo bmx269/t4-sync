@@ -2163,3 +2163,69 @@ class TestLocalDiff(unittest.TestCase):
         self.file.write_bytes(b"a{}\r\nb{}\r\n")
         diff, _state = self.repo.diff(self.file)
         self.assertIn("+b{}", diff)
+
+
+class TestFileHistory(unittest.TestCase):
+    """"No uncommitted changes" is a dead end; when and why is the answer."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        subprocess.run(["git", "init", "-b", "main"], cwd=self.root, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for key, value in (("user.email", "t@example.com"), ("user.name", "Ada")):
+            subprocess.run(["git", "config", key, value], cwd=self.root, check=True)
+        self.repo = Repo.at(self.root)
+        self.file = self.root / "media" / "site.css"
+        self.file.parent.mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write_and_commit(self, text, message):
+        self.file.write_text(text, encoding="utf-8")
+        self.repo.commit([self.file], message)
+
+    def test_an_uncommitted_file_has_no_history_and_does_not_raise(self):
+        self.file.write_text("a{}\n", encoding="utf-8")
+        self.assertEqual(self.repo.log(self.file), [])
+
+    def test_commits_come_back_newest_first(self):
+        self._write_and_commit("a{}\n", "first")
+        self._write_and_commit("b{}\n", "second")
+        found = self.repo.log(self.file)
+        self.assertEqual([c["subject"] for c in found], ["second", "first"])
+
+    def test_each_entry_carries_what_the_list_shows(self):
+        self._write_and_commit("a{}\n", "only")
+        entry = self.repo.log(self.file)[0]
+        self.assertEqual(entry["subject"], "only")
+        self.assertEqual(entry["author"], "Ada")
+        self.assertTrue(entry["sha"].startswith(entry["short"]))
+        self.assertRegex(entry["date"], r"^\d{4}-\d{2}-\d{2}T")
+
+    def test_a_subject_with_separators_in_it_still_parses(self):
+        # The log is split on control characters no subject should contain.
+        self._write_and_commit("a{}\n", "fix: tabs\tand | pipes")
+        self.assertEqual(self.repo.log(self.file)[0]["subject"],
+                         "fix: tabs\tand | pipes")
+
+    def test_one_commit_can_be_shown_on_its_own(self):
+        self._write_and_commit("a{}\n", "first")
+        self._write_and_commit("b{}\n", "second")
+        sha = self.repo.log(self.file)[0]["sha"]
+        diff = self.repo.show(sha, self.file)
+        self.assertIn("+b{}", diff)
+        self.assertIn("-a{}", diff)
+
+    def test_a_commit_id_that_is_not_one_is_refused(self):
+        # It reaches a subprocess, so it is checked rather than trusted.
+        self._write_and_commit("a{}\n", "only")
+        for bad in ("; rm -rf /", "HEAD; echo", "../../etc/passwd", ""):
+            with self.assertRaises(ValueError):
+                self.repo.show(bad, self.file)
+
+    def test_the_limit_is_honoured(self):
+        for index in range(5):
+            self._write_and_commit("a%d{}\n" % index, "commit %d" % index)
+        self.assertEqual(len(self.repo.log(self.file, limit=2)), 2)

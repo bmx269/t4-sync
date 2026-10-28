@@ -431,7 +431,13 @@ class AppHandler(BaseHTTPRequestHandler):
         repo = open_repo(self.project)
         uncommitted = set()
         if repo.available:
-            uncommitted = {p.rsplit("/", 1)[-1] for p in repo.dirty([root])}
+            # dirty() gives paths relative to the repository root; the
+            # manifest keys are relative to the environment directory.
+            prefix = repo.rel(root)
+            prefix = "" if prefix in (".", "") else prefix + "/"
+            for entry in repo.dirty([root]):
+                uncommitted.add(entry[len(prefix):] if entry.startswith(prefix)
+                                else entry)
 
         found = []
         for rel, meta in sorted(manifest.items()):
@@ -442,15 +448,24 @@ class AppHandler(BaseHTTPRequestHandler):
                 local = read_text(path)
             except OSError:
                 continue
-            if digest(local) == meta.get("sha"):
+            since_pull = digest(local) != meta.get("sha")
+            dirty = rel in uncommitted
+            if not (since_pull or dirty):
                 continue
+            why = []
+            if since_pull:
+                why.append("edited since the pull")
+            if dirty:
+                why.append("not committed")
             found.append({
                 "path": rel,
                 "endpoint": meta.get("endpoint"),
                 "id": meta.get("id"),
                 "name": meta.get("name"),
                 "bytes": len(local),
-                "committed": rel.rsplit("/", 1)[-1] not in uncommitted,
+                "since_pull": since_pull,
+                "committed": not dirty,
+                "why": ", ".join(why),
             })
         return self._json({"env": env_name, "changed": found})
 
@@ -491,13 +506,27 @@ class AppHandler(BaseHTTPRequestHandler):
                 "path": rel, "against": "local", "diff": None,
                 "error": "%s, so there is no local baseline. Use "
                          "'compare to T4'." % repo.reason})
+        sha = self._query().get("sha", [None])[0]
         try:
+            if sha:
+                # One commit's change to this file.
+                return self._json({"path": rel, "against": "local",
+                                   "sha": sha, "state": "commit",
+                                   "diff": repo.show(sha, target),
+                                   "history": repo.log(target)})
             diff, state = repo.diff(target)
+            # Always the history too: "no uncommitted changes" is a dead end,
+            # and the file plainly changed at some point. When and why is the
+            # answer worth having.
+            history = repo.log(target)
+        except ValueError as exc:
+            return self._json({"error": str(exc)}, 400)
         except Exception as exc:                      # noqa: BLE001 - reported
             return self._json({"path": rel, "against": "local", "diff": None,
                                "error": "git failed: %s" % exc})
         return self._json({"path": rel, "against": "local", "diff": diff,
-                           "state": state, "identical": not diff.strip()})
+                           "state": state, "identical": not diff.strip(),
+                           "history": history})
 
     def _remote_diff(self):
         """One file against what T4 holds right now.
@@ -681,15 +710,22 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
 /* One action per row, with what it does beside it: the buttons are not
    self-explanatory and a tooltip is no use to someone deciding. */
-.acts{display:grid;gap:.5rem}
-.act{display:grid;gap:.2rem;padding:.3rem 0;border-top:1px solid var(--line)}
-.act:first-child{border-top:0}
-.act button{justify-self:start}
-.act p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.45}
-@media (min-width:981px) and (max-width:1500px){
- .act{grid-template-columns:9.5rem minmax(0,1fr);gap:.6rem;align-items:start}
- .act button{width:100%%}
-}
+.acts{display:flex;flex-direction:column;gap:.25rem}
+/* Button plus a ? that opens what it does. The explanations were worth
+   having but not worth a third of the column every time. */
+.act{position:relative;display:flex;gap:.4rem;align-items:center}
+.act > button:first-child{flex:1 1 auto;text-align:left}
+.qm{flex:0 0 auto;width:1.6rem;padding:.3rem 0;text-align:center;
+ color:var(--dim);line-height:1}
+.qm:hover{color:var(--accent);border-color:var(--accent)}
+.act.open .qm{background:var(--accent);color:#fff;border-color:var(--accent)}
+.help{display:none;position:absolute;top:calc(100%% + .3rem);left:0;right:0;
+ z-index:20;background:var(--bg);border:1px solid var(--accent);
+ border-radius:6px;padding:.5rem .6rem;font-size:12px;line-height:1.5;
+ color:var(--fg);box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.act.open .help{display:block}
+.help code{background:var(--card);padding:.05rem .25rem;border-radius:3px}
+@media (max-width:980px){.help{position:static;margin:.2rem 0 .4rem}}
 .when{display:flex;gap:.5rem;align-items:baseline;padding:.25rem 0;
  border-top:1px solid var(--line)}
 .when:first-child{border-top:0}
@@ -716,6 +752,17 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .dbar{display:flex;gap:.5rem;align-items:baseline;padding:.1rem 0 .35rem;
  font-size:11px}
 .dbar .dnote{flex:1 1 auto;min-width:0}
+.hist{margin-top:.5rem;border-top:1px solid var(--line)}
+.histhead{font-size:11px;padding:.35rem 0 .2rem}
+.histrow{display:flex;gap:.5rem;align-items:baseline;width:100%%;
+ text-align:left;background:none;border:0;border-radius:4px;padding:.2rem .3rem;
+ font-size:11.5px;cursor:pointer}
+.histrow:hover{background:rgba(43,75,191,.08);color:inherit}
+.histrow.on{background:rgba(43,75,191,.14)}
+.histrow .when{flex:0 0 5.5rem;font-family:ui-monospace,monospace}
+.histrow .subj{flex:1 1 auto;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.histrow .who{flex:0 0 auto;font-family:ui-monospace,monospace;font-size:10.5px}
 /* A git-style diff: the shape is the information, so keep the gutters. */
 .diff{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
  font-size:12px;line-height:1.45;overflow-x:auto;
@@ -770,26 +817,23 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
     <div class="acts">
       <div class="act">
         <button data-run='["pull"]'>Pull source</button>
-        <p>Downloads the templates from the CMS — page layouts, content
-           layouts, content types and the Media Library CSS and JS. These are
-           the files you edit. Needs the CMS reachable.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Downloads the templates from the CMS &mdash; page layouts, content layouts, content types and the Media Library CSS and JS. These are the files you edit. Needs the CMS reachable, so the VPN if you use one. It will not overwrite a file you have edited since the last pull.</div>
       </div>
       <div class="act">
         <button data-run='["mirror"]'>Mirror site</button>
-        <p>Crawls the <em>published</em> site and saves the finished pages, so
-           there is something real to look at. Different server from the pull,
-           and only needed when pages have changed a lot.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Crawls the <em>published</em> site and saves the finished pages, so there is something real to look at. A different server from the pull. Only needed when the published pages have changed a lot &mdash; editing templates does not require a fresh mirror.</div>
       </div>
       <div class="act">
         <button data-run='["sections"]'>Map sections</button>
-        <p>Walks the site tree to record which layout each section uses, so
-           the inspector can name files exactly instead of guessing. Slow —
-           thousands of requests — but only needed occasionally.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Walks the site tree recording which layout each section uses and which content items sit in it. This is what lets the inspector name exact files instead of guessing. Slow &mdash; a few thousand requests &mdash; but it resumes where it left off and is only needed occasionally.</div>
       </div>
       <div class="act">
         <button data-run='["sync"]'>Sync</button>
-        <p>Pulls, then reports what changed on each side. Never writes to the
-           CMS. The usual way to start a session.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Pulls, then reports what changed on each side. Never writes to the CMS. The usual way to start a session.</div>
       </div>
     </div>
 
@@ -797,24 +841,23 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
     <div class="acts">
       <div class="act">
         <button data-run='["serve"]'>Start local site</button>
-        <p>Runs the site on your own machine from the mirrored pages, with
-           your edits applied and the inspector switched on. Keeps running
-           until you stop it; everything else still works meanwhile.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Runs the site on your machine from the mirrored pages, with your edits applied and the inspector switched on. It keeps running until you stop it, and everything else here still works meanwhile.</div>
       </div>
       <div class="act">
         <button id="openserve" disabled>View site</button>
-        <p>Opens the local site in a new tab. Becomes available a moment after
-           the server starts.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Opens the local site in a new tab. It becomes available a moment after the server reports its address.</div>
       </div>
       <div class="act">
         <button data-run='["status"]'>Status</button>
-        <p>What is pending, grouped by kind, with the repository state. Read
-           only — it changes nothing.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">What is pending, grouped by kind, with the repository state. Read only &mdash; it changes nothing.</div>
       </div>
       <div class="act">
         <button data-run='["diff"]'>What differs</button>
-        <p>Compares your files against what the CMS holds right now, and lists
-           every one that differs. Read only.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Compares every file against what the CMS holds right now and lists those that differ. Read only, and slow over a VPN: one request per record. For a single file, use the diff button in the Changes list.</div>
       </div>
     </div>
 
@@ -822,15 +865,13 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
     <div class="acts">
       <div class="act">
         <button data-run='["save"]'>Commit to git</button>
-        <p>Records your edits in the repository with a message naming the CMS
-           record behind each file. Do this before pushing — a push of
-           uncommitted work is refused.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Records your edits in the repository, with a message naming the CMS record behind each file. Whether a push requires this first is set per environment in <code>.t4/config.json</code>.</div>
       </div>
       <div class="act">
         <button id="push" class="primary">Push to T4</button>
-        <p>Sends the selected files to the CMS, backing up each record first.
-           Only environments marked writable accept it; production is
-           pull-only unless deliberately changed.</p>
+        <button class="qm" type="button" aria-label="What this does">?</button>
+        <div class="help">Sends the ticked files to the CMS, backing up each record first. Only environments marked writable accept it. To send one file on its own, use the push button on its row in Changes.</div>
       </div>
     </div>
   </section>
@@ -1227,6 +1268,28 @@ function run(argv, opts) {
     });
 }
 
+// The ? panels: one open at a time, dismissed by clicking away or Escape.
+document.addEventListener("click", function (e) {
+  var qm = e.target.closest(".qm");
+  var act = qm && qm.closest(".act");
+  document.querySelectorAll(".act.open").forEach(function (open) {
+    if (open !== act) open.classList.remove("open");
+  });
+  if (qm) {
+    e.preventDefault();
+    act.classList.toggle("open");
+    return;
+  }
+  if (e.target.closest(".help")) return;    // clicking inside it is not a dismiss
+});
+
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll(".act.open").forEach(function (open) {
+    open.classList.remove("open");
+  });
+});
+
 document.addEventListener("click", function (e) {
   var b = e.target.closest("button[data-run]");
   if (b) { run(JSON.parse(b.getAttribute("data-run"))); return; }
@@ -1292,7 +1355,42 @@ function diffHeader(wrap, path, against) {
   return note;
 }
 
-function fillDiff(wrap, path, against) {
+function historyList(entries, path, current) {
+  var box = document.createElement("div");
+  box.className = "hist";
+
+  var head = document.createElement("div");
+  head.className = "dim histhead";
+  head.appendChild(text_(entries.length
+    ? "History - " + entries.length + " commit(s) touched this file"
+    : "No commits have touched this file yet."));
+  box.appendChild(head);
+
+  entries.forEach(function (c) {
+    var row = document.createElement("button");
+    row.className = "histrow" + (c.sha === current ? " on" : "");
+    row.dataset.sha = c.sha;
+    row.dataset.path = path;
+
+    var when = document.createElement("span");
+    when.className = "dim when";
+    when.appendChild(text_((c.date || "").slice(0, 10)));
+
+    var subject = document.createElement("span");
+    subject.className = "subj";
+    subject.appendChild(text_(c.subject || "(no message)"));
+
+    var who = document.createElement("span");
+    who.className = "dim who";
+    who.appendChild(text_(c.short + "  " + (c.author || "")));
+
+    row.appendChild(when); row.appendChild(subject); row.appendChild(who);
+    box.appendChild(row);
+  });
+  return box;
+}
+
+function fillDiff(wrap, path, against, sha) {
   // Local by default: "what have I changed" is asked far more often, git
   // already holds the answer, and it costs no request. Comparing with T4 is
   // the deployment question, costs one, and is a click away.
@@ -1307,8 +1405,11 @@ function fillDiff(wrap, path, against) {
     ? "Reading the repository..." : "Asking T4 for its copy..."));
   wrap.appendChild(waiting);
 
+  if (sha) note.textContent = "one commit";
+
   api("/api/diff?env=" + encodeURIComponent(selected())
-      + "&against=" + against + "&path=" + encodeURIComponent(path))
+      + "&against=" + against + (sha ? "&sha=" + encodeURIComponent(sha) : "")
+      + "&path=" + encodeURIComponent(path))
     .then(function (d) {
       waiting.remove();
       if (d.state && STATE_NOTE[d.state]) note.textContent = STATE_NOTE[d.state];
@@ -1319,16 +1420,15 @@ function fillDiff(wrap, path, against) {
         wrap.appendChild(bad);
         return;
       }
-      if (d.identical || !d.diff) {
+      if (d.diff && d.diff.trim()) {
+        wrap.appendChild(diffLines(d.diff));
+      } else if (against !== "local") {
         var same = document.createElement("p");
         same.className = "dim"; same.style.margin = ".2rem 0";
-        same.appendChild(text_(against === "local"
-          ? "No uncommitted changes in this file."
-          : "Identical to what T4 holds - nothing to deploy."));
+        same.appendChild(text_("Identical to what T4 holds - nothing to deploy."));
         wrap.appendChild(same);
-        return;
       }
-      wrap.appendChild(diffLines(d.diff));
+      if (d.history) wrap.appendChild(historyList(d.history, path, d.sha));
     })
     .catch(function (e) {
       waiting.remove();
@@ -1429,6 +1529,14 @@ document.addEventListener("click", function (e) {
     syncButtons();
     return;                      // ticking a box is not asking for the diff
   }
+  var commit = e.target.closest(".histrow");
+  if (commit) {
+    e.stopPropagation();
+    fillDiff(commit.closest(".dwrap"), commit.dataset.path, "local",
+             commit.dataset.sha);
+    return;
+  }
+
   var swap = e.target.closest("button[data-against]");
   if (swap) {
     e.stopPropagation();
