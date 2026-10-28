@@ -33,7 +33,8 @@ def run_mirror(args, project):
     pages, assets, errors = mirror_mod.crawl(
         url, dest, reject_ext=reject, limit=args.limit, timeout=args.timeout)
     print("\n%d pages, %d assets, %d errors" % (pages, assets, errors))
-    print("Serve it: t4 serve")
+    if pages and not getattr(args, "quiet_hint", False):
+        print("Serve it: t4 serve")
     return 0
 
 
@@ -58,12 +59,14 @@ def bootstrap_mirror(args, project, root, env_name):
             "No mirror in %s, and no published_url for %r to make one from.\n"
             "  t4 mirror https://webtest.example.edu/" % (root, env_name))
 
-    print("No mirror yet for %s." % env_name)
-    print("Fetching one from %s - this needs the published site to be "
-          "reachable\n(behind a VPN, that means connected).\n" % url)
+    print("No mirror found for %s - running `t4 mirror` first.\n" % env_name)
+    print("  source   %s" % url)
+    print("  note     this fetches the published site over HTTP, so that host")
+    print("           must be reachable; behind a VPN, that means connected.")
+    print("  skip it  t4 serve --no-setup, or cap it with --setup-limit N\n")
     run_mirror(argparse.Namespace(url=url, env=env_name, timeout=30,
                                   limit=getattr(args, "setup_limit", None),
-                                  include_documents=False),
+                                  include_documents=False, quiet_hint=True),
                project)
     print()
 
@@ -79,9 +82,18 @@ def run_serve(args, project):
             return sorted(p for p in root.glob("*") if has_pages(p)) if root.is_dir() else []
 
         candidates = mirrors()
+        tried = False
         if not candidates and not args.no_setup:
             bootstrap_mirror(args, project, root, env_name)
             candidates = mirrors()
+            tried = True
+        if not candidates and tried:
+            # Telling someone to run the command that just ran and failed is
+            # worse than saying nothing.
+            raise T4Error(
+                "The mirror fetched no pages, so there is nothing to serve.\n"
+                "The published site was unreachable or returned no HTML — if "
+                "it is\nbehind a VPN, check you are connected, then: t4 mirror")
         if not candidates:
             raise T4Error("No mirror found in %s\nRun `t4 mirror` first." % root)
         if len(candidates) > 1:

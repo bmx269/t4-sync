@@ -1,4 +1,5 @@
 """Smoke tests that need no network and no T4 instance."""
+import argparse
 import json
 import os
 import pathlib
@@ -32,6 +33,7 @@ from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 from t4sync.errors import T4Error   # noqa: E402
 from t4sync.vcs import Repo, message_for, require_clean   # noqa: E402
+from t4sync.commands import site   # noqa: E402
 
 
 class TestExtract(unittest.TestCase):
@@ -1113,3 +1115,102 @@ class TestPushGate(unittest.TestCase):
             (plain / ".t4" / "config.json").write_text("{}", encoding="utf-8")
             repo = require_clean(Project(plain), "test", [])
         self.assertFalse(repo.available)
+
+
+class TestServeBootstrapsMirror(unittest.TestCase):
+    """`t4 serve` mirrors the site when there is none, and not otherwise."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / ".t4").mkdir()
+        (self.root / ".t4" / "config.json").write_text(json.dumps({
+            "source_dir": "t4-source", "mirror_dir": "site-mirror",
+            "environments": {"test": {"url": "https://cms.example.edu",
+                                      "published_url": "https://www.example.edu"}},
+        }), encoding="utf-8")
+        self.project = Project(self.root)
+        self.calls = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _args(self, **over):
+        # Built from the real parser so a new serve flag cannot make these
+        # tests pass against a Namespace that no longer resembles the command.
+        args = build_parser().parse_args(["serve", "--env", "test"])
+        for key, value in over.items():
+            setattr(args, key, value)
+        return args
+
+    def _mirror_dir(self, host="www.example.edu"):
+        page = self.root / "site-mirror" / host / "index.html"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text("<html></html>", encoding="utf-8")
+
+    def _patched(self):
+        """Replace the crawl and the server, leaving the decision under test."""
+        def fake_mirror(args, project):
+            self.calls.append("mirror")
+            self._mirror_dir()
+            return 0
+
+        def fake_serve(*args, **kwargs):
+            self.calls.append("serve")
+
+        return fake_mirror, fake_serve
+
+    def _run(self, args):
+        fake_mirror, fake_serve = self._patched()
+        real_mirror, real_serve = site.run_mirror, site.serve_mod.serve
+        site.run_mirror, site.serve_mod.serve = fake_mirror, fake_serve
+        try:
+            return site.run_serve(args, self.project)
+        finally:
+            site.run_mirror, site.serve_mod.serve = real_mirror, real_serve
+
+    def test_mirrors_when_there_is_none(self):
+        self._run(self._args())
+        self.assertEqual(self.calls, ["mirror", "serve"])
+
+    def test_does_not_mirror_when_one_exists(self):
+        self._mirror_dir()
+        self._run(self._args())
+        self.assertEqual(self.calls, ["serve"])
+
+    def test_no_setup_fails_instead_of_mirroring(self):
+        with self.assertRaises(T4Error):
+            self._run(self._args(no_setup=True))
+        self.assertEqual(self.calls, [])
+
+    def test_an_empty_mirror_directory_does_not_count(self):
+        # A crawl that died early leaves the directory but no pages; serving
+        # it would 404 everything and look like a broken tool.
+        (self.root / "site-mirror" / "www.example.edu").mkdir(parents=True)
+        self._run(self._args())
+        self.assertEqual(self.calls, ["mirror", "serve"])
+
+    def test_without_a_published_url_it_says_so(self):
+        self.project.config["environments"]["test"].pop("published_url")
+        with self.assertRaises(T4Error) as caught:
+            self._run(self._args())
+        self.assertIn("published_url", str(caught.exception))
+
+    def test_mirror_is_still_its_own_command(self):
+        self.assertIn("mirror", build_parser().parse_args(["mirror"]).command)
+
+    def test_a_failed_bootstrap_does_not_say_to_run_mirror_again(self):
+        def fake_mirror(args, project):
+            self.calls.append("mirror")      # crawl reaches nothing
+            return 0
+
+        real = site.run_mirror
+        site.run_mirror = fake_mirror
+        try:
+            with self.assertRaises(T4Error) as caught:
+                site.run_serve(self._args(), self.project)
+        finally:
+            site.run_mirror = real
+        message = str(caught.exception)
+        self.assertIn("fetched no pages", message)
+        self.assertNotIn("Run `t4 mirror` first", message)
