@@ -19,6 +19,16 @@ jobs:
           # 3.8 is unavailable on the arm64 macOS runners.
           - os: macos-latest
             python: "3.8"
+          # ubuntu-latest moved to 26.04, which ships no 3.8 build. Pinned
+          # below instead of dropped: the floor exists for RHEL-era Linux
+          # boxes, which is exactly what a 26.04 runner cannot stand in for.
+          - os: ubuntu-latest
+            python: "3.8"
+        include:
+          # 24.04 rather than 22.04: both carry a 3.8 build, and 22.04 is the
+          # nearer of the two to retirement.
+          - os: ubuntu-24.04
+            python: "3.8"
 
     runs-on: ${{ matrix.os }}
 
