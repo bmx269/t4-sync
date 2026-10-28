@@ -161,6 +161,29 @@ def open_repo(project):
     return Repo.at(project.root)
 
 
+def requires_commit(project, env_name):
+    """Whether a push to this environment must come from a commit.
+
+    Per environment, because the answer genuinely differs: test is where you
+    iterate, and a commit per experiment is friction you will route around;
+    production is where the record of what shipped matters most. Settling it
+    globally forces the stricter answer on the place it helps least, or the
+    looser one on the place it helps most.
+
+    An environment's own setting wins; a project-level `require_commit` is
+    the default for environments that do not say; absent both, it is on,
+    because the safe default is the one you have to opt out of.
+    """
+    try:
+        env = project.env(env_name)
+    except T4Error:
+        env = {}
+    if "require_commit" in env:
+        return bool(env["require_commit"])
+    value = project.config.get("require_commit")
+    return True if value is None else bool(value)
+
+
 def require_clean(project, env_name, paths, allow_dirty=False):
     """Stop a push whose source is not committed.
 
@@ -175,7 +198,7 @@ def require_clean(project, env_name, paths, allow_dirty=False):
               % repo.reason)
         return repo
 
-    if project.config.get("require_commit") is False or allow_dirty:
+    if allow_dirty or not requires_commit(project, env_name):
         return repo
 
     pending = repo.dirty(paths)
@@ -186,9 +209,11 @@ def require_clean(project, env_name, paths, allow_dirty=False):
         "%d file(s) are not committed:\n  %s\n\n"
         "Commit them before deploying, so what is on %s matches a commit:\n"
         "  t4 save -e %s -m \"<why>\"\n\n"
-        "To deploy anyway: t4 push --allow-dirty, or set \"require_commit\": "
-        "false in .t4/config.json."
-        % (len(pending), "\n  ".join(sorted(pending)[:20]), env_name, env_name))
+        "To deploy anyway: t4 push --allow-dirty for this run, or turn the\n"
+        "check off for this environment alone in .t4/config.json:\n"
+        "  \"environments\": { \"%s\": { \"require_commit\": false } }"
+        % (len(pending), "\n  ".join(sorted(pending)[:20]), env_name, env_name,
+           env_name))
 
 
 def message_for(env_name, entries, summary=None):

@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import history
 from .compare import load_manifest
-from .vcs import open_repo
+from .vcs import open_repo, requires_commit
 
 # Deliberately not serve's 8321: running the panel and the site at once is the
 # normal case, not a clash to resolve.
@@ -261,6 +261,7 @@ def state(project, jobs):
             "url": env.get("url"),
             "published_url": env.get("published_url"),
             "push_allowed": bool(env.get("push_allowed")),
+            "requires_commit": requires_commit(project, name),
             "has_token": bool(project.read_token(name)),
             "tracked": tracked,
             "source": str(source),
@@ -867,6 +868,11 @@ function render() {
     ? state.mirror.pages + " pages (" + state.mirror.host + ")"
     : "none - Mirror site, or just start the local site"));
   box.appendChild(row("Repository", state.repo.summary));
+  box.appendChild(row("Before push", env.push_allowed
+    ? (env.requires_commit
+        ? "a commit is required"
+        : "a commit is not required for this environment")
+    : "pushing is disabled for this environment"));
 
   el("push").title = env.push_allowed ? ""
     : "Pushing is disabled for this environment in .t4/config.json";

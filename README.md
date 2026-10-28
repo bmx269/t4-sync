@@ -128,10 +128,24 @@ T4-Env: test
 
 **`t4 push` refuses to deploy a file that is not committed.** The check runs
 after the comparison, so it names the files actually about to go out, not
-everything that happens to be dirty in the tree. Escape hatches: `--allow-dirty`
-for one run, or `"require_commit": false` in `.t4/config.json` to turn it off.
-A project that is not a git repository is not blocked — the tool predates this —
-but it says so rather than deploying untracked work silently.
+everything that happens to be dirty in the tree.
+
+**It is set per environment**, because the answer differs: test is where you
+iterate, and a commit per experiment is friction you will route around;
+production is where the record of what shipped matters most.
+
+```json
+"environments": {
+  "test": { "push_allowed": true,  "require_commit": false },
+  "prod": { "push_allowed": false, "require_commit": true }
+}
+```
+
+An environment's own setting wins; a project-level `require_commit` is the
+default for any that do not say; absent both it is on, because the safe
+default is the one you have to opt out of. `--allow-dirty` skips it for a
+single run. A project that is not a git repository is not blocked — the tool
+predates this — but it says so rather than deploying untracked work silently.
 
 Each successful push appends a line to `.t4/deployed.jsonl` recording the
 file, the T4 record, and the commit it was deployed from, and `.t4/history.jsonl`

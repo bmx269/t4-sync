@@ -39,7 +39,8 @@ from t4sync import serve   # noqa: E402
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
 from t4sync.errors import T4Error   # noqa: E402
-from t4sync.vcs import Repo, message_for, require_clean   # noqa: E402
+from t4sync.vcs import (Repo, message_for, require_clean,   # noqa: E402
+                        requires_commit)
 from t4sync.commands import edit, site   # noqa: E402
 
 
@@ -2026,3 +2027,81 @@ class TestWatcherIgnoresToolWrites(unittest.TestCase):
         self.assertFalse(self._changed(
             lambda: (self.root / "_manifest.json").write_text(
                 "{}", encoding="utf-8")))
+
+
+class TestRequireCommitIsPerEnvironment(unittest.TestCase):
+    """Test is where you iterate; production is where the record matters."""
+
+    def _project(self, config):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        (root / ".t4").mkdir()
+        (root / ".t4" / "config.json").write_text(json.dumps(config),
+                                                  encoding="utf-8")
+        return Project(root)
+
+    def test_on_by_default(self):
+        project = self._project({"environments": {"test": {}}})
+        self.assertTrue(requires_commit(project, "test"))
+
+    def test_an_environment_can_turn_it_off_alone(self):
+        project = self._project({"environments": {
+            "test": {"require_commit": False},
+            "prod": {}}})
+        self.assertFalse(requires_commit(project, "test"))
+        self.assertTrue(requires_commit(project, "prod"))
+
+    def test_an_environment_can_turn_it_on_against_a_loose_default(self):
+        project = self._project({
+            "require_commit": False,
+            "environments": {"test": {}, "prod": {"require_commit": True}}})
+        self.assertFalse(requires_commit(project, "test"))
+        self.assertTrue(requires_commit(project, "prod"))
+
+    def test_the_project_level_key_still_works_as_a_default(self):
+        project = self._project({"require_commit": False,
+                                 "environments": {"test": {}}})
+        self.assertFalse(requires_commit(project, "test"))
+
+    def test_an_unknown_environment_gets_the_safe_answer(self):
+        project = self._project({"environments": {}})
+        self.assertTrue(requires_commit(project, "nope"))
+
+    def test_the_gate_follows_the_environment(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        (root / ".t4").mkdir()
+        (root / ".t4" / "config.json").write_text(json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"require_commit": False}, "prod": {}}}),
+            encoding="utf-8")
+        subprocess.run(["git", "init", "-b", "main"], cwd=root, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        target = root / "t4-source" / "test" / "a.html"
+        target.parent.mkdir(parents=True)
+        target.write_text("x", encoding="utf-8")
+        project = Project(root)
+
+        require_clean(project, "test", [target])      # loose: must not raise
+        with self.assertRaises(T4Error):
+            require_clean(project, "prod", [target])
+
+    def test_the_refusal_names_the_per_environment_key(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = pathlib.Path(tmp.name)
+        (root / ".t4").mkdir()
+        (root / ".t4" / "config.json").write_text(json.dumps({
+            "source_dir": "t4-source", "environments": {"prod": {}}}),
+            encoding="utf-8")
+        subprocess.run(["git", "init", "-b", "main"], cwd=root, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        target = root / "t4-source" / "prod" / "a.html"
+        target.parent.mkdir(parents=True)
+        target.write_text("x", encoding="utf-8")
+        with self.assertRaises(T4Error) as caught:
+            require_clean(Project(root), "prod", [target])
+        message = str(caught.exception)
+        self.assertIn('"prod": { "require_commit": false }', message)

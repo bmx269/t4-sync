@@ -15,7 +15,7 @@ import urllib.error
 from ..api import Client
 from ..compare import compare, load_manifest
 from ..errors import T4Error
-from ..vcs import open_repo
+from ..vcs import open_repo, requires_commit
 from .edit import overrides_root
 
 # Printed in this order; anything unrecognised follows, sorted.
@@ -44,7 +44,11 @@ def run(args, project):
     env = project.env(env_name)
     print("Project     %s" % project.root)
     print("Environment %s" % env["label"])
-    print("Push        %s" % ("allowed" if env.get("push_allowed") else "disabled"))
+    print("Push        %s%s" % (
+        "allowed" if env.get("push_allowed") else "disabled",
+        "" if not env.get("push_allowed") else
+        ", commit required" if requires_commit(project, env_name)
+        else ", commit not required"))
     source = project.env_dir(env_name)
     print("Repository  %s\n"
           % open_repo(project).describe([source] if source.is_dir() else None))
