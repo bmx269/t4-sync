@@ -608,16 +608,24 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
                 files = index.files_for(exact_id)
                 note = "assigned in T4 to section %s" % _esc(section.get("id"))
 
-        if not files and resolver is not None:
-            record, why = resolver.resolve(body, layout_name, layout_id)
-            files = index.files_for(record["id"]) if record else files
-            # Plain text: the caller escapes it before it reaches the page.
-            note = ("%s (%s)" % (record.get("name"), why)) if record else why
-        else:
-            files, note = index.resolve(layout_name, layout_id)
+        # Only fall back while nothing has been resolved. Written as an `else`
+        # of the resolver check, the name lookup ran whenever there was no
+        # resolver and overwrote the exact answer from the section tree with
+        # an ambiguous one -- which is why a page whose layout T4 names
+        # precisely still reported "7 candidates" and offered no file to open.
+        # The same bug was fixed in build_comment and missed here.
+        if not files:
+            if resolver is not None:
+                record, why = resolver.resolve(body, layout_name, layout_id)
+                files = index.files_for(record["id"]) if record else files
+                # Plain text: escaped before it reaches the page.
+                note = ("%s (%s)" % (record.get("name"), why)) if record else why
+            else:
+                files, note = index.resolve(layout_name, layout_id)
         for rel, _meta in files:
-            rows.append(("", '<code>%s</code>' % _esc(rel),
-                         "t4-source/%s/%s" % (env_name or "<env>", rel)))
+            # Rendered as a file row: these are source files like any other,
+            # and the panel should open them rather than hand you a command.
+            rows.append(("", None, None, rel))
         if note:
             rows.append(("", '<span class="t4i-dim">%s</span>' % _esc(note), None))
         if not files and not note:
@@ -628,12 +636,17 @@ def build_panel(body, index, overrides_dir=None, env_name=None,
                                     'on this page</span>', None))
 
     assets = []
+    by_name = getattr(media, "by_name", None) or {}
     for href in dict.fromkeys(ASSET_RE.findall(body)):
         if href.startswith(("http://", "https://", "//")):
             continue
         rel = href.split("?")[0].lstrip("/")
         overridden = bool(overrides_dir and os.path.isfile(local_path(overrides_dir, rel)))
-        assets.append((rel, overridden))
+        # The served URL and the pulled file agree on the filename, not the
+        # path: T4 publishes a Media Library item under a channel path that
+        # has nothing to do with where the pull put it.
+        source_rel = by_name.get(rel.rsplit("/", 1)[-1].lower())
+        assets.append((rel, overridden, source_rel))
 
     groups = group_by_type(page_content(
         body, content_items,
@@ -660,8 +673,8 @@ def page_data(env_name, layout_name, layout_files, groups, assets, media=None):
     media_map = dict(getattr(media, "by_name", None) or {})
     # An asset with no pulled source still names the served path, which is
     # what `t4 edit` takes, so it is worth reporting either way.
-    for rel, _over in assets or []:
-        media_map.setdefault(rel.rsplit("/", 1)[-1].lower(), None)
+    for asset in assets or []:
+        media_map.setdefault(asset[0].rsplit("/", 1)[-1].lower(), None)
 
     return {
         "env": env_name or "<env>",
@@ -823,12 +836,17 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
              '<div id="t4i-legend" class="t4i-legend"></div>',
              '<div id="t4i-picked"></div>']
 
-    for label, value, copy_target in rows:
+    for row in rows:
+        label, value, copy_target = row[0], row[1], row[2]
+        file_rel = row[3] if len(row) > 3 else None
+        if file_rel:
+            _file_row(parts, file_rel, env_name)
+            continue
         parts.append('<div class="t4i-row">')
         parts.append('<span class="t4i-key">%s</span>' % _esc(label))
         parts.append('<span class="t4i-val">%s</span>' % value)
         if copy_target:
-            parts.append('<button class="t4i-copy" data-copy="t4 edit %s">edit</button>'
+            parts.append('<button class="t4i-copy" data-copy="%s">copy</button>'
                          % _esc(copy_target))
         parts.append('</div>')
 
@@ -841,16 +859,29 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
                     anchor_count)
 
     if assets:
-        overridden = sum(1 for _rel, over in assets if over)
+        overridden = sum(1 for asset in assets if asset[1])
+        pulled = sum(1 for asset in assets if len(asset) > 2 and asset[2])
         parts.append('<div class="t4i-row t4i-head">Assets '
-                     '<span class="t4i-dim">%d, %d overridden</span></div>'
-                     % (len(assets), overridden))
-        for rel, over in assets:
-            parts.append('<div class="t4i-row t4i-asset%s">' % (" t4i-on" if over else ""))
+                     '<span class="t4i-dim">%d, %d pulled, %d overridden'
+                     '</span></div>' % (len(assets), pulled, overridden))
+        for asset in assets:
+            rel, over = asset[0], asset[1]
+            source_rel = asset[2] if len(asset) > 2 else None
+            parts.append('<div class="t4i-row t4i-asset%s">'
+                         % (" t4i-on" if over else ""))
             parts.append('<span class="t4i-val"><code>%s</code></span>' % _esc(rel))
-            parts.append('<button class="t4i-copy" data-copy="t4 edit %s">%s</button>'
-                         % (_esc(rel), "editing" if over else "edit"))
+            if over:
+                parts.append('<span class="t4i-badge">overridden</span>')
             parts.append('</div>')
+            if source_rel:
+                # A Media Library item: the pulled file is what is being
+                # served and what deploys, so open that rather than the URL.
+                _file_row(parts, source_rel, env_name)
+            else:
+                parts.append('<div class="t4i-row t4i-sub"><span class="t4i-dim">'
+                             'not pulled — served from the mirror. '
+                             '<code>t4 edit %s</code> to experiment locally.'
+                             '</span></div>' % _esc(rel))
 
     if children:
         same = {}

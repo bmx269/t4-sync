@@ -1797,3 +1797,107 @@ class TestEditRedirectsToPulledSource(unittest.TestCase):
         self.assertIn("Copied into overrides", out)
         self.assertTrue(
             (self.root / "overrides" / "media" / "css" / "vendor.js").exists())
+
+
+class TestLayoutInheritance(unittest.TestCase):
+    """T4 reports no channel at all for a section that inherits its layout."""
+
+    TREE = {
+        "1": {"id": 1, "name": "root", "parent": 0, "path": "/site",
+              "channels": [{"id": 13, "pageLayout": 100}]},
+        "2": {"id": 2, "name": "mid", "parent": 1, "path": "/site/mid",
+              "channels": []},
+        "3": {"id": 3, "name": "leaf", "parent": 2, "path": "/site/mid/leaf",
+              "channels": []},
+        "4": {"id": 4, "name": "own", "parent": 1, "path": "/site/own",
+              "channels": [{"id": 13, "pageLayout": 0,
+                            "inheritedPageLayout": 200}]},
+    }
+
+    def setUp(self):
+        self.layouts = SectionLayouts(self.TREE)
+
+    def test_a_section_that_sets_its_own_layout_uses_it(self):
+        self.assertEqual(self.layouts.resolve("/site/")[0], 100)
+
+    def test_an_inheriting_section_climbs_to_its_ancestor(self):
+        # channels: [] means "not set here", not "no layout" -- 40% of
+        # sections on a real site, so reading the field alone reports
+        # nothing for most pages.
+        self.assertEqual(self.layouts.resolve("/mid/")[0], 100)
+
+    def test_it_climbs_more_than_one_level(self):
+        self.assertEqual(self.layouts.resolve("/mid/leaf/")[0], 100)
+
+    def test_it_names_the_section_the_layout_came_from(self):
+        _layout, owner = self.layouts.resolve("/mid/leaf/")
+        self.assertEqual(owner["name"], "root")
+
+    def test_an_explicit_inherited_value_is_still_used(self):
+        self.assertEqual(self.layouts.resolve("/own/")[0], 200)
+
+    def test_a_parent_cycle_does_not_hang(self):
+        cyclic = {"1": {"id": 1, "parent": 2, "path": "/a", "channels": []},
+                  "2": {"id": 2, "parent": 1, "path": "/b", "channels": []}}
+        self.assertEqual(SectionLayouts(cyclic).resolve("/a/"), (None, cyclic["1"]))
+
+    def test_an_unknown_path_resolves_to_nothing(self):
+        self.assertEqual(self.layouts.resolve("/nowhere/"), (None, None))
+
+
+class TestPanelKeepsTheExactAnswer(unittest.TestCase):
+    """The section tree is exact; a name lookup must not overwrite it."""
+
+    MANIFEST = {
+        "pageLayout/u-webpage.production.header.html": {
+            "endpoint": "pageLayout", "id": 975522, "field": "headerCode",
+            "name": "u_webpage.production"},
+        "pageLayout/u-webpage.webdev.header.html": {
+            "endpoint": "pageLayout", "id": 975523, "field": "headerCode",
+            "name": "u_webpage.webdev"},
+    }
+    PAGE = '<meta name="t4-layout" content="u_webpage">'
+    TREE = {"1": {"id": 1, "name": "sec", "parent": 0, "path": "/sec",
+                  "channels": [{"id": 13, "pageLayout": 975522}]}}
+
+    def test_an_exact_assignment_survives_with_no_resolver(self):
+        # Written as an `else` of the resolver check, the ambiguous name
+        # lookup ran whenever no resolver was passed and threw the exact
+        # answer away -- so the panel said "candidates" and offered no file.
+        panel = build_panel(self.PAGE, LayoutIndex(self.MANIFEST),
+                            url_path="/sec/", env_name="test",
+                            sections=SectionLayouts(self.TREE))
+        self.assertIn("u-webpage.production.header.html", panel)
+        self.assertNotIn("candidates", panel)
+
+    def test_without_an_assignment_the_name_lookup_still_runs(self):
+        panel = build_panel(self.PAGE, LayoutIndex(self.MANIFEST),
+                            url_path="/nowhere/", env_name="test",
+                            sections=SectionLayouts(self.TREE))
+        self.assertIn("candidates", panel)
+
+    def test_page_layout_files_can_be_opened(self):
+        panel = build_panel(self.PAGE, LayoutIndex(self.MANIFEST),
+                            url_path="/sec/", env_name="test",
+                            sections=SectionLayouts(self.TREE))
+        self.assertIn('data-open="edit"', panel)
+        self.assertIn('data-open="reveal"', panel)
+        self.assertNotIn('data-copy="t4 edit', panel)
+
+
+class TestAssetRowsPointAtPulledSource(unittest.TestCase):
+    """A stylesheet's served URL is not where the pulled file lives."""
+
+    PAGE = '<link href="/media/web/b3/css/site.css" rel="stylesheet">'
+    MEDIA = MediaSources({"media/site.css": {"endpoint": "media", "id": 1,
+                                             "name": "site.css"}}, "t4-source/test")
+
+    def test_the_asset_resolves_to_the_file_that_deploys(self):
+        panel = build_panel(self.PAGE, LayoutIndex({}), env_name="test",
+                            media=self.MEDIA)
+        self.assertIn('data-path="t4-source/test/media/site.css"', panel)
+
+    def test_an_asset_with_no_pulled_source_says_so(self):
+        panel = build_panel(self.PAGE, LayoutIndex({}), env_name="test",
+                            media=MediaSources({}, "t4-source/test"))
+        self.assertIn("not pulled", panel)

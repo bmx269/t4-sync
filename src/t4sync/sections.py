@@ -210,8 +210,39 @@ class SectionLayouts:
     def available(self):
         return bool(self.index)
 
+    def inherited(self, section, limit=32):
+        """The layout a section uses, following inheritance up the tree.
+
+        A section that does not set its own layout comes back from T4 with
+        `channels: []` -- not with the layout it inherits. On this site that
+        is 40% of sections, so reading the field alone reports "no layout"
+        for most pages and the inspector falls back to guessing from the
+        published name, which rarely identifies one file.
+
+        T4 resolves this by walking up to the nearest ancestor that sets one,
+        so that is what this does. `limit` guards against a parent cycle in
+        the data; a tree should never need thirty-two hops.
+        """
+        seen, hops = set(), 0
+        while section is not None and hops < limit:
+            layout_id = layout_for(section, self.channel_id)
+            if layout_id:
+                return layout_id, section
+            key = str(section.get("parent"))
+            if key in seen:
+                break
+            seen.add(key)
+            section = self.sections.get(key)
+            hops += 1
+        return None, None
+
     def resolve(self, url_path):
-        """Return (layout_id, section) for a URL, or (None, None)."""
+        """Return (layout_id, section) for a URL, or (None, None).
+
+        `section` is the one whose layout was used, which is not always the
+        one the URL names -- an inherited layout belongs to an ancestor, and
+        saying which makes the answer checkable in T4.
+        """
         key = (url_path or "/").split("?")[0].strip("/").lower()
         section = self.index.get(key)
         if section is None and key:
@@ -220,7 +251,10 @@ class SectionLayouts:
             section = self.index.get(trimmed)
         if section is None:
             return None, None
-        return layout_for(section, self.channel_id), section
+        layout_id, owner = self.inherited(section)
+        if layout_id:
+            return layout_id, owner
+        return None, section
 
 
 class MediaSources:
