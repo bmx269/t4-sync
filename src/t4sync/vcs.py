@@ -93,6 +93,42 @@ class Repo:
         """Paths under `paths` with uncommitted changes."""
         return [name for _code, name in self.status(paths)]
 
+    def diff(self, path, context=3):
+        """What changed in `path` since the last commit, as a unified diff.
+
+        The local baseline comes free from the repository: a pull keeps no
+        per-file snapshot, so without git there is nothing on disk to compare
+        against and the only honest answer would be a network request to T4.
+
+        An untracked file has no committed version, so git shows nothing for
+        it; `--no-index` against an empty file gives the whole thing as an
+        addition, which is the truthful rendering of a file that is entirely
+        new since the last commit.
+        """
+        rel = self.rel(path)
+        out = _run(["git", "diff", "--no-color", "-U%d" % context, "--", rel],
+                   self.root)
+        if out.strip():
+            return out, "committed"
+
+        staged = _run(["git", "diff", "--no-color", "--cached", "-U%d" % context,
+                       "--", rel], self.root)
+        if staged.strip():
+            return staged, "staged"
+
+        tracked = _run(["git", "ls-files", "--", rel], self.root).strip()
+        if tracked:
+            return "", "committed"          # tracked and unchanged
+
+        try:
+            out = _run(["git", "diff", "--no-color", "--no-index",
+                        "-U%d" % context, os.devnull, rel], self.root)
+        except subprocess.CalledProcessError as exc:
+            # --no-index exits 1 when the files differ, which is the normal
+            # case here; the diff is still on stdout.
+            out = (exc.output or b"").decode("utf-8", errors="replace")
+        return out, "untracked"
+
     def head(self):
         """(sha, branch) for the current commit, or (None, branch) if unborn."""
         try:

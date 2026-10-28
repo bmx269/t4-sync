@@ -2105,3 +2105,61 @@ class TestRequireCommitIsPerEnvironment(unittest.TestCase):
             require_clean(Project(root), "prod", [target])
         message = str(caught.exception)
         self.assertIn('"prod": { "require_commit": false }', message)
+
+
+class TestLocalDiff(unittest.TestCase):
+    """git already holds the local baseline; a pull keeps no snapshot."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        subprocess.run(["git", "init", "-b", "main"], cwd=self.root, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for key, value in (("user.email", "t@example.com"), ("user.name", "T")):
+            subprocess.run(["git", "config", key, value], cwd=self.root, check=True)
+        self.repo = Repo.at(self.root)
+        self.file = self.root / "media" / "site.css"
+        self.file.parent.mkdir()
+        self.file.write_text("a{}\n", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _commit(self):
+        self.repo.commit([self.file], "add")
+
+    def test_an_untracked_file_shows_as_entirely_new(self):
+        diff, state = self.repo.diff(self.file)
+        self.assertEqual(state, "untracked")
+        self.assertIn("+a{}", diff)
+
+    def test_a_committed_unchanged_file_has_no_diff(self):
+        self._commit()
+        diff, state = self.repo.diff(self.file)
+        self.assertEqual(state, "committed")
+        self.assertEqual(diff.strip(), "")
+
+    def test_an_edit_after_a_commit_shows_only_the_edit(self):
+        self._commit()
+        self.file.write_text("a{color:red}\n", encoding="utf-8")
+        diff, state = self.repo.diff(self.file)
+        self.assertEqual(state, "committed")
+        self.assertIn("-a{}", diff)
+        self.assertIn("+a{color:red}", diff)
+
+    def test_a_staged_edit_is_still_reported(self):
+        self._commit()
+        self.file.write_text("a{color:red}\n", encoding="utf-8")
+        subprocess.run(["git", "add", "--", "media/site.css"], cwd=self.root,
+                       check=True)
+        diff, state = self.repo.diff(self.file)
+        self.assertEqual(state, "staged")
+        self.assertIn("+a{color:red}", diff)
+
+    def test_crlf_content_does_not_break_the_diff(self):
+        # T4 stores CRLF; a diff that mangled it would misreport every line.
+        self.file.write_bytes(b"a{}\r\n")
+        self._commit()
+        self.file.write_bytes(b"a{}\r\nb{}\r\n")
+        diff, _state = self.repo.diff(self.file)
+        self.assertIn("+b{}", diff)

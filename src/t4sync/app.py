@@ -455,6 +455,51 @@ class AppHandler(BaseHTTPRequestHandler):
         return self._json({"env": env_name, "changed": found})
 
     def _diff(self):
+        """One file, against the last commit or against T4.
+
+        Two different questions, and the local one gets asked far more often:
+        "what have I changed" needs no network and is what you check before
+        committing. "What differs from T4" is the deployment question, costs
+        a request, and is worth asking deliberately -- so it is the toggle
+        rather than the default.
+        """
+        against = self._query().get("against", ["local"])[0] or "local"
+        if against == "local":
+            return self._local_diff()
+        return self._remote_diff()
+
+    def _local_diff(self):
+        """What changed since the last commit, from git.
+
+        git already holds the local baseline. A pull keeps no per-file
+        snapshot, so without it there is nothing on disk to compare against
+        and the only honest answer would be a request to T4.
+        """
+        from .opener import Refused, safe_path
+
+        env_name = self._env_arg()
+        rel = (self._query().get("path", [""])[0] or "").replace("\\", "/")
+        root = self.project.env_dir(env_name)
+        try:
+            target = safe_path(root, rel)
+        except Refused as exc:
+            return self._json({"error": str(exc)}, 400)
+
+        repo = open_repo(self.project)
+        if not repo.available:
+            return self._json({
+                "path": rel, "against": "local", "diff": None,
+                "error": "%s, so there is no local baseline. Use "
+                         "'compare to T4'." % repo.reason})
+        try:
+            diff, state = repo.diff(target)
+        except Exception as exc:                      # noqa: BLE001 - reported
+            return self._json({"path": rel, "against": "local", "diff": None,
+                               "error": "git failed: %s" % exc})
+        return self._json({"path": rel, "against": "local", "diff": diff,
+                           "state": state, "identical": not diff.strip()})
+
+    def _remote_diff(self):
         """One file against what T4 holds right now.
 
         Against T4 rather than a local copy, because that is the question
@@ -502,7 +547,7 @@ class AppHandler(BaseHTTPRequestHandler):
             remote.splitlines(keepends=True), local.splitlines(keepends=True),
             fromfile="T4  %s" % rel, tofile="local  %s" % rel))
         return self._json({"path": rel, "meta": meta, "diff": diff,
-                           "identical": remote == local})
+                           "against": "t4", "identical": remote == local})
 
     def _stream(self, job_id):
         job = self.jobs.get(job_id)
@@ -590,37 +635,36 @@ PAGE = r"""<!doctype html>
  --dim:#8b93a7;--line:#262b36;--card:#191c24;--accent:#9fb4ff;--warn:#fca5a5;
  --ok:#8ff0a6}}
 *{box-sizing:border-box}
-html,body{height:100%%}
-body{margin:0;background:var(--bg);color:var(--fg);display:flex;
- flex-direction:column;overflow:hidden;
+body{margin:0;background:var(--bg);color:var(--fg);
  font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-header{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;flex:0 0 auto;
+/* Sticky, so switching environment or refreshing stays reachable without
+   trapping the content in a pane of its own. */
+header{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
+ position:sticky;top:0;z-index:5;background:var(--bg);
  padding:.6rem 1rem;border-bottom:1px solid var(--line)}
 h1{font-size:15px;margin:0;letter-spacing:.02em}
 h2{font-size:13px;margin:0 0 .5rem;color:var(--dim);font-weight:600;
  text-transform:uppercase;letter-spacing:.06em}
-/* Three columns where there is room: what to do, what changed, what
-   happened. Each scrolls on its own so a long log does not push the
-   changes list off screen, which is the pairing you actually work in. */
-main{flex:1 1 auto;min-height:0;display:grid;gap:.75rem;padding:.75rem;
- grid-template-columns:21rem minmax(0,1.3fr) minmax(0,1fr)}
-.col{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;
- display:flex;flex-direction:column;gap:.75rem;padding-right:.15rem}
+/* Columns use the width; the page does the scrolling. Panes that scroll
+   inside a page that also scrolls mean the wheel does different things
+   depending on where the pointer is, which is worse than a long page. */
+main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
+ grid-template-columns:20rem minmax(0,1.4fr) minmax(0,1fr)}
+.col{min-width:0;display:flex;flex-direction:column;gap:.75rem}
+/* What to do stays in view while reading a long change list. */
+@media (min-width:981px){
+ .col-side{position:sticky;top:3.4rem}
+}
 @media (max-width:1500px){
  main{grid-template-columns:20rem minmax(0,1fr)}
  .col-log{grid-column:2}
 }
 @media (max-width:980px){
- body{overflow:auto}
  main{grid-template-columns:minmax(0,1fr)}
- .col{overflow:visible}
  .col-log{grid-column:auto}
 }
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;
- padding:.7rem .85rem;flex:0 0 auto}
-/* The log fills whatever is left rather than scrolling the page. */
-.col-log .card:last-child{flex:1 1 auto;display:flex;flex-direction:column;
- min-height:14rem}
+ padding:.7rem .85rem}
 .row{display:flex;gap:.6rem;align-items:baseline;padding:.25rem 0;
  border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
@@ -669,9 +713,12 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .chg.open .tog .caret{transform:rotate(90deg)}
 .dwrap{padding:0 0 .5rem 1.6rem}
 .dwrap[hidden]{display:none}
+.dbar{display:flex;gap:.5rem;align-items:baseline;padding:.1rem 0 .35rem;
+ font-size:11px}
+.dbar .dnote{flex:1 1 auto;min-width:0}
 /* A git-style diff: the shape is the information, so keep the gutters. */
 .diff{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
- font-size:12px;line-height:1.45;overflow:auto;max-height:60vh;
+ font-size:12px;line-height:1.45;overflow-x:auto;
  border:1px solid var(--line);border-radius:6px}
 .diff div{padding:0 .5rem;white-space:pre-wrap;word-break:break-word}
 .diff .add{background:rgba(25,135,84,.16)}
@@ -684,7 +731,7 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 }
 code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
- border-radius:6px;flex:1 1 auto;min-height:8rem;overflow:auto;font-size:12px;
+ border-radius:6px;max-height:28rem;overflow:auto;font-size:12px;
  white-space:pre-wrap;word-break:break-word}
 .dim{color:var(--dim)}
 .ok{color:var(--ok)}
@@ -700,9 +747,7 @@ pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
 .dot.bad{background:var(--warn)}
 .dot.live{background:var(--accent);animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{0%%,100%%{opacity:1}50%%{opacity:.25}}
-footer{flex:0 0 auto;padding:.35rem 1rem;color:var(--dim);font-size:11px;
- border-top:1px solid var(--line);white-space:nowrap;overflow:hidden;
- text-overflow:ellipsis}
+footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
 </style>
 
 <header>
@@ -806,8 +851,9 @@ footer{flex:0 0 auto;padding:.35rem 1rem;color:var(--dim);font-size:11px;
     </h2>
     <p class="dim" style="margin:.1rem 0 .5rem;font-size:12px">
       Files you have edited since the last pull. <b>diff</b> opens what would
-      change, compared against what T4 holds right now. <b>push</b> deploys
-      that one file; tick several and use Push to T4 to send them together.
+      change since your last commit, with a toggle to compare against what T4
+      holds instead. <b>push</b> deploys that one file; tick several and use
+      Push to T4 to send them together.
     </p>
     <div id="changes"></div>
   </section>
@@ -1216,34 +1262,80 @@ function diffLines(text) {
   return pre;
 }
 
-function fillDiff(wrap, path) {
+var STATE_NOTE = {
+  committed: "against your last commit",
+  staged: "against your last commit (staged)",
+  untracked: "not committed yet - the whole file is new"
+};
+
+function diffHeader(wrap, path, against) {
+  var bar = document.createElement("div");
+  bar.className = "dbar";
+
+  var label = document.createElement("span");
+  label.className = "dim";
+  label.appendChild(text_(against === "local"
+    ? "Local changes" : "Compared with T4"));
+
+  var note = document.createElement("span");
+  note.className = "dim dnote";
+
+  var swap = document.createElement("button");
+  swap.className = "tog";
+  swap.dataset.against = against === "local" ? "t4" : "local";
+  swap.dataset.path = path;
+  swap.appendChild(text_(against === "local"
+    ? "compare with T4" : "show local changes"));
+
+  bar.appendChild(label); bar.appendChild(note); bar.appendChild(swap);
+  wrap.appendChild(bar);
+  return note;
+}
+
+function fillDiff(wrap, path, against) {
+  // Local by default: "what have I changed" is asked far more often, git
+  // already holds the answer, and it costs no request. Comparing with T4 is
+  // the deployment question, costs one, and is a click away.
+  against = against || "local";
+  wrap.dataset.against = against;
   wrap.innerHTML = "";
+  var note = diffHeader(wrap, path, against);
+
   var waiting = document.createElement("p");
   waiting.className = "dim"; waiting.style.margin = ".2rem 0";
-  waiting.appendChild(text_("Asking T4 for its copy\u2026"));
+  waiting.appendChild(text_(against === "local"
+    ? "Reading the repository..." : "Asking T4 for its copy..."));
   wrap.appendChild(waiting);
 
   api("/api/diff?env=" + encodeURIComponent(selected())
-      + "&path=" + encodeURIComponent(path))
+      + "&against=" + against + "&path=" + encodeURIComponent(path))
     .then(function (d) {
-      wrap.innerHTML = "";
+      waiting.remove();
+      if (d.state && STATE_NOTE[d.state]) note.textContent = STATE_NOTE[d.state];
       if (d.error) {
         var bad = document.createElement("p");
-        bad.className = "warn"; bad.appendChild(text_(d.error));
+        bad.className = "warn"; bad.style.margin = ".2rem 0";
+        bad.appendChild(text_(d.error));
         wrap.appendChild(bad);
         return;
       }
       if (d.identical || !d.diff) {
         var same = document.createElement("p");
         same.className = "dim"; same.style.margin = ".2rem 0";
-        same.appendChild(text_("Identical to what T4 holds — nothing to "
-                             + "deploy for this file."));
+        same.appendChild(text_(against === "local"
+          ? "No uncommitted changes in this file."
+          : "Identical to what T4 holds - nothing to deploy."));
         wrap.appendChild(same);
         return;
       }
       wrap.appendChild(diffLines(d.diff));
     })
-    .catch(function (e) { wrap.textContent = e.message; });
+    .catch(function (e) {
+      waiting.remove();
+      var bad = document.createElement("p");
+      bad.className = "warn"; bad.appendChild(text_(e.message));
+      wrap.appendChild(bad);
+    });
 }
 
 function toggleDiff(row) {
@@ -1255,7 +1347,7 @@ function toggleDiff(row) {
   // Fetched once, then kept: re-opening a diff should not cost a request.
   if (opening && !wrap.dataset.loaded) {
     wrap.dataset.loaded = "1";
-    fillDiff(wrap, row.dataset.path);
+    fillDiff(wrap, row.dataset.path, "local");
   }
 }
 
@@ -1337,6 +1429,13 @@ document.addEventListener("click", function (e) {
     syncButtons();
     return;                      // ticking a box is not asking for the diff
   }
+  var swap = e.target.closest("button[data-against]");
+  if (swap) {
+    e.stopPropagation();
+    fillDiff(swap.closest(".dwrap"), swap.dataset.path, swap.dataset.against);
+    return;
+  }
+
   var one = e.target.closest("button[data-pushone]");
   if (one) {
     e.stopPropagation();          // not a request to open the diff
