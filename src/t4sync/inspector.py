@@ -638,7 +638,8 @@ def _render_content(parts, groups, have_items, env_name):
                  '<span class="t4i-dim">%d type(s), %d item(s)</span></div>'
                  % (len(groups), total))
     for group in groups:
-        parts.append('<div class="t4i-row t4i-type">')
+        parts.append('<div class="t4i-row t4i-type" data-type="%s">'
+                     % _esc(group["type"]))
         parts.append('<i class="t4i-dot" style="background:hsl(%d 85%% 62%%)"></i>'
                      % _hue(group["type"]))
         parts.append('<span class="t4i-val"><b>%s</b></span>' % _esc(group["type"]))
@@ -689,7 +690,14 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
              '<label class="t4i-switch"><input type="checkbox" id="t4i-labels" '
              'checked> labels</label>',
              '</div>',
-             '<div id="t4i-legend" class="t4i-legend"></div>']
+             '<div class="t4i-row t4i-controls">',
+             '<label class="t4i-switch"><input type="checkbox" id="t4i-pick"> '
+             'Select on click <span class="t4i-dim">(links off)</span></label>',
+             '</div>',
+             '<div id="t4i-legend" class="t4i-legend"></div>',
+             '<div class="t4i-row" id="t4i-picked">'
+             '<span class="t4i-key">Selected</span>'
+             '<span class="t4i-val" id="t4i-picked-val"></span></div>']
 
     for label, value, copy_target in rows:
         parts.append('<div class="t4i-row">')
@@ -772,6 +780,20 @@ a.t4i-item{color:#9fb4ff;text-decoration:none;border-bottom:1px dotted #44506e}
 a.t4i-item:hover{color:#fff}
 /* Flashed when a panel item is clicked, so the row and the page agree. */
 html .t4c-flash{outline:3px solid #ffd34d!important;outline-offset:-3px}
+.t4i-flash{background:rgba(255,211,77,.22);border-radius:3px}
+
+/* Pick mode: click an element on the page to select it. */
+html.t4c-pick,html.t4c-pick *{cursor:crosshair!important}
+html.t4c-pick #t4-inspector,html.t4c-pick #t4-inspector *{cursor:auto!important}
+html.t4c-pick [data-t4c-hover]{outline:2px solid #6ea8ff;outline-offset:-2px}
+html [data-t4c-sel]{outline:3px solid #ffd34d!important;outline-offset:-3px;
+ position:relative}
+html [data-t4c-sel]::after{content:attr(data-t4c-sel);position:absolute;
+ top:0;right:0;z-index:2147483646;background:#ffd34d;color:#0b0d12;
+ font:600 10px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+ padding:1px 5px;border-radius:0 0 0 3px;pointer-events:none;white-space:nowrap}
+#t4i-picked{display:none;gap:8px}
+#t4i-picked.on{display:flex}
 .t4i-legend{display:none;flex-wrap:wrap;gap:4px 10px;padding:4px 0 2px}
 .t4i-legend.on{display:flex}
 .t4i-legend span{display:flex;align-items:center;gap:5px;font-size:11px}
@@ -953,6 +975,118 @@ SCRIPT = """
     target.classList.add("t4c-flash");
     setTimeout(function () { target.classList.remove("t4c-flash"); }, 1600);
   });
+
+  // -- pick mode: click an element on the page to select its component ----
+  //
+  // The other direction of the same question. Highlighting shows you every
+  // component at once, which is the wrong tool when you are looking at one
+  // thing on screen and want to know what produced it.
+
+  var picked = null;
+
+  function componentAt(node) {
+    // Nearest enclosing element that collect() recognised. Walking up rather
+    // than matching exactly: a click lands on a heading or a link inside a
+    // component far more often than on the component's own box.
+    var items = collect();
+    for (var el = node; el && el !== document.documentElement; el = el.parentElement) {
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].el === el) return items[i];
+      }
+    }
+    return null;
+  }
+
+  function flashPanel(el) {
+    if (!el) return;
+    if (root.dataset.collapsed === "1") root.dataset.collapsed = "0";
+    el.scrollIntoView({ block: "nearest" });
+    el.classList.add("t4i-flash");
+    setTimeout(function () { el.classList.remove("t4i-flash"); }, 1800);
+  }
+
+  function clearPick() {
+    if (picked) picked.removeAttribute("data-t4c-sel");
+    picked = null;
+    var box = document.getElementById("t4i-picked");
+    if (box) box.classList.remove("on");
+  }
+
+  function select(item) {
+    clearPick();
+    picked = item.el;
+    picked.setAttribute("data-t4c-sel", item.label);
+
+    var box = document.getElementById("t4i-picked");
+    var val = document.getElementById("t4i-picked-val");
+    if (box && val) {
+      val.textContent = item.label;
+      box.classList.add("on");
+    }
+
+    // Point at the panel row that lists the files for it. The item link is
+    // the more precise of the two, so prefer it and fall back to the type.
+    var row = null;
+    if (item.id) row = root.querySelector('a.t4i-item[data-item="' + item.id + '"]');
+    if (!row) {
+      var rows = root.querySelectorAll(".t4i-type");
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].getAttribute("data-type") === item.group) { row = rows[i]; break; }
+      }
+    }
+    flashPanel(row);
+  }
+
+  function pickOn() {
+    var box = document.getElementById("t4i-pick");
+    return !!(box && box.checked);
+  }
+
+  // Capture phase, so a link's own handler never runs: the point of the mode
+  // is that clicking a component tells you about it instead of navigating.
+  document.addEventListener("click", function (e) {
+    if (!pickOn()) return;
+    if (e.target.closest && e.target.closest("#t4-inspector")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var item = componentAt(e.target);
+    if (item) select(item); else clearPick();
+  }, true);
+
+  // A link reached by keyboard would otherwise still navigate.
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { clearPick(); return; }
+    if (!pickOn() || e.key !== "Enter") return;
+    if (e.target.closest && e.target.closest("#t4-inspector")) return;
+    if (e.target.closest && e.target.closest("a[href]")) e.preventDefault();
+  }, true);
+
+  document.addEventListener("mouseover", function (e) {
+    if (!pickOn()) return;
+    if (e.target.closest && e.target.closest("#t4-inspector")) return;
+    var item = componentAt(e.target);
+    var previous = document.querySelector("[data-t4c-hover]");
+    if (previous) previous.removeAttribute("data-t4c-hover");
+    if (item) item.el.setAttribute("data-t4c-hover", "");
+  }, true);
+
+  var PICKKEY = "t4-inspector-pick";
+  var pick = document.getElementById("t4i-pick");
+  if (pick) {
+    try { if (localStorage.getItem(PICKKEY) === "1") pick.checked = true; }
+    catch (e) {}
+    var sync = function () {
+      document.documentElement.classList.toggle("t4c-pick", pick.checked);
+      if (!pick.checked) {
+        clearPick();
+        var hover = document.querySelector("[data-t4c-hover]");
+        if (hover) hover.removeAttribute("data-t4c-hover");
+      }
+      try { localStorage.setItem(PICKKEY, pick.checked ? "1" : "0"); } catch (e) {}
+    };
+    pick.addEventListener("change", sync);
+    sync();
+  }
   var KEY = "t4-inspector-open";
   try { if (localStorage.getItem(KEY) === "1") root.dataset.collapsed = "0"; } catch (e) {}
   root.querySelector("#t4i-toggle").addEventListener("click", function () {

@@ -11,11 +11,11 @@ $py = $null
 foreach ($candidate in @("python", "python3", "py")) {
     $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
     if ($cmd) {
-        & $candidate -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,8) else 1)" 2>$null
+        & $candidate -c "import sys; sys.exit(0 if sys.version_info[:2] >= (3,11) else 1)" 2>$null
         if ($LASTEXITCODE -eq 0) { $py = $candidate; break }
     }
 }
-if (-not $py) { throw "Python 3.8+ is required but was not found. Install it from python.org or the Microsoft Store." }
+if (-not $py) { throw "Python 3.11+ is required but was not found. Install it from python.org or the Microsoft Store." }
 
 Write-Host "Using $(& $py --version)"
 & $py -m venv "$Here\.venv"

@@ -4,7 +4,7 @@ A command-line tool for Terminal Four. Pull layout source out of the CMS onto
 disk, review changes, push them back, and run a local copy of the published
 site.
 
-Standard library only — no dependencies beyond Python 3.8+.
+Standard library only — no dependencies beyond Python 3.11+.
 
 ```sh
 t4 init                                   # set up this project
@@ -19,7 +19,7 @@ t4 mirror && t4 serve                     # local copy of the published site
 
 ## Install
 
-Requires Python 3.8+ and git. Clone, then run the installer for your platform.
+Requires Python 3.11+ and git. Clone, then run the installer for your platform.
 
 ```sh
 git clone https://github.com/bmx269/t4-sync.git

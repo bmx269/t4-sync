@@ -19,12 +19,12 @@ done
 PY=""
 for candidate in python3 python; do
   if command -v "$candidate" >/dev/null 2>&1; then
-    if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3,8) else 1)'; then
+    if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3,11) else 1)'; then
       PY="$candidate"; break
     fi
   fi
 done
-[ -n "$PY" ] || { echo "Python 3.8+ is required but was not found." >&2; exit 1; }
+[ -n "$PY" ] || { echo "Python 3.11+ is required but was not found." >&2; exit 1; }
 
 echo "Using $($PY --version)"
 "$PY" -m venv "$HERE/.venv"

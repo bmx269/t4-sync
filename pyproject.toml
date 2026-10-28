@@ -7,7 +7,7 @@ name = "t4-sync"
 version = "0.1.0"
 description = "Pull, push and compare Terminal Four layout source, and run a local copy of the published site."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Trent Stromkins" }]
 classifiers = [

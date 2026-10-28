@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -19,7 +20,7 @@ from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E40
                               InspectorContext, LayoutIndex,
                               annotate_components, annotate_content_items,
                               build_comment, build_panel, group_by_type,
-                              page_content, strip_injected)
+                              page_content, strip_injected, SCRIPT)
 from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
@@ -1214,3 +1215,46 @@ class TestServeBootstrapsMirror(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("fetched no pages", message)
         self.assertNotIn("Run `t4 mirror` first", message)
+
+
+class TestPickMode(unittest.TestCase):
+    """Clicking a component on the page selects it, without navigating."""
+
+    PANEL = build_panel(
+        '<span id="d.en.5"></span>', LayoutIndex({}), env_name="test",
+        content_items=ContentItems({"5": {"id": 5, "name": "Box A",
+                                          "contentTypeName": "Action boxes"}}))
+
+    def test_the_control_names_its_side_effect(self):
+        self.assertIn('id="t4i-pick"', self.PANEL)
+        self.assertIn("links off", self.PANEL)
+
+    def test_type_rows_are_addressable_from_the_page(self):
+        # Pick mode resolves a clicked element to a type, then has to find
+        # the row listing that type's files.
+        self.assertIn('data-type="Action boxes"', self.PANEL)
+
+    def test_items_are_addressable_by_id(self):
+        self.assertIn('data-item="5"', self.PANEL)
+
+    def test_clicks_are_intercepted_in_the_capture_phase(self):
+        # Bubble phase would run a link's own handler first and navigate away.
+        self.assertIn('document.addEventListener("click"', self.PANEL)
+        self.assertIn("e.preventDefault();\n    e.stopPropagation();", self.PANEL)
+
+    def test_the_script_is_syntactically_valid(self):
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        script = re.sub(r"</?script[^>]*>", "", SCRIPT)
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as fh:
+            fh.write(script)
+            path = fh.name
+        try:
+            proc = subprocess.run([node, "--check", path],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(proc.returncode, 0,
+                             proc.stderr.decode("utf-8", errors="replace"))
+        finally:
+            os.unlink(path)
