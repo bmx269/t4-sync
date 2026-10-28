@@ -6,6 +6,9 @@ import sys
 from ..api import Client
 from ..compare import compare, load_manifest, remote_path, unified, write_field
 from ..errors import T4Error
+from ..vcs import require_clean
+
+DEPLOY_LOG = "deployed.jsonl"
 
 
 def backup(project, env_name, entry, stamp):
@@ -18,6 +21,31 @@ def backup(project, env_name, entry, stamp):
         path.write_text(json.dumps(entry["record"], indent=2, sort_keys=True),
                         encoding="utf-8")
     return path
+
+
+def record_deploy(project, env_name, entry, sha, branch):
+    """Append what was deployed, from which commit.
+
+    T4's own history says a record changed; it does not say which commit the
+    markup came from. Appending rather than rewriting keeps the log readable
+    when two people deploy from different checkouts, and makes it a file git
+    can merge.
+    """
+    path = project.root / ".t4" / DEPLOY_LOG
+    path.parent.mkdir(parents=True, exist_ok=True)
+    meta = entry["meta"]
+    line = json.dumps({
+        "time": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "env": env_name,
+        "path": entry["path"],
+        "endpoint": meta.get("endpoint"),
+        "id": meta.get("id"),
+        "field": meta.get("field"),
+        "commit": sha,
+        "branch": branch,
+    }, sort_keys=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
 
 
 def run(args, project):
@@ -48,6 +76,16 @@ def run(args, project):
         return 0
 
     print("%d file(s) differ.\n" % len(changed))
+
+    # Checked after the comparison, so the gate names the files actually
+    # about to be deployed rather than everything that happens to be dirty.
+    repo = require_clean(project, env_name,
+                         [project.root / e["path"] for e in changed],
+                         allow_dirty=args.allow_dirty or args.dry_run)
+    sha, branch = repo.head() if repo.available else (None, None)
+    if sha and not args.dry_run:
+        print("Deploying from %s (%s)\n" % (sha[:8], branch or "detached"))
+
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     pushed = skipped = failed = 0
 
@@ -87,6 +125,7 @@ def run(args, project):
         try:
             client.put_json(remote_path(meta), record)
             print("Pushed. Backup: %s\n" % saved.relative_to(project.root))
+            record_deploy(project, env_name, entry, sha, branch)
             pushed += 1
         except Exception as exc:
             print("FAILED: %s\n  remote unchanged; backup kept at %s\n"

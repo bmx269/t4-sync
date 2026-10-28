@@ -6,8 +6,19 @@ from . import __version__
 from .config import Project
 from .errors import T4Error
 from .commands import (compare, diff, doctor, edit, env, init, layouts,
-                       preview, pull, push, sections, site, status, sync,
+                       preview, pull, push, save, sections, site, status, sync,
                        token)
+
+
+# Short forms for the commands typed dozens of times a day. Deliberately few:
+# a one-letter alias is only worth having where it is unambiguous, and `s`
+# belongs to serve rather than save, status or sync because serve is the one
+# you restart constantly.
+ALIASES = {
+    "s": "serve",
+    "st": "status",
+    "d": "diff",
+}
 
 
 def build_parser():
@@ -19,7 +30,9 @@ def build_parser():
     sub = p.add_subparsers(dest="command", metavar="<command>")
 
     def add(name, help_text):
-        return sub.add_parser(name, help=help_text, description=help_text)
+        return sub.add_parser(name, help=help_text, description=help_text,
+                              aliases=[a for a, full in ALIASES.items()
+                                       if full == name])
 
     def env_flags(sp, allow_all=True):
         sp.add_argument("--env", "-e", help="environment name")
@@ -81,12 +94,24 @@ def build_parser():
     sp.add_argument("--show", action="store_true", help="full unified diffs")
     sp.add_argument("--all", action="store_true", help="list unchanged files too")
 
+    sp = add("save", "Commit pulled source to git, before deploying it.")
+    sp.add_argument("paths", nargs="*",
+                    help="limit the commit to these paths")
+    sp.add_argument("--env", "-e", help="environment whose source to commit")
+    sp.add_argument("--message", "-m", help="commit subject line")
+    sp.add_argument("--config", action="store_true",
+                    help="include .t4/config.json (never tokens)")
+    sp.add_argument("--dry-run", action="store_true",
+                    help="list what would be committed")
+
     sp = add("push", "Send local changes to T4, one confirmation per file.")
     sp.add_argument("paths", nargs="*")
     env_flags(sp, allow_all=False)
     sp.add_argument("--dry-run", action="store_true")
     sp.add_argument("--yes", action="store_true",
                     help="skip per-file prompts (use with explicit paths)")
+    sp.add_argument("--allow-dirty", action="store_true",
+                    help="deploy files that are not committed")
 
     sp = add("mirror", "Download the published site for local development.")
     sp.add_argument("url", nargs="?")
@@ -148,6 +173,10 @@ def build_parser():
                     help="proxy without saving fetched files into the mirror")
     sp.add_argument("--no-reload", action="store_true",
                     help="do not refresh the browser when overrides change")
+    sp.add_argument("--no-setup", action="store_true",
+                    help="fail instead of mirroring the site when none exists")
+    sp.add_argument("--setup-limit", type=int, metavar="N",
+                    help="stop the first mirror after N files")
     sp.add_argument("--inspect", choices=["both", "panel", "comments", "off"],
                     default="both",
                     help="layout debug output: an overlay, HTML comments in the "
@@ -171,6 +200,7 @@ HANDLERS = {
     "sync": (sync.run, True),
     "status": (status.run, True),
     "diff": (diff.run, True),
+    "save": (save.run, True),
     "push": (push.run, True),
     "sections": (sections.run, True),
     "compare": (compare.run, True),
@@ -189,6 +219,8 @@ def main(argv=None):
         parser.print_help()
         return 0
 
+    # argparse reports the alias the user typed, not the command it stands for.
+    args.command = ALIASES.get(args.command, args.command)
     handler, needs_project = HANDLERS[args.command]
     try:
         if args.command == "env" and not args.env_action:

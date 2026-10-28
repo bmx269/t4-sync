@@ -28,8 +28,8 @@ import sys
 import threading
 import time
 
-from .inspector import (ContentTypeIndex, InspectorContext, LayoutIndex,
-                        LAYOUT_ID_META, LAYOUT_META,
+from .inspector import (ContentLayoutIndex, ContentTypeIndex, InspectorContext,
+                        LayoutIndex, LAYOUT_ID_META, LAYOUT_META,
                         annotate_components, annotate_content_items,
                         build_comment, build_panel, fence)
 from .render import PreviewEngine, status_comment
@@ -81,7 +81,7 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
             body, named = annotate_content_items(
                 body, inspector.content_items,
                 (inspector.content_types or {}).get("contenttype"),
-                inspector.env_name)
+                inspector.env_name, inspector.content_layouts)
             if named:
                 prefix = prefix.replace(
                     "<!-- END T4 DEBUG -->",
@@ -93,7 +93,11 @@ def transform_html(body, rules=(), inject_reload=False, inspector=None):
                     "<!-- COMPONENTS: %d marked inline -->\n<!-- END T4 DEBUG -->"
                     % marked)
         if inspector.mode in ("panel", "both"):
-            extra += fence(build_panel(body, inspector.index, **kwargs))
+            extra += fence(build_panel(
+                body, inspector.index,
+                content_items=inspector.content_items,
+                content_types=(inspector.content_types or {}).get("contenttype"),
+                content_layouts=inspector.content_layouts, **kwargs))
     if inject_reload:
         extra += fence(RELOAD_SCRIPT)
 
@@ -410,6 +414,7 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
             env_name=env_name, mode=inspect,
             sections=SectionLayouts.from_env_dir(source_dir),
             content_items=ContentItems.from_env_dir(source_dir),
+            content_layouts=ContentLayoutIndex.from_env_dir(source_dir),
             resolver=(MirrorHandler.previewer.resolver()
                       if MirrorHandler.previewer else None),
             content_types={
@@ -446,6 +451,13 @@ def serve(site, overrides=None, rules_file=None, port=8321, host="127.0.0.1",
             print("Inspector %s - %s" % (inspect,
                   ("%d page layout(s) mapped" % known if known else
                    "no layouts pulled yet, run `t4 pull` to map pages to files")))
+            items = MirrorHandler.inspector.content_items
+            layouts = MirrorHandler.inspector.content_layouts
+            print("Content   %s, %d content layout(s) across %d type(s)"
+                  % ("%d item(s) mapped" % len(items.items) if items.available
+                     else "items not mapped - run `t4 sections`",
+                     sum(len(v) for v in layouts.by_type.values()),
+                     len(layouts.by_type)))
         else:
             print("Inspector off")
         print("URL       http://%s:%d/" % (host, port))

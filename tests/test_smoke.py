@@ -14,10 +14,11 @@ from t4sync import extract            # noqa: E402
 from t4sync.extract import local_path   # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
 from t4sync.config import Project      # noqa: E402
-from t4sync.inspector import (ContentTypeIndex, InspectorContext,  # noqa: E402
-                              LayoutIndex, annotate_components,
-                              annotate_content_items, build_comment,
-                              build_panel, strip_injected)
+from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
+                              InspectorContext, LayoutIndex,
+                              annotate_components, annotate_content_items,
+                              build_comment, build_panel, group_by_type,
+                              page_content, strip_injected)
 from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, render)
@@ -29,6 +30,8 @@ from t4sync.sections import (ContentItems, MediaSources,   # noqa: E402
                              SectionLayouts, by_url_path, layout_for)
 from t4sync.serve import (RELOAD_PATH, Watcher, load_rules,   # noqa: E402
                           rules_for_published_urls, transform_html)
+from t4sync.errors import T4Error   # noqa: E402
+from t4sync.vcs import Repo, message_for, require_clean   # noqa: E402
 
 
 class TestExtract(unittest.TestCase):
@@ -447,10 +450,24 @@ class TestPanelEscaping(unittest.TestCase):
         self.assertIn("m_open &amp; co", panel)      # data is escaped
         self.assertNotIn("&lt;span", panel)          # our own markup is not
 
-    def test_highlight_toggle_is_present(self):
+    def test_highlight_control_offers_every_mode(self):
         panel = build_panel("<html></html>", LayoutIndex({}))
         self.assertIn('id="t4i-hl"', panel)
-        self.assertIn("Highlight components", panel)
+        for mode in ("off", "content", "components", "all"):
+            self.assertIn('value="%s"' % mode, panel)
+
+    def test_content_section_says_what_is_missing(self):
+        panel = build_panel("<html></html>", LayoutIndex({}))
+        self.assertIn("t4 sections", panel)
+
+    def test_content_type_name_is_escaped(self):
+        items = ContentItems({"5": {"id": 5, "name": "A & B",
+                                    "contentTypeName": "Boxes <b>"}})
+        panel = build_panel('<span id="d.en.5"></span>', LayoutIndex({}),
+                            content_items=items, env_name="test")
+        self.assertIn("Boxes &lt;b&gt;", panel)       # data is escaped
+        self.assertIn("A &amp; B", panel)
+        self.assertNotIn("Boxes <b>", panel)          # and not emitted raw
 
 
 class TestNestedFields(unittest.TestCase):
@@ -581,6 +598,89 @@ class TestContentItemAnnotation(unittest.TestCase):
     def test_no_data_is_a_no_op(self):
         page = '<span id="d.en.980255"></span>'
         self.assertEqual(annotate_content_items(page, ContentItems({})), (page, 0))
+
+    def test_content_layout_file_is_named(self):
+        page = '<span id="d.en.980255"></span><p>x</p>'
+        out, _n = annotate_content_items(
+            page, self.ITEMS, env_name="test",
+            content_layouts=ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST))
+        self.assertIn("layout -> t4-source/test/contentLayout/action-boxes.html",
+                      out)
+        self.assertEqual(strip_injected(out), page)
+
+    def test_missing_layout_is_reported_not_omitted(self):
+        out, _n = annotate_content_items('<span id="d.en.980255"></span>',
+                                         self.ITEMS, env_name="test",
+                                         content_layouts=ContentLayoutIndex({}))
+        self.assertIn("none pulled for this type", out)
+
+
+CONTENT_LAYOUT_MANIFEST = {
+    "contentLayout/action-boxes.html": {
+        "endpoint": "layout", "contentType": "Action boxes",
+        "name": "text/html", "id": 975973},
+    "contentLayout/action-boxes-rss.html": {
+        "endpoint": "layout", "contentType": "Action boxes",
+        "name": "text/rss", "id": 975974},
+    "pageLayout/u_webpage.html": {"endpoint": "pageLayout", "id": 1},
+}
+
+
+class TestContentLayoutIndex(unittest.TestCase):
+    """Content layouts are keyed by the type's name, not its id."""
+
+    INDEX = ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST)
+
+    def test_groups_every_layout_of_a_type(self):
+        found = self.INDEX.for_type("Action boxes")
+        self.assertEqual([rel for rel, _label in found],
+                         ["contentLayout/action-boxes-rss.html",
+                          "contentLayout/action-boxes.html"])
+
+    def test_lookup_is_case_insensitive(self):
+        self.assertTrue(self.INDEX.for_type("ACTION BOXES"))
+
+    def test_falls_through_to_the_alias(self):
+        self.assertTrue(self.INDEX.for_type("Not a type", "Action boxes"))
+
+    def test_page_layouts_are_not_content_layouts(self):
+        self.assertEqual(self.INDEX.for_type("u_webpage"), [])
+
+    def test_unknown_type_is_empty_not_an_error(self):
+        self.assertEqual(self.INDEX.for_type(None), [])
+
+
+class TestPageContent(unittest.TestCase):
+    """What the panel lists: items on the page, grouped by content type."""
+
+    ITEMS = ContentItems({
+        "1": {"id": 1, "name": "Box A", "contentTypeName": "Action boxes"},
+        "2": {"id": 2, "name": "Box B", "contentTypeName": "Action boxes"},
+        "3": {"id": 3, "name": "Banner", "contentTypeName": "Hero"},
+    })
+    LAYOUTS = ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST)
+
+    PAGE = ('<span id="d.en.1"></span><span id="d.en.2"></span>'
+            '<span id="d.en.3"></span>')
+
+    def test_items_are_found_in_document_order(self):
+        found = page_content(self.PAGE, self.ITEMS, None, self.LAYOUTS)
+        self.assertEqual([e["name"] for e in found], ["Box A", "Box B", "Banner"])
+
+    def test_a_repeated_anchor_is_listed_once(self):
+        found = page_content(self.PAGE + '<span id="d.en.1"></span>',
+                             self.ITEMS, None, self.LAYOUTS)
+        self.assertEqual(len(found), 3)
+
+    def test_grouping_collapses_by_type_and_keeps_the_count(self):
+        groups = group_by_type(page_content(self.PAGE, self.ITEMS, None, self.LAYOUTS))
+        self.assertEqual([g["type"] for g in groups], ["Action boxes", "Hero"])
+        self.assertEqual(len(groups[0]["items"]), 2)
+        self.assertEqual(len(groups[0]["layouts"]), 2)
+        self.assertEqual(groups[1]["layouts"], [])
+
+    def test_unmapped_items_give_nothing_rather_than_guessing(self):
+        self.assertEqual(page_content(self.PAGE, ContentItems({})), [])
 
 
 class TestMediaFilenames(unittest.TestCase):
@@ -861,3 +961,155 @@ class TestProgress(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCommentSafety(unittest.TestCase):
+    """Injected comments must stay openable paths, and must not end early."""
+
+    def test_double_hyphen_in_a_path_survives(self):
+        items = ContentItems({"1": {"id": 1, "name": "x",
+                                    "contentTypeName": "Code Only Template"}})
+        layouts = ContentLayoutIndex({
+            "contentLayout/code-only-template--textcode.html": {
+                "endpoint": "layout", "contentType": "Code Only Template",
+                "name": "text/code"}})
+        out, _n = annotate_content_items('<span id="d.en.1"></span>', items,
+                                         env_name="test", content_layouts=layouts)
+        self.assertIn("contentLayout/code-only-template--textcode.html", out)
+
+    def test_a_closing_sequence_in_data_is_broken(self):
+        items = ContentItems({"1": {"id": 1, "name": "evil --> out",
+                                    "contentTypeName": "T"}})
+        out, _n = annotate_content_items('<span id="d.en.1"></span>', items)
+        self.assertNotIn("evil --> out", out)
+        self.assertIn("evil - -> out", out)
+        # The note's own terminator, and nothing the data smuggled in.
+        note = out.split("<!-- T4 CONTENT")[1]
+        self.assertEqual(note.index("-->"), note.index("\n-->") + 1)
+
+
+class TestVcs(unittest.TestCase):
+    """Git is the step between editing a layout and deploying it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name) / "proj"
+        self.root.mkdir()
+        self._git("init", "-b", "main")
+        self._git("config", "user.email", "t@example.com")
+        self._git("config", "user.name", "T")
+        self.repo = Repo.at(self.root)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _git(self, *args):
+        subprocess.run(("git",) + args, cwd=self.root, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _write(self, rel, text="x"):
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_a_directory_outside_a_repo_is_reported_not_raised(self):
+        outside = pathlib.Path(self.tmp.name) / "elsewhere"
+        outside.mkdir()
+        repo = Repo.at(outside)
+        self.assertFalse(repo.available)
+        self.assertIn("not inside a git repository", repo.reason)
+
+    def test_untracked_and_modified_both_count_as_pending(self):
+        self._write("t4-source/test/a.html")
+        self.assertEqual(self.repo.dirty(), ["t4-source/test/a.html"])
+        self.repo.commit([self.root / "t4-source"], "add")
+        self.assertEqual(self.repo.dirty(), [])
+        self._write("t4-source/test/a.html", "changed")
+        self.assertEqual(self.repo.dirty(), ["t4-source/test/a.html"])
+
+    def test_dirty_is_scoped_to_the_paths_asked_about(self):
+        self._write("t4-source/test/a.html")
+        self._write("notes.txt")
+        self.assertEqual(self.repo.dirty([self.root / "t4-source"]),
+                         ["t4-source/test/a.html"])
+
+    def test_commit_stages_only_what_it_was_given(self):
+        self._write("t4-source/test/a.html")
+        self._write("unrelated.txt")
+        self.repo.commit([self.root / "t4-source"], "only the source")
+        self.assertEqual(self.repo.dirty(), ["unrelated.txt"])
+
+    def test_commit_with_nothing_staged_returns_none(self):
+        self._write("a.txt")
+        self.repo.commit([self.root / "a.txt"], "one")
+        self.assertIsNone(self.repo.commit([self.root / "a.txt"], "again"))
+
+    def test_head_on_an_empty_repo_does_not_raise(self):
+        sha, _branch = self.repo.head()
+        self.assertIsNone(sha)
+        self.assertIn("no commits yet", self.repo.describe())
+
+    def test_message_names_the_record_behind_the_file(self):
+        message = message_for("test", [{
+            "path": "t4-source/test/pageLayout/u_webpage.footer.html",
+            "meta": {"endpoint": "pageLayout", "id": 1100982, "name": "u_webpage"},
+        }])
+        self.assertIn("pageLayout #1100982", message)
+        self.assertIn("(u_webpage)", message)
+        self.assertIn("T4-Env: test", message)
+
+
+class TestPushGate(unittest.TestCase):
+    """A push must not deploy markup that is not committed."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / ".t4").mkdir()
+        (self.root / ".t4" / "config.json").write_text(
+            json.dumps({"source_dir": "t4-source", "environments": {}}),
+            encoding="utf-8")
+        subprocess.run(["git", "init", "-b", "main"], cwd=self.root, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for key, value in (("user.email", "t@example.com"), ("user.name", "T")):
+            subprocess.run(["git", "config", key, value], cwd=self.root, check=True)
+        self.project = Project(self.root)
+        self.file = self.root / "t4-source" / "test" / "a.html"
+        self.file.parent.mkdir(parents=True)
+        self.file.write_text("x", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_uncommitted_file_is_refused_and_says_how_to_fix_it(self):
+        with self.assertRaises(T4Error) as caught:
+            require_clean(self.project, "test", [self.file])
+        self.assertIn("t4 save", str(caught.exception))
+
+    def test_allow_dirty_lets_it_through(self):
+        self.assertTrue(require_clean(self.project, "test", [self.file],
+                                      allow_dirty=True).available)
+
+    def test_config_can_turn_the_gate_off(self):
+        self.project.config["require_commit"] = False
+        self.assertTrue(require_clean(self.project, "test", [self.file]).available)
+
+    def test_a_committed_file_passes(self):
+        Repo.at(self.root).commit([self.file], "add")
+        self.assertTrue(require_clean(self.project, "test", [self.file]).available)
+
+    def test_an_unrelated_dirty_file_does_not_block_the_push(self):
+        Repo.at(self.root).commit([self.file], "add")
+        (self.root / "notes.txt").write_text("wip", encoding="utf-8")
+        self.assertTrue(require_clean(self.project, "test", [self.file]).available)
+
+    def test_a_project_without_git_is_not_blocked(self):
+        # A separate temporary directory: anything under self.root is inside
+        # the repository created in setUp, git repositories being recursive.
+        with tempfile.TemporaryDirectory() as other:
+            plain = pathlib.Path(other) / "plain"
+            (plain / ".t4").mkdir(parents=True)
+            (plain / ".t4" / "config.json").write_text("{}", encoding="utf-8")
+            repo = require_clean(Project(plain), "test", [])
+        self.assertFalse(repo.available)

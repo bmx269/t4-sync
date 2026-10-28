@@ -75,6 +75,7 @@ t4 pull --env prod
 t4 pull --all               # every environment that has a token
 t4 pull --only pageLayout
 t4 pull --no-detail         # metadata only: fast, no source
+t4 pull --binary            # also fetch binary media (images, fonts)
 t4 pull --force             # overwrite files you have edited locally
 ```
 
@@ -86,6 +87,7 @@ end of the run; `--force` discards them.
 ```sh
 t4 sync                     # pull, then report both sides
 t4 diff [paths...] [--show]
+t4 save -m "why"            # commit the pulled source
 t4 push [paths...] [--dry-run]
 ```
 
@@ -99,14 +101,64 @@ Pushing is **disabled per environment by default** — set `"push_allowed": true
 in `.t4/config.json` for the environments you want writable, and leave
 production off unless you mean it.
 
+### Version control, before deploying
+
+A push writes straight into the CMS database. T4 keeps its own per-record
+history, but it lives behind the UI and says nothing about *why* a change was
+made or what else went with it. So the record of a deployment is kept on this
+side, in the repository the pulled source already sits in:
+
+```sh
+t4 save -m "Narrow the action box gutter on mobile"
+t4 push
+```
+
+`t4 save` stages the environment's pulled source and commits it. The message
+it writes names the T4 record behind each file, because a reviewer looking at
+`contentLayout/action-boxes--texthtml.html` cannot otherwise tell which record
+that is:
+
+```
+Narrow the action box gutter on mobile
+
+  t4-source/test/contentLayout/action-boxes--texthtml.html  ->  layout #975973  (text/html)
+
+T4-Env: test
+```
+
+**`t4 push` refuses to deploy a file that is not committed.** The check runs
+after the comparison, so it names the files actually about to go out, not
+everything that happens to be dirty in the tree. Escape hatches: `--allow-dirty`
+for one run, or `"require_commit": false` in `.t4/config.json` to turn it off.
+A project that is not a git repository is not blocked — the tool predates this —
+but it says so rather than deploying untracked work silently.
+
+Each successful push appends a line to `.t4/deployed.jsonl` recording the
+file, the T4 record, and the commit it was deployed from. That makes "what is
+on test, and where did it come from" answerable without asking T4. It is
+append-only so two people deploying from different checkouts produce a file
+git can merge.
+
+`t4 status` shows the repository state alongside everything else.
+
 ### The editing loop
 
 ```sh
-t4 serve                              # start the local site
+t4 s                                  # start the local site (alias for serve)
 t4 edit media/css/site.css            # copy a file in to edit it
 # edit overrides/media/css/site.css — the browser refreshes on save
-t4 status                             # what is pending, both file sets
+t4 st                                 # what is pending, both file sets
 ```
+
+`t4 serve` sets up what it needs. If there is no mirror yet it fetches one
+from the environment's `published_url` before serving — so a fresh checkout is
+`t4 serve` rather than `t4 mirror` then `t4 serve`. That first fetch needs the
+published site to be reachable, which behind a campus network means the VPN;
+afterwards everything is served from disk and nothing is needed but `--proxy`
+for assets you chose not to mirror. `--no-setup` makes it fail instead, and
+`--setup-limit N` caps the first crawl.
+
+`serve`, `status` and `diff` have the short forms `s`, `st` and `d`.
 
 `t4 edit` copies a mirrored file into `overrides/` at the right path, so you
 do not have to reproduce a deep path by hand. `--list` shows what is
@@ -266,10 +318,38 @@ Layout *names* are not reliably unique after slugging; the id is.
 Each row's **edit** button copies the matching `t4 edit …` command. Assets
 already overridden are highlighted and read **editing**.
 
-**Highlight components** outlines every content item and navigation object on
-the page, coloured by type, with a legend. The colour is derived from the type
-name, so the same component is the same colour on every page. The setting is
-remembered per browser.
+A **Content** section lists what the page is made of, grouped by content type,
+with the files behind each one:
+
+```
+Content       5 type(s), 32 item(s)
+  ● Contact                                           x25
+      contentLayout/contact--texthtml.html      text/html   [path]
+      contentLayout/contact--textrss.html       text/rss    [path]
+      contenttype/contact.json                              [path]
+      Abbotsford front desk · Chilliwack front desk · ...
+  ● Page Content                                       x3
+      ...
+```
+
+Content types are field definitions; the markup they render lives in their
+**Content Layouts**, so that is what the panel points at. Clicking an item
+scrolls the page to it and flashes it. This comes from the `d.en.<id>` anchors
+T4 publishes for every content item it renders — T4's own markup, not a site
+convention — matched against `t4 sections`, so it works on any instance.
+
+**Highlight** outlines what is on the page, coloured by type, with a legend:
+
+| | |
+|---|---|
+| `content items` | every content item, from T4's own anchors |
+| `marker components` | components the site comments in its own layouts |
+| `everything` | both |
+
+The colour is derived from the type name, so the same component is the same
+colour on every page, and the panel's swatches match the outlines. **labels**
+turns the name badges off when they get in the way of seeing the layout. Both
+settings are remembered per browser.
 
 It works from the marker comments already in the DOM — no markup is injected
 into the page, which would risk landing somewhere invalid like `<head>` or
@@ -423,6 +503,12 @@ t4 mirror https://webtest.example.edu/
 t4 serve                    # http://127.0.0.1:8321/
 ```
 
+The mirror crawls the **published site over HTTP** — it is a separate thing
+from `t4 pull`, which reads layout source from the CMS API. So it needs the
+published host to be reachable, which behind a campus network means the VPN.
+Once the mirror is on disk, `t4 serve` needs nothing but the files (and
+`--proxy`, if you left assets unmirrored).
+
 The mirror saves files **verbatim**. They are byte-identical to what T4
 published, so markup copied out of them pastes straight back into a layout.
 URL rewriting happens at serve time instead.
@@ -489,14 +575,15 @@ JS in `overrides/`, reload, see it against real published markup, with no
 publish cycle. The loop it does not shorten is changing a layout's logic.
 
 What it does give you for layout work is version control, diffing and review:
-you can see what changed in a layout, who changed it, and push a reviewed
-change — you just cannot render it locally first.
+you can see what changed in a layout, who changed it, commit it with
+[`t4 save`](#version-control-before-deploying) and push a reviewed change —
+you just cannot render it locally first.
 
 ## Things that will bite you
 
-Verified against a live T4 **8.4.3** instance. 8.4.4 and 8.4.5 release notes
-record no changes to the endpoints used here, but have not been tested
-directly — run `t4 doctor` to confirm against yours.
+Verified against live T4 **8.4.3** and **8.4.5** instances. 8.4.4 is untested;
+its release notes record no changes to the endpoints used here. Run `t4 doctor`
+to confirm against yours.
 
 **Some resources need a `{language}` path segment**, and omitting it returns
 500 — the same answer as a route that does not exist. This hides whole
@@ -516,9 +603,12 @@ exist". The verified set is in `src/t4sync/endpoints.py`. Do not tidy them.
 universal-newline translation. Without it every CRLF file looks modified and a
 push would rewrite layouts with mangled line endings.
 
-**Content Layouts are not exposed by the REST API.** About 30 route spellings
-were tried on 8.4.3; all 500. Page Layouts, Content Types, Navigation and Lists
-all work. Export a Package from the UI for Content Layouts.
+**A 500 is not evidence that a resource does not exist.** Content Layouts were
+written off twice on that basis — about 30 route spellings were tried, all 500,
+and the conclusion recorded here was "not exposed by the REST API". The cause
+was the missing `{language}` segment above. They are pulled and pushed like
+anything else. Check the published spec before concluding an endpoint is
+absent.
 
 **8.4.5 deprecates the XML Web Services payload** in favour of JSON. This tool
 only ever speaks JSON, so that deprecation does not affect it. 8.4.5 also
