@@ -52,7 +52,10 @@ jobs:
           t4 env
           t4 token status
           test -f .t4/config.json
-          grep -q '.t4/tokens/' .gitignore
+          # The repository tracks the source and nothing else, so the whole
+          # of .t4 -- config, tokens, local logs -- must be ignored.
+          grep -qx '.t4/' .gitignore
+          grep -q 't4-source/\*/_raw/' .gitignore
           # Push must refuse an environment that is not explicitly writable.
           if t4 push --env prod; then
             echo "push should have refused a pull-only environment"; exit 1
