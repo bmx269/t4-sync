@@ -590,18 +590,37 @@ PAGE = r"""<!doctype html>
  --dim:#8b93a7;--line:#262b36;--card:#191c24;--accent:#9fb4ff;--warn:#fca5a5;
  --ok:#8ff0a6}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);
+html,body{height:100%%}
+body{margin:0;background:var(--bg);color:var(--fg);display:flex;
+ flex-direction:column;overflow:hidden;
  font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-header{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
- padding:.75rem 1rem;border-bottom:1px solid var(--line)}
+header{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;flex:0 0 auto;
+ padding:.6rem 1rem;border-bottom:1px solid var(--line)}
 h1{font-size:15px;margin:0;letter-spacing:.02em}
 h2{font-size:13px;margin:0 0 .5rem;color:var(--dim);font-weight:600;
  text-transform:uppercase;letter-spacing:.06em}
-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
- gap:1rem;padding:1rem;align-items:start}
-@media (max-width:820px){main{grid-template-columns:minmax(0,1fr)}}
+/* Three columns where there is room: what to do, what changed, what
+   happened. Each scrolls on its own so a long log does not push the
+   changes list off screen, which is the pairing you actually work in. */
+main{flex:1 1 auto;min-height:0;display:grid;gap:.75rem;padding:.75rem;
+ grid-template-columns:21rem minmax(0,1.3fr) minmax(0,1fr)}
+.col{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+ display:flex;flex-direction:column;gap:.75rem;padding-right:.15rem}
+@media (max-width:1500px){
+ main{grid-template-columns:20rem minmax(0,1fr)}
+ .col-log{grid-column:2}
+}
+@media (max-width:980px){
+ body{overflow:auto}
+ main{grid-template-columns:minmax(0,1fr)}
+ .col{overflow:visible}
+ .col-log{grid-column:auto}
+}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;
- padding:.75rem .9rem}
+ padding:.7rem .85rem;flex:0 0 auto}
+/* The log fills whatever is left rather than scrolling the page. */
+.col-log .card:last-child{flex:1 1 auto;display:flex;flex-direction:column;
+ min-height:14rem}
 .row{display:flex;gap:.6rem;align-items:baseline;padding:.25rem 0;
  border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
@@ -619,13 +638,14 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 /* One action per row, with what it does beside it: the buttons are not
    self-explanatory and a tooltip is no use to someone deciding. */
 .acts{display:grid;gap:.5rem}
-.act{display:grid;grid-template-columns:10.5rem minmax(0,1fr);gap:.7rem;
- align-items:start;padding:.35rem 0;border-top:1px solid var(--line)}
+.act{display:grid;gap:.2rem;padding:.3rem 0;border-top:1px solid var(--line)}
 .act:first-child{border-top:0}
-.act button{width:100%%}
-.act p{margin:.1rem 0;color:var(--dim);font-size:12px;line-height:1.5}
-@media (max-width:560px){.act{grid-template-columns:minmax(0,1fr)}
- .act button{width:auto;justify-self:start}}
+.act button{justify-self:start}
+.act p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.45}
+@media (min-width:981px) and (max-width:1500px){
+ .act{grid-template-columns:9.5rem minmax(0,1fr);gap:.6rem;align-items:start}
+ .act button{width:100%%}
+}
 .when{display:flex;gap:.5rem;align-items:baseline;padding:.25rem 0;
  border-top:1px solid var(--line)}
 .when:first-child{border-top:0}
@@ -642,9 +662,16 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 .chg .p{flex:1 1 auto;min-width:0;word-break:break-all;font-family:ui-monospace,
  SFMono-Regular,Menlo,monospace;font-size:12px}
 .chg .rec{flex:0 0 auto;color:var(--dim);font-size:11px}
+.chg .tog{flex:0 0 auto;padding:.1rem .5rem;font-size:11px}
+.chg .one{color:var(--accent);border-color:var(--line)}
+.chg .one:hover:not(:disabled){border-color:var(--accent)}
+.chg .tog .caret{display:inline-block;transition:transform .15s}
+.chg.open .tog .caret{transform:rotate(90deg)}
+.dwrap{padding:0 0 .5rem 1.6rem}
+.dwrap[hidden]{display:none}
 /* A git-style diff: the shape is the information, so keep the gutters. */
 .diff{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
- font-size:12px;line-height:1.45;overflow:auto;max-height:34rem;
+ font-size:12px;line-height:1.45;overflow:auto;max-height:60vh;
  border:1px solid var(--line);border-radius:6px}
 .diff div{padding:0 .5rem;white-space:pre-wrap;word-break:break-word}
 .diff .add{background:rgba(25,135,84,.16)}
@@ -657,7 +684,7 @@ button.danger{border-color:var(--warn);color:var(--warn)}
 }
 code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
- border-radius:6px;max-height:26rem;overflow:auto;font-size:12px;
+ border-radius:6px;flex:1 1 auto;min-height:8rem;overflow:auto;font-size:12px;
  white-space:pre-wrap;word-break:break-word}
 .dim{color:var(--dim)}
 .ok{color:var(--ok)}
@@ -673,7 +700,9 @@ pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
 .dot.bad{background:var(--warn)}
 .dot.live{background:var(--accent);animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{0%%,100%%{opacity:1}50%%{opacity:.25}}
-footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
+footer{flex:0 0 auto;padding:.35rem 1rem;color:var(--dim);font-size:11px;
+ border-top:1px solid var(--line);white-space:nowrap;overflow:hidden;
+ text-overflow:ellipsis}
 </style>
 
 <header>
@@ -687,6 +716,7 @@ footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
 </header>
 
 <main>
+ <div class="col col-side">
   <section class="card">
     <h2>Project</h2>
     <div id="summary"></div>
@@ -761,30 +791,29 @@ footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
   </section>
 
   <section class="card">
-    <h2>Changes
-      <span id="changecount" class="pill"></span>
-      <button id="rescan" style="float:right">Rescan</button>
-    </h2>
-    <p class="dim" style="margin:.1rem 0 .5rem;font-size:12px">
-      Files you have edited since the last pull. Tick the ones to deploy —
-      Push sends only those. Click a row to see the diff against T4.
-    </p>
-    <div id="changes"></div>
-  </section>
-
-  <section class="card" id="diffcard">
-    <h2>Diff <span id="difftitle" class="pill"></span></h2>
-    <div id="diff"><p class="dim" style="margin:.2rem 0">Pick a changed file
-      to see what would be deployed.</p></div>
-  </section>
-
-  <section class="card">
     <h2>History</h2>
     <div id="events"></div>
     <h2 style="margin-top:1rem">Recent activity</h2>
     <div id="recent"></div>
   </section>
+ </div>
 
+ <div class="col col-main">
+  <section class="card">
+    <h2>Changes
+      <span id="changecount" class="pill"></span>
+      <button id="rescan" style="float:right">Rescan</button>
+    </h2>
+    <p class="dim" style="margin:.1rem 0 .5rem;font-size:12px">
+      Files you have edited since the last pull. <b>diff</b> opens what would
+      change, compared against what T4 holds right now. <b>push</b> deploys
+      that one file; tick several and use Push to T4 to send them together.
+    </p>
+    <div id="changes"></div>
+  </section>
+ </div>
+
+ <div class="col col-log">
   <section class="card">
     <h2>Tasks</h2>
     <div id="tasks"><p class="dim" style="margin:.2rem 0">Nothing running.</p></div>
@@ -794,6 +823,7 @@ footer{padding:.5rem 1rem 2rem;color:var(--dim);font-size:12px}
     </h2>
     <pre id="log">Pick an action to begin.</pre>
   </section>
+ </div>
 </main>
 
 <footer id="foot"></footer>
@@ -821,6 +851,7 @@ function api(path, options) {
 
 function el(id) { return document.getElementById(id); }
 function text(s) { return document.createTextNode(s == null ? "" : String(s)); }
+var text_ = text;   // alias, for scopes with a local named `text`
 
 function row(key, valueNode) {
   var d = document.createElement("div"); d.className = "row";
@@ -1013,7 +1044,13 @@ function syncButtons() {
     : "Start the local site first";
 
   var env = envByName(selected()) || {};
-  el("push").disabled = !env.push_allowed || !!busy[laneFor("push")];
+  var blocked = !env.push_allowed || !!busy[laneFor("push")];
+  el("push").disabled = blocked;
+  document.querySelectorAll("button[data-pushone]").forEach(function (b) {
+    b.disabled = blocked;
+    b.title = env.push_allowed ? "Push just this file"
+      : "Pushing is disabled for this environment";
+  });
 
   var start = document.querySelector('button[data-run=\'["serve"]\']');
   if (start) start.textContent = serving ? "Site is running" : "Start local site";
@@ -1163,6 +1200,65 @@ document.addEventListener("click", function (e) {
 var changes = [];
 var picked = {};          // path -> selected
 
+function diffLines(text) {
+  // Git-style gutters: the shape is the information, so keep it.
+  var pre = document.createElement("div");
+  pre.className = "diff";
+  text.split("\n").forEach(function (line) {
+    var row = document.createElement("div");
+    var c = line.charAt(0);
+    row.className = line.indexOf("@@") === 0 ? "hunk"
+      : (line.indexOf("+++") === 0 || line.indexOf("---") === 0) ? "meta"
+      : c === "+" ? "add" : c === "-" ? "del" : "";
+    row.appendChild(text_(line || " "));
+    pre.appendChild(row);
+  });
+  return pre;
+}
+
+function fillDiff(wrap, path) {
+  wrap.innerHTML = "";
+  var waiting = document.createElement("p");
+  waiting.className = "dim"; waiting.style.margin = ".2rem 0";
+  waiting.appendChild(text_("Asking T4 for its copy\u2026"));
+  wrap.appendChild(waiting);
+
+  api("/api/diff?env=" + encodeURIComponent(selected())
+      + "&path=" + encodeURIComponent(path))
+    .then(function (d) {
+      wrap.innerHTML = "";
+      if (d.error) {
+        var bad = document.createElement("p");
+        bad.className = "warn"; bad.appendChild(text_(d.error));
+        wrap.appendChild(bad);
+        return;
+      }
+      if (d.identical || !d.diff) {
+        var same = document.createElement("p");
+        same.className = "dim"; same.style.margin = ".2rem 0";
+        same.appendChild(text_("Identical to what T4 holds — nothing to "
+                             + "deploy for this file."));
+        wrap.appendChild(same);
+        return;
+      }
+      wrap.appendChild(diffLines(d.diff));
+    })
+    .catch(function (e) { wrap.textContent = e.message; });
+}
+
+function toggleDiff(row) {
+  var wrap = row.nextElementSibling;
+  if (!wrap || !wrap.classList.contains("dwrap")) return;
+  var opening = wrap.hidden;
+  wrap.hidden = !opening;
+  row.classList.toggle("open", opening);
+  // Fetched once, then kept: re-opening a diff should not cost a request.
+  if (opening && !wrap.dataset.loaded) {
+    wrap.dataset.loaded = "1";
+    fillDiff(wrap, row.dataset.path);
+  }
+}
+
 function renderChanges() {
   var box = el("changes");
   box.innerHTML = "";
@@ -1171,7 +1267,7 @@ function renderChanges() {
   if (!changes.length) {
     var p = document.createElement("p");
     p.className = "dim"; p.style.margin = ".2rem 0";
-    p.appendChild(text("Nothing edited since the last pull."));
+    p.appendChild(text_("Nothing edited since the last pull."));
     box.appendChild(p);
     syncButtons();
     return;
@@ -1181,21 +1277,40 @@ function renderChanges() {
     row.className = "chg" + (picked[c.path] ? " on" : "");
     row.dataset.path = c.path;
 
-    var box_ = document.createElement("input");
-    box_.type = "checkbox";
-    box_.checked = !!picked[c.path];
-    box_.dataset.pick = c.path;
+    var tick = document.createElement("input");
+    tick.type = "checkbox";
+    tick.checked = !!picked[c.path];
+    tick.dataset.pick = c.path;
 
     var path = document.createElement("span");
-    path.className = "p"; path.appendChild(text(c.path));
+    path.className = "p"; path.appendChild(text_(c.path));
 
     var rec = document.createElement("span");
     rec.className = "rec";
-    rec.appendChild(text((c.endpoint || "?") + " #" + (c.id || "?")
+    rec.appendChild(text_((c.endpoint || "?") + " #" + (c.id || "?")
       + (c.committed ? "" : "  uncommitted")));
 
-    row.appendChild(box_); row.appendChild(path); row.appendChild(rec);
+    var tog = document.createElement("button");
+    tog.className = "tog"; tog.dataset.diff = c.path;
+    var caret = document.createElement("span");
+    caret.className = "caret"; caret.appendChild(text_("\u203a"));
+    tog.appendChild(caret);
+    tog.appendChild(text_(" diff"));
+
+    // One file on its own, for when the rest are not ready to go.
+    var one = document.createElement("button");
+    one.className = "tog one";
+    one.dataset.pushone = c.path;
+    one.appendChild(text_("push"));
+
+    row.appendChild(tick); row.appendChild(path);
+    row.appendChild(rec); row.appendChild(tog); row.appendChild(one);
     box.appendChild(row);
+
+    var wrap = document.createElement("div");
+    wrap.className = "dwrap";
+    wrap.hidden = true;
+    box.appendChild(wrap);
   });
   syncButtons();
 }
@@ -1211,46 +1326,7 @@ function loadChanges() {
       picked = keep;
       renderChanges();
     })
-    .catch(function (e) {
-      el("changes").textContent = e.message;
-    });
-}
-
-function renderDiff(path) {
-  el("difftitle").textContent = path;
-  var box = el("diff");
-  box.innerHTML = "";
-  var waiting = document.createElement("p");
-  waiting.className = "dim"; waiting.style.margin = ".2rem 0";
-  waiting.appendChild(text("Asking T4 for its copy\u2026"));
-  box.appendChild(waiting);
-
-  api("/api/diff?env=" + encodeURIComponent(selected())
-      + "&path=" + encodeURIComponent(path))
-    .then(function (d) {
-      box.innerHTML = "";
-      if (d.error) { box.appendChild(text(d.error)); return; }
-      if (d.identical || !d.diff) {
-        var same = document.createElement("p");
-        same.className = "dim";
-        same.appendChild(text("Identical to what T4 holds."));
-        box.appendChild(same);
-        return;
-      }
-      var pre = document.createElement("div");
-      pre.className = "diff";
-      d.diff.split("\n").forEach(function (line) {
-        var row = document.createElement("div");
-        var c = line.charAt(0);
-        row.className = line.indexOf("@@") === 0 ? "hunk"
-          : (line.indexOf("+++") === 0 || line.indexOf("---") === 0) ? "meta"
-          : c === "+" ? "add" : c === "-" ? "del" : "";
-        row.appendChild(text(line || " "));
-        pre.appendChild(row);
-      });
-      box.appendChild(pre);
-    })
-    .catch(function (e) { box.textContent = e.message; });
+    .catch(function (e) { el("changes").textContent = e.message; });
 }
 
 document.addEventListener("click", function (e) {
@@ -1261,11 +1337,36 @@ document.addEventListener("click", function (e) {
     syncButtons();
     return;                      // ticking a box is not asking for the diff
   }
+  var one = e.target.closest("button[data-pushone]");
+  if (one) {
+    e.stopPropagation();          // not a request to open the diff
+    pushPaths([one.dataset.pushone]);
+    return;
+  }
+
   var row = e.target.closest(".chg");
-  if (row) renderDiff(row.dataset.path);
+  if (row) toggleDiff(row);
 });
 
 el("rescan").addEventListener("click", loadChanges);
+
+function pushPaths(paths) {
+  var env = envByName(selected()) || {};
+  if (!env.push_allowed) {
+    el("jobstate").textContent = "Pushing is disabled for " + env.name
+      + " in .t4/config.json.";
+    el("jobstate").className = "pill warn";
+    return;
+  }
+  var what = paths.length === 1 ? paths[0]
+    : paths.length + " selected file(s)";
+  if (!confirm("Push " + what + " to " + (env.label || env.name) + "?\n\n"
+             + "It is sent to T4 with the current record backed up first."
+             + (env.requires_commit
+                 ? "\nThis environment requires the file to be committed."
+                 : ""))) return;
+  run(["push"], {extra: ["--yes"].concat(paths)});
+}
 
 el("push").addEventListener("click", function () {
   var env = envByName(selected()) || {};
@@ -1275,13 +1376,7 @@ el("push").addEventListener("click", function () {
     el("jobstate").className = "pill warn";
     return;
   }
-  var what = chosen.length
-    ? chosen.length + " selected file(s)"
-    : "every differing file";
-  if (!confirm("Push " + what + " to " + (env.label || env.name) + "?\n\n"
-             + "Each is sent to T4, with the current record backed up first. "
-             + "Files that are not committed will be refused.")) return;
-  run(["push"], {extra: ["--yes"].concat(chosen)});
+  pushPaths(chosen);
 });
 
 el("stop").addEventListener("click", function () {
