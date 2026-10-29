@@ -490,6 +490,7 @@ class AppHandler(BaseHTTPRequestHandler):
         return self._json({
             "types": tagdata.content_types(env_dir),
             "navigation": tagdata.named_objects(env_dir, "navigation"),
+            "media": tagdata.media_objects(env_dir),
             "lists": tagdata.named_objects(env_dir, "list"),
             "vocabulary": tagdata.vocabulary(env_dir),
             "takes_object": tagdata.TAKES_OBJECT,
@@ -497,6 +498,9 @@ class AppHandler(BaseHTTPRequestHandler):
                                  "attrs": spec["attrs"]}
                           for name, spec in tagdata.TAG_TYPES.items()},
             "modifier_help": tagdata.MODIFIERS,
+            "id_hints": tagdata.ID_HINTS,
+            "date_formats": [{"value": value, "example": example}
+                             for value, example in tagdata.DATE_FORMATS],
             "mixing_warning": tagdata.MIXING_WARNING,
         })
 
@@ -704,6 +708,9 @@ PAGE = r"""<!doctype html>
  --btn:#252b38;--btn-edge:#687490;--btn-fg:#e8eaf0;
  --btn-hover:#2f374a;--btn-active:#39435a;--on-accent:#12141a}}
 *{box-sizing:border-box}
+/* A display rule on an element beats the browser's own [hidden], so say it
+   once, loudly, rather than per selector. */
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);
  font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
 /* Sticky, so switching environment or refreshing stays reachable without
@@ -734,9 +741,9 @@ main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
 .build label{display:flex;flex-direction:column;gap:.15rem;font-size:11px;
  color:var(--dim);min-width:0}
 .build select,.build input{width:100%%;font-size:12px}
+#tg-datewrap{gap:.25rem}
 .build input{background:var(--bg);color:var(--fg);border:1px solid var(--btn-edge);
  border-radius:6px;padding:.3rem .5rem}
-.build label[hidden]{display:none}
 .mods{display:flex;flex-wrap:wrap;gap:.3rem .7rem;margin:.5rem 0 .2rem;
  font-size:11.5px}
 .mods label{display:flex;gap:.3rem;align-items:center;cursor:pointer}
@@ -850,7 +857,6 @@ button:hover:not(:disabled) .ic{opacity:1}
 .chg .tog .caret{display:inline-block;transition:transform .15s}
 .chg.open .tog .caret{transform:rotate(90deg)}
 .dwrap{padding:0 0 .5rem 1.6rem}
-.dwrap[hidden]{display:none}
 .dbar{display:flex;gap:.5rem;align-items:baseline;padding:.1rem 0 .35rem;
  font-size:11px}
 .dbar .dnote{flex:1 1 auto;min-width:0}
@@ -1034,11 +1040,13 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
       <label>Tag<select id="tg-type"></select></label>
       <label id="tg-ctwrap">Content type<select id="tg-ct"></select></label>
       <label id="tg-elwrap">Element<select id="tg-el"></select></label>
-      <label id="tg-objwrap" hidden>Object<select id="tg-obj"></select></label>
+      <label id="tg-objwrap" hidden>Object <span id="tg-objhint"
+        class="dim"></span><select id="tg-obj"></select></label>
       <label id="tg-metawrap" hidden>Meta<select id="tg-meta"></select></label>
       <label id="tg-outwrap">Output<select id="tg-out"></select></label>
       <label id="tg-datewrap">Date format
-        <input id="tg-date" type="text" placeholder="dd MMMM yyyy">
+        <select id="tg-datepick"></select>
+        <input id="tg-date" type="text" placeholder="or a custom pattern">
       </label>
     </div>
     <div id="tg-mods" class="mods"></div>
@@ -1764,13 +1772,31 @@ function tagSpec() {
     spec.modifiers = [].slice
       .call(document.querySelectorAll("#tg-mods input:checked"))
       .map(function (b) { return b.value; });
-    if (el("tg-date").value) spec.date_format = el("tg-date").value;
+    // A meta tag formats its date with `format`; a content element uses
+    // `date_format`. Same idea, different attribute.
+    var chosen = el("tg-date").value || el("tg-datepick").value;
+    if (chosen) spec[kind === "meta" ? "format" : "date_format"] = chosen;
   } else if (kind === "meta") {
     spec.meta = el("tg-meta").value;
   } else {
     spec.id = el("tg-obj").value;
   }
   return spec;
+}
+
+// A media tag has nothing to say about an element name, and carrying one
+// over from the previous selection produced a tag full of complaints about
+// choices the user had not made.
+function resetTagFields() {
+  el("tg-date").value = "";
+  if (el("tg-datepick").options.length) el("tg-datepick").selectedIndex = 0;
+  document.querySelectorAll("#tg-mods input:checked").forEach(function (box) {
+    box.checked = false;
+  });
+  ["tg-el", "tg-out", "tg-obj", "tg-meta"].forEach(function (id) {
+    var sel = el(id);
+    if (sel && sel.options.length) sel.selectedIndex = 0;
+  });
 }
 
 function showForKind() {
@@ -1786,7 +1812,10 @@ function showForKind() {
   el("tg-elwrap").hidden = !named;
   el("tg-outwrap").hidden = !takes("output");
   el("tg-mods").hidden = !takes("modifiers");
-  el("tg-datewrap").hidden = !takes("date_format");
+  // Only where a date format applies: on a date element, or a meta tag.
+  var element = currentElement();
+  el("tg-datewrap").hidden = !(
+    (takes("date_format") && element && element.is_date) || takes("format"));
   el("tg-metawrap").hidden = kind !== "meta";
   // Only the kinds that actually refer to another object get a picker. A
   // title tag was being offered the list of Lists, which produced a tag
@@ -1794,11 +1823,28 @@ function showForKind() {
   var wants = (tagData.takes_object || {})[kind];
   el("tg-objwrap").hidden = !wants;
   if (wants) {
-    var source = wants === "navigation" ? tagData.navigation : tagData.lists;
+    var source = wants === "navigation" ? tagData.navigation
+      : wants === "media" ? tagData.media : tagData.lists;
     fillSelect("tg-obj", (source || []).map(function (o) {
       return {value: String(o.id), text: o.name + "  #" + o.id};
     }));
+    var hint = el("tg-objhint");
+    if (hint) {
+      hint.textContent = (source && source.length)
+        ? "" : "\u2014 none pulled; run t4 pull";
+    }
   }
+}
+
+function currentElement() {
+  var type = ((tagData || {}).types || []).filter(function (c) {
+    return String(c.id) === el("tg-ct").value;
+  })[0];
+  if (!type) return null;
+  var wanted = el("tg-el").value;
+  return (type.elements || []).filter(function (e) {
+    return e.name === wanted;
+  })[0] || null;
 }
 
 function fillElements() {
@@ -1904,6 +1950,10 @@ function loadTagData() {
       fillSelect("tg-meta", (v.meta || []).map(function (o) {
         return {value: o.value, count: o.count};
       }));
+      fillSelect("tg-datepick", [{value: "", text: "(none)"}].concat(
+        (d.date_formats || []).map(function (f) {
+          return {value: f.value, text: f.value + "  \u2014 " + f.example};
+        })));
 
       var mods = el("tg-mods");
       mods.innerHTML = "";
@@ -1926,7 +1976,10 @@ function loadTagData() {
 document.addEventListener("change", function (e) {
   if (!e.target.closest(".build, .mods")) return;
   if (e.target.id === "tg-ct") fillElements();
-  if (e.target.id === "tg-type") showForKind();
+  if (e.target.id === "tg-type") { resetTagFields(); }
+  // The date field depends on which element is chosen, so re-decide on
+  // every change rather than only when the tag type moves.
+  showForKind();
   renderTag();
 });
 document.addEventListener("input", function (e) {

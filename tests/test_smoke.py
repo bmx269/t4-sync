@@ -2353,8 +2353,12 @@ class TestTagBuilder(unittest.TestCase):
             "id": 307, "name": "Contact", "alias": "contact",
             "contentTypeElements": [
                 {"name": "First Name", "alias": "First Name", "type": 1, "id": 2},
-                {"name": "Photo", "alias": "Photo", "type": 3, "id": 7},
-                {"name": "Sort key", "alias": "Sort key", "type": 9, "id": 32},
+                {"name": "Photo", "alias": "Photo", "type": 11, "id": 7},
+                {"name": "Body", "alias": "Body", "type": 3, "id": 9},
+                {"name": "When", "alias": "When", "type": 5, "id": 11},
+                {"name": "Campus", "alias": "Campus", "type": 7,
+                 "listId": 4, "id": 12},
+                {"name": "Odd", "alias": "Odd", "type": 99, "id": 32},
             ]}), encoding="utf-8")
         (self.env / "contentLayout").mkdir()
         (self.env / "contentLayout" / "a.html").write_text(
@@ -2372,15 +2376,32 @@ class TestTagBuilder(unittest.TestCase):
         found = tags.content_types(str(self.env))
         self.assertEqual([t["name"] for t in found], ["Contact"])
         self.assertEqual([e["name"] for e in found[0]["elements"]],
-                         ["First Name", "Photo", "Sort key"])
+                         ["First Name", "Photo", "Body", "When", "Campus",
+                          "Odd"])
 
-    def test_element_types_are_named_where_known(self):
-        elements = tags.content_types(str(self.env))[0]["elements"]
-        self.assertEqual(elements[0]["type"], "plain text")
-        self.assertEqual(elements[1]["type"], "image")
+    def test_element_types_are_named_where_corroborated(self):
+        by_name = {e["name"]: e for e
+                   in tags.content_types(str(self.env))[0]["elements"]}
+        self.assertEqual(by_name["First Name"]["type"], "plain text")
+        self.assertEqual(by_name["Photo"]["type"], "image")
+        self.assertEqual(by_name["Body"]["type"], "HTML")
+        self.assertEqual(by_name["When"]["type"], "date")
+        self.assertEqual(by_name["Campus"]["type"], "list")
+
+    def test_only_a_date_element_is_marked_as_one(self):
+        by_name = {e["name"]: e for e
+                   in tags.content_types(str(self.env))[0]["elements"]}
+        self.assertTrue(by_name["When"]["is_date"])
+        self.assertFalse(by_name["Body"]["is_date"])
+
+    def test_an_uncorroborated_code_falls_back_on_what_is_known(self):
+        # listId says "list" more reliably than an unverified type number.
+        self.assertEqual(tags.element_type({"type": 99, "listId": 3}), "list")
+        self.assertEqual(tags.element_type({"type": 99, "binary": True}),
+                         "file or image")
 
     def test_an_unknown_element_type_is_reported_not_guessed(self):
-        self.assertEqual(tags.element_type(99), "type 99")
+        self.assertEqual(tags.element_type({"type": 99}), "type 99")
 
     def test_vocabulary_is_mined_from_the_project(self):
         vocab = tags.vocabulary(str(self.env))
@@ -2441,7 +2462,30 @@ class TestTagBuilder(unittest.TestCase):
             {"type": "media", "name": "Logo", "output": "image"})
         self.assertIn("a media tag does not take name", problems)
         self.assertIn("a media tag does not take output", problems)
-        self.assertIn("a media tag needs id", problems)
+        self.assertTrue(any(p.startswith("a media tag needs id")
+                            for p in problems), problems)
+
+    def test_a_missing_id_says_where_to_find_one(self):
+        # "needs id" without saying where to get one is half an answer.
+        _markup, problems = tags.build_tag({"type": "media"})
+        self.assertTrue(any("Media Library" in p for p in problems), problems)
+
+    def test_a_missing_required_attribute_is_left_as_a_placeholder(self):
+        # The tag keeps the right shape to paste and finish by hand, rather
+        # than silently lacking a piece.
+        markup, _problems = tags.build_tag({"type": "media"})
+        self.assertEqual(markup, '<t4 type="media" id="" />')
+        markup, _problems = tags.build_tag({"type": "navigation"})
+        self.assertEqual(markup, '<t4 type="navigation" id="" />')
+
+    def test_media_items_can_be_picked_from_the_pull(self):
+        (self.env / "_manifest.json").write_text(json.dumps({
+            "media/site.css": {"endpoint": "media", "id": 4120,
+                               "name": "site.css"},
+            "pageLayout/a.html": {"endpoint": "pageLayout", "id": 1}}),
+            encoding="utf-8")
+        found = tags.media_objects(str(self.env))
+        self.assertEqual(found, [{"id": 4120, "name": "site.css"}])
 
     def test_a_media_tag_built_properly_has_no_complaints(self):
         markup, problems = tags.build_tag(

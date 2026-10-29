@@ -66,6 +66,7 @@ TAG_TYPES = {
         "needs": ["id"],
         "attrs": ["id", "formatter", "max-width", "max-height",
                   "client-resize"],
+        "object": "media",
         "note": "A media tag names a Media Library item by id and a Media "
                 "Layout by formatter. It does not take name, output or "
                 "modifiers -- those belong to a content tag.",
@@ -73,7 +74,7 @@ TAG_TYPES = {
     "meta": {
         "label": "Metadata",
         "oneof": ["id", "meta"],
-        "attrs": ["id", "meta", "display_field"],
+        "attrs": ["id", "meta", "display_field", "format"],
         "note": "In a Page Layout a meta tag names a Metadata definition by "
                 "id and writes the whole <meta> element. The meta= form is "
                 "the Content Type one, which writes just the value.",
@@ -138,26 +139,87 @@ MODIFIERS = {
 
 # Documented as incompatible: rssentities must not be combined with
 # striptags.
+# Where to find an id in T4, per tag type. "needs id" without saying where
+# to get one is only half an answer.
+ID_HINTS = {
+    "media": "Content > Media Library: open the item and the id is the "
+             "number in the URL.",
+    "navigation": "Assets > Navigation Objects: the id is in the list.",
+    "meta": "Assets > Metadata: the id is in the list.",
+    "data-obj": "Assets > Data Objects.",
+    "web-obj": "Assets > Web Objects.",
+    "sslink": "The section id, shown in Site Structure.",
+}
+
+# The formats T4's own tag builder offers, so the common ones are a choice
+# rather than something to remember. Custom patterns are Java
+# SimpleDateFormat and still accepted.
+DATE_FORMATS = [
+    ("MM/dd/yyyy", "09/25/1980"),
+    ("dd/MM/yyyy", "04/10/1970"),
+    ("d MMMM yyyy", "22 January 2013"),
+    ("EEEE, MMMM d, yyyy", "Monday, December 8, 1980"),
+    ("EEE, MMM d, ''yy", "Tue, Feb 3, '59"),
+    ("HH:mm", "21:30"),
+    ("h:mm a", "9:30 PM"),
+    ("MM/dd/yyyy 'at' HH:mm:ss z", "05/29/1997 at 21:30:56 PDT"),
+    ("yyyy-MM-dd'T'HH:mm:ss'Z'", "Google/Outlook format"),
+    ("yyyyMMdd'T'HHmmss'Z'", "iCalendar .ics format"),
+]
+
 MODIFIER_CONFLICTS = [({"rssentities", "striptags"},
                        "rssentities must not be combined with striptags")]
 
 
-# T4's element type codes. Only those that change what a tag should say are
-# named; anything else is reported by number rather than guessed at, because
-# a wrong label here sends someone to the wrong output value.
-ELEMENT_TYPES = {
+# T4 returns an element's type as a bare number, so these were inferred --
+# and the first attempt was mostly wrong, which is worth recording. They
+# were then corroborated against how the site's own layouts use each
+# element, which is evidence rather than a guess:
+#
+#   14  output="linkurl" or "linktext" lands on it 74 times out of 84
+#   11  output="image" and "file"
+#    4  output="file" 28 times
+#    5  every name is a date, and listId is unset
+#  6,7  every single element of these types has a listId
+#   15  likewise
+#
+# Anything not corroborated is reported by number. A wrong label here sends
+# someone to an output value their element does not support.
+VERIFIED_ELEMENT_TYPES = {
     1: "plain text",
-    2: "HTML",
-    3: "image",
+    2: "image",
+    3: "HTML",
     4: "file",
-    5: "list",
-    6: "date",
-    9: "hidden",
+    5: "date",
+    6: "list",
+    7: "list",
+    11: "image",
+    13: "number",
+    14: "section or content link",
+    15: "list",
 }
 
+# Which element types a date format applies to.
+DATE_ELEMENT_TYPES = {5}
 
-def element_type(code):
-    return ELEMENT_TYPES.get(code, "type %s" % code)
+
+def element_type(element):
+    """A readable type for one element record, or its number.
+
+    Takes the whole record rather than the code: `listId` and `binary` say
+    more about an element than its type number does, and using them avoids
+    claiming to know a code that has not been corroborated.
+    """
+    if not isinstance(element, dict):
+        element = {"type": element}
+    code = element.get("type")
+    if code in VERIFIED_ELEMENT_TYPES:
+        return VERIFIED_ELEMENT_TYPES[code]
+    if element.get("listId"):
+        return "list"
+    if element.get("binary"):
+        return "file or image"
+    return "type %s" % code
 
 
 def content_types(env_dir):
@@ -186,7 +248,10 @@ def content_types(env_dir):
             elements.append({
                 "name": name,
                 "alias": element.get("alias") or name,
-                "type": element_type(element.get("type")),
+                "type": element_type(element),
+                # So the panel can offer a date format only where one
+                # applies, rather than on every element.
+                "is_date": element.get("type") in DATE_ELEMENT_TYPES,
             })
         if not elements:
             continue
@@ -196,6 +261,24 @@ def content_types(env_dir):
             "alias": record.get("alias"),
             "elements": elements,
         })
+    return found
+
+
+def media_objects(env_dir):
+    """Media Library items, from the manifest, so a media tag can pick one."""
+    import os.path
+    path = os.path.join(env_dir or "", "_manifest.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    except (OSError, ValueError):
+        return []
+    found = []
+    for rel, meta in sorted(manifest.items()):
+        if meta.get("endpoint") != "media" or meta.get("id") is None:
+            continue
+        found.append({"id": meta["id"],
+                      "name": meta.get("name") or rel.rsplit("/", 1)[-1]})
     return found
 
 
@@ -317,9 +400,16 @@ def build_tag(spec):
             continue
         given[key] = value
 
+    # A required attribute that has not been filled in is emitted empty, so
+    # the tag has the right shape to paste and finish by hand rather than
+    # one silently missing a piece.
+    placeholders = []
     for required in rules.get("needs", []):
         if required not in given:
-            problems.append("a %s tag needs %s" % (kind, required))
+            placeholders.append(required)
+            hint = ID_HINTS.get(kind) if required == "id" else None
+            problems.append("a %s tag needs %s%s"
+                            % (kind, required, " - " + hint if hint else ""))
     oneof = rules.get("oneof")
     if oneof and not any(key in given for key in oneof):
         problems.append("a %s tag needs one of %s" % (kind, " or ".join(oneof)))
@@ -343,6 +433,8 @@ def build_tag(spec):
     for key in ("name", "id", "meta", "output"):
         if key in given:
             parts.append('%s="%s"' % (key, _attr(given.pop(key))))
+        elif key in placeholders:
+            parts.append('%s=""' % key)
     if modifiers:
         parts.append('modifiers="%s"' % _attr(",".join(modifiers)))
     for key in sorted(given):
