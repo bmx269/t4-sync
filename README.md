@@ -1,43 +1,159 @@
 # t4-sync
 
-A command-line tool for Terminal Four. Pull layout source out of the CMS onto
-disk, review changes, push them back, and run a local copy of the published
-site.
+Work on a Terminal Four site from your own computer: bring the templates down,
+edit them in a normal editor, see the result immediately, and send them back
+when you are happy.
 
 Standard library only — no dependencies beyond Python 3.11+.
 
-```sh
-t4 init                                   # set up this project
-t4 env add test https://myweb-test.example.edu
-t4 token set test                         # paste a token; input hidden
-t4 pull                                   # layout source onto disk
-t4 sync                                   # pull, then report what moved
-t4 diff --show                            # local vs T4
-t4 push                                   # per-file confirmation
-t4 mirror && t4 serve                     # local copy of the published site
+## What it does
+
+Terminal Four keeps your templates inside the CMS, and publishes finished pages
+to a web server. Editing means clicking through the CMS, saving, publishing and
+waiting to see what happened. This tool puts both halves on your machine so the
+loop is a page refresh instead.
+
+```
+        TERMINAL FOUR                           PUBLISHED SITE
+        the CMS, where templates live           what visitors see
+        myweb-test.example.edu                  webtest.example.edu
+                │        ▲                              │
+     t4 pull    │        │   t4 push          t4 mirror │
+     bring them │        │   send them back   take a    │
+     down       ▼        │                    copy      ▼
+        ┌───────────────────────────────────────────────────────┐
+        │                    YOUR COMPUTER                      │
+        │                                                       │
+        │   t4-source/     the templates — these you edit       │
+        │   site-mirror/   a copy of the finished pages         │
+        │                                                       │
+        │   t4 serve   →   http://127.0.0.1:8321                │
+        │                  the two combined: real pages, with   │
+        │                  your edits applied as you save       │
+        └───────────────────────────────────────────────────────┘
 ```
 
-## Install
+Two different servers, and they can fail independently. The **CMS** holds the
+templates (`t4 pull`, `t4 push`). The **published site** holds the finished
+pages (`t4 mirror`). If either is behind a VPN, you need to be connected for
+those commands — but not for day-to-day editing, which happens entirely on disk.
 
-Requires Python 3.11+ and git. Clone, then run the installer for your platform.
+## Getting started
+
+Two separate things get set up, and it helps to keep them apart:
+
+```
+   THE TOOL                              A PROJECT
+   installed once                        one per website
+   ~/Sites/t4-sync/                      ~/Sites/MySite/
+
+   the `t4` command                      that site's templates,
+   serves every project                  settings and history
+```
+
+### 1. Install the tool — once per computer
+
+You need **Python 3.11 or newer** and **git**. Both are free; if you do not
+have them, install Python from [python.org](https://www.python.org/downloads/)
+and git from [git-scm.com](https://git-scm.com/downloads).
+
+Open a terminal (Terminal on a Mac, PowerShell on Windows) and run:
 
 ```sh
 git clone https://github.com/bmx269/t4-sync.git
 cd t4-sync
-./install.sh            # macOS, Linux
+./install.sh                 # macOS and Linux
 ```
 
 ```powershell
 git clone https://github.com/bmx269/t4-sync.git
 cd t4-sync
-.\install.ps1           # Windows
+.\install.ps1                # Windows
 ```
 
-Both create a virtualenv in the checkout and put `t4` on your PATH
-(`~/.local/bin` by default; `--prefix` / `-Prefix` to change it). If that
-directory is not on your PATH, the installer tells you how to add it.
+This keeps everything it needs inside the folder you just cloned and adds one
+command, `t4`, to your system. It changes nothing else. If the installer says
+the folder is not on your PATH, it prints the single line to fix that — copy
+it, run it, and open a new terminal.
 
-To update: `git pull` then re-run the installer.
+Check it worked:
+
+```sh
+t4 --version
+```
+
+Leave the cloned folder where it is; the `t4` command points into it. To get
+later updates, `git pull` in that folder and run the installer again.
+
+### 2. Set up a project — once per website
+
+A project is just a folder. Make one wherever you keep your work, go into it,
+and set it up:
+
+```sh
+mkdir ~/Sites/MySite
+cd ~/Sites/MySite
+
+t4 init                                        # creates the project here
+t4 env add test https://myweb-test.example.edu # the CMS address
+t4 token set test                              # paste your API token
+```
+
+The **token** is how the tool signs in to Terminal Four as you. Get one from
+someone with CMS admin access, or generate your own in Terminal Four under
+**Administration → User Management**. It is stored in this project only, never
+committed, and nothing else on your machine can read it.
+
+> **Already have a project repository?** Someone has done the above and shared
+> it. Clone it instead of making a folder, then do only the `t4 init`,
+> `t4 env add` and `t4 token set` steps — the templates arrive with the clone,
+> so you can skip the next step entirely.
+
+### 3. Bring the site down
+
+```sh
+t4 pull        # the templates, from the CMS
+t4 serve       # fetches a copy of the published pages, then opens the site
+```
+
+`t4 pull` needs the CMS reachable; `t4 serve` fetches the published pages the
+first time and then runs everything from disk. Behind a VPN, be connected for
+both. The first `t4 serve` takes a few minutes — after that it starts instantly.
+
+Your browser now shows the site at **http://127.0.0.1:8321**.
+
+### 4. Make a change
+
+Open any file under `t4-source/test/` in your editor — the stylesheets are in
+`media/`, the page templates in `pageLayout/`, the component markup in
+`contentLayout/`. Save it, and the browser refreshes by itself.
+
+Not sure which file produced what you are looking at? The site you are serving
+has a **T4** button in the corner. Open it, turn on **Select on click**, and
+click anything on the page: it names the content type, the template and the
+stylesheet behind it, each with a button to open that file in your editor.
+
+### 5. Send it back
+
+```sh
+t4 st                             # what have I changed?
+t4 save -m "Fix the footer gap"   # record it in version control
+t4 push                           # send it to Terminal Four
+```
+
+`t4 push` shows you each change and asks before sending it. Nothing leaves your
+machine without you saying yes.
+
+### What next
+
+| You want to | Do this |
+|---|---|
+| Work without the terminal | `t4 app` — see below |
+| Start work the next day | `t4 sync` then `t4 serve` |
+| Know which file made a page | Open the **T4** panel on the served site |
+| Undo something you sent | `git revert`, then `t4 push` again |
+| Let the inspector name everything | `t4 sections` — slow, but once only |
+| Work on production | Nothing: production is read-only until deliberately enabled |
 
 ## How it is organised
 
@@ -182,10 +298,54 @@ they can look at it — a pull only becomes necessary when T4 has moved on.
 t4 app                      # opens http://127.0.0.1:8320/ in your browser
 ```
 
-A page for the commands, for the days you are not living in a terminal. It
-shows the project's state — which environment, whether it is writable, what is
-pulled, whether the repository is clean — and runs pull, mirror, serve, save
-and push as buttons, streaming each command's output into a log pane.
+Everything above, without the terminal. One command opens it, and it runs the
+same `t4` commands behind the buttons.
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│  t4-sync      Environment [ TEST ▾ ]  writable              [ Refresh ]    │
+├────────────────────────────────────────────────────────────────────────────┤
+│  ▸ Project   753 files · 394 pages mirrored · main, clean                  │
+│                                                                            │
+│   GET THE FILES          WORK ON IT             SHIP IT                    │
+│   ⤓ Pull source    [?]   ▶ Start local site [?]  ⎇ Commit to git    [?]    │
+│   ⊕ Mirror site    [?]   ↗ View site        [?]  ⤒ Push to T4       [?]    │
+│   ⊞ Map sections   [?]   ☰ Status           [?]                            │
+│   ⟳ Sync           [?]   ◫ What differs     [?]   ↑ every button has a ?   │
+├──────────────────────────────────────────────┬─────────────────────────────┤
+│  Changes                   5 changed         │  History                    │
+│                                              │                             │
+│  ☑ media/ufv-v.css      media #971148        │  Pulled      2 hours ago    │
+│      [ › diff ]  [ push ]                    │  Pushed      yesterday      │
+│  ☑ pageLayout/m-open.footer.html             │  Committed   yesterday      │
+│      ▼ Local changes   against your last     │  Edited      10 min ago     │
+│      ┌─────────────────────────────────────┐ │  Mirrored    3 days ago     │
+│      │ @@ -14,7 +14,7 @@                   │ │                             │
+│      │ -  padding: 40px 0 20px;            │ │  Recent activity            │
+│      │ +  padding: 24px 0 16px;            │ │   Committed  10 min ago     │
+│      └─────────────────────────────────────┘ │   Pulled     2 hours ago    │
+│      History — 3 commits touched this file   │                             │
+│       2026-10-28  a1b2c3d  Fix footer gap    │                             │
+├──────────────────────────────────────────────┴─────────────────────────────┤
+│  Tasks                                                       [ Stop ]      │
+│   ● t4 pull test                        running                            │
+│   ● t4 save test                        done                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ $ t4 pull --env test                                                 │  │
+│  │   pageLayout   114 of 114                                            │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Ticking files and pressing Push** sends only those. **diff** shows what you
+changed since your last commit, with a toggle to compare against what Terminal
+Four holds instead. **push** on a row sends that one file. Tasks run side by
+side, so a pull does not stop you committing, and the site can stay running
+throughout.
+
+It shows the project's state — which environment, whether it is writable, what
+is pulled, whether the repository is clean — and runs pull, mirror, serve, save
+and push as buttons, streaming each command's output into the log pane.
 
 On macOS and Windows there are double-clickable launchers in `launchers/`.
 Copy the one for your platform into your project directory (the one holding
@@ -376,6 +536,28 @@ literals, identical tags -- it says so instead of picking one:
 
 `t4 serve` injects a small **T4** badge in the corner of every page. Expand it
 and it answers "what rendered this, and what do I edit":
+
+```
+     the page you are looking at            the T4 panel
+   ┌──────────────────────────────┐    ┌──────────────────────────────────┐
+   │                              │    │ Highlight [ content items ▾ ]    │
+   │   ╔══════════════════════╗   │    │ ☑ labels   ☑ Select on click     │
+   │   ║ Contact · E. Newman  ║◄──┼────┤                                  │
+   │   ║                      ║   │    │ Selected      [show whole page]  │
+   │   ║  [photo]  Elaine     ║   │    │  ● Contact · Elaine Newman       │
+   │   ║           Advisor    ║   │    │     contentLayout/contact--       │
+   │   ╚══════════════════════╝   │    │       texthtml.html              │
+   │                              │    │       [edit] [folder] [copy]     │
+   │   click any element ─────────┼───►│  ● page layout u_webpage         │
+   │                              │    │     pageLayout/u-webpage...html  │
+   └──────────────────────────────┘    └──────────────────────────────────┘
+```
+
+Click something on the page and the panel narrows to just what produced it —
+the component, its template, the page layout around it — each with a button to
+open that file in your editor or show it in Finder. While **Select on click**
+is on, links do not navigate, so clicking a menu item tells you about it
+instead of taking you away.
 
 ```
 Page layout   m_open  #1027039
