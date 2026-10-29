@@ -110,6 +110,8 @@ def build_parser():
                     help="skip per-file prompts (use with explicit paths)")
     sp.add_argument("--allow-dirty", action="store_true",
                     help="deploy files that are not committed")
+    sp.add_argument("--ignore-conflicts", action="store_true",
+                    help="push even where T4 changed too, discarding its side")
 
     sp = add("mirror", "Download the published site for local development.")
     sp.add_argument("url", nargs="?")

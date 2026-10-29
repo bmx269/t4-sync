@@ -254,6 +254,7 @@ def build(out_dir):
 HERO = '''
 <div class="hero">
   <h1>t4-sync</h1>
+  <p class="tagline">A T4 CMS Local Development Tool</p>
   <p>Work on a Terminal Four site from your own computer: bring the templates
      down, edit them in a normal editor, see the result immediately, and send
      them back when you are happy.</p>
@@ -321,7 +322,9 @@ ul,ol{padding-left:1.2rem}
 li{margin:.25rem 0}
 .hero{padding:1.5rem 0 .5rem;border-bottom:1px solid var(--line);
  margin-bottom:1.5rem}
-.hero h1{font-size:2.4rem;margin:0 0 .5rem}
+.hero h1{font-size:2.4rem;margin:0 0 .2rem}
+.hero .tagline{font-size:1rem;color:var(--accent);font-weight:600;
+ margin:0 0 .8rem;letter-spacing:.01em}
 .hero p{font-size:1.05rem;color:var(--dim);max-width:44rem}
 .herolinks{margin-top:1.2rem;display:flex;gap:.6rem;flex-wrap:wrap}
 .cta{display:inline-block;padding:.5rem 1.1rem;border-radius:7px;
@@ -343,7 +346,7 @@ TEMPLATE = """<!doctype html>
 <style>%(style)s</style>
 <header>
   <b><a href="index.html" style="color:inherit;text-decoration:none">t4-sync</a></b>
-  <span class="sub">Terminal Four, from your own machine</span>
+  <span class="sub">T4 CMS Local Development Tool</span>
 </header>
 <div class="wrap">
   <nav class="side">%(nav)s</nav>

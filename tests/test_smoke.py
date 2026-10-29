@@ -30,6 +30,7 @@ from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, preview_every, render)
 from t4sync.compare import read_field, remote_path, write_field  # noqa: E402
+from t4sync import compare as compare_mod   # noqa: E402
 from t4sync.contentlayout import format_key, layout_name  # noqa: E402
 from t4sync.commands.pull import media_filename   # noqa: E402
 from t4sync import sections as sectionlib   # noqa: E402
@@ -2665,3 +2666,84 @@ class TestDiagramContent(unittest.TestCase):
                 for l2, r2, y2, t2 in labels[index + 1:]:
                     if abs(y1 - y2) < 9 and l1 < r2 - 2 and l2 < r1 - 2:
                         self.fail("%s: %r overlaps %r" % (path.name, t1, t2))
+
+
+class TestConflictDetection(unittest.TestCase):
+    """Who moved since the pull: you, T4, or both.
+
+    Borrowed from Salesforce DX source tracking, whose rule is that a deploy
+    must not silently overwrite what changed in the org and a retrieve must
+    not clobber local work. The manifest already records what each file
+    looked like when pulled, so the three-way answer costs nothing extra.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / ".t4").mkdir()
+        (self.root / ".t4" / "config.json").write_text(json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"base": "https://cms"}}}), encoding="utf-8")
+        self.env = self.root / "t4-source" / "test"
+        self.env.mkdir(parents=True)
+        self.project = Project(self.root)
+        self.pulled = "original\n"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _entry(self, local, remote):
+        (self.env / "a.html").write_text(local, encoding="utf-8")
+        manifest = {"a.html": {"endpoint": "media", "id": 1, "field": "text",
+                               "sha": extract.digest(self.pulled)}}
+
+        class FakeClient:
+            @staticmethod
+            def fetch_path(_path):
+                return {"text": remote}
+
+        results = compare_mod.compare(self.project, "test", FakeClient(), manifest)
+        return results[0]
+
+    def test_nobody_moved(self):
+        self.assertEqual(self._entry(self.pulled, self.pulled)["state"], "same")
+
+    def test_only_you_moved(self):
+        entry = self._entry("mine\n", self.pulled)
+        self.assertEqual(entry["state"], "changed")
+        self.assertTrue(entry["local_changed"])
+        self.assertFalse(entry["remote_changed"])
+
+    def test_only_t4_moved_is_not_something_to_push(self):
+        # Pushing here puts the old version back: a silent revert that looks
+        # like a successful deploy.
+        entry = self._entry(self.pulled, "theirs\n")
+        self.assertEqual(entry["state"], "behind")
+
+    def test_both_moved_is_a_conflict(self):
+        entry = self._entry("mine\n", "theirs\n")
+        self.assertEqual(entry["state"], "conflict")
+        self.assertTrue(entry["local_changed"] and entry["remote_changed"])
+
+    def test_the_same_edit_on_both_sides_is_not_a_conflict(self):
+        entry = self._entry("agreed\n", "agreed\n")
+        self.assertEqual(entry["state"], "same")
+
+    def test_without_a_recorded_hash_nothing_is_claimed(self):
+        # An old manifest has no sha; guessing a conflict from that would
+        # block pushes on no evidence.
+        (self.env / "a.html").write_text("mine\n", encoding="utf-8")
+        manifest = {"a.html": {"endpoint": "media", "id": 1, "field": "text"}}
+
+        class FakeClient:
+            @staticmethod
+            def fetch_path(_path):
+                return {"text": "theirs\n"}
+
+        entry = compare_mod.compare(self.project, "test", FakeClient(), manifest)[0]
+        self.assertEqual(entry["state"], "changed")
+        self.assertFalse(entry["local_changed"])
+
+    def test_push_offers_an_escape_hatch(self):
+        args = build_parser().parse_args(["push", "--ignore-conflicts"])
+        self.assertTrue(args.ignore_conflicts)

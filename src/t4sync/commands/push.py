@@ -66,7 +66,37 @@ def run(args, project):
     print("Target: %s%s\n" % (env["label"], "   [DRY RUN]" if args.dry_run else ""))
     results = compare(project, env_name, client, manifest, args.paths or None,
                       progress_label="Checking against T4")
-    changed = [e for e in results if e["state"] == "changed"]
+    changed = [e for e in results if e["state"] in ("changed", "conflict", "behind")]
+    conflicts = [e for e in results if e["state"] == "conflict"]
+    behind = [e for e in results if e["state"] == "behind"]
+
+    # Both sides moved since the pull. Pushing discards whoever edited it in
+    # T4, and on a shared instance that is the likeliest way to lose work.
+    if conflicts and not args.ignore_conflicts:
+        print("%d file(s) changed in T4 as well as here since the last pull:\n"
+              % len(conflicts))
+        for entry in conflicts:
+            print("  %s" % entry["path"])
+        print("\nPushing would discard the T4 side. Look first:")
+        print("  t4 diff --show %s" % conflicts[0]["path"])
+        print("\nThen either take theirs    t4 pull --force <path>")
+        print("     or keep yours        t4 push --ignore-conflicts <path>")
+        if not behind:
+            return 2
+        print()
+
+    if behind:
+        # Only T4 moved. Pushing here puts the old version back, which looks
+        # like a successful deploy and is a silent revert.
+        print("%d file(s) changed in T4 but not here; pushing would revert "
+              "them:" % len(behind))
+        for entry in behind:
+            print("  %s" % entry["path"])
+        print("Run `t4 pull` to take those, or name the files you do mean "
+              "to push.\n")
+        changed = [e for e in changed if e["state"] != "behind"]
+        if not changed:
+            return 0
 
     for entry in [e for e in results if e["state"] == "error"]:
         print("  ! %s  %s" % (entry["path"], entry.get("error", "")))
@@ -93,7 +123,9 @@ def run(args, project):
     for index, entry in enumerate(changed, 1):
         meta = entry["meta"]
         print("=" * 72)
-        print("[%d/%d] %s" % (index, len(changed), entry["path"]))
+        print("[%d/%d] %s%s" % (index, len(changed), entry["path"],
+                                 "   *** ALSO CHANGED IN T4 ***"
+                                 if entry["state"] == "conflict" else ""))
         print("       %s id=%s field=%s  (%s)"
               % (meta["endpoint"], meta["id"], meta["field"], meta.get("name")))
         print("=" * 72)

@@ -5,7 +5,7 @@ import pathlib
 import urllib.error
 
 from .api import describe_http_error
-from .extract import read_text
+from .extract import digest, read_text
 from .progress import Progress
 
 MANIFEST = "_manifest.json"
@@ -105,7 +105,25 @@ def _compare(project, env_name, client, selected, bar):
             continue
         entry["record"] = record
         entry["remote"] = read_field(record, meta["field"]) or ""
-        entry["state"] = "same" if entry["remote"] == entry["local"] else "changed"
+
+        # Three-way, not two. The manifest records what the file looked like
+        # when it was pulled, so "we differ" can be told apart into who
+        # moved: you, T4, or both. Both is a conflict, and pushing it
+        # discards whatever someone else did in the CMS -- on a shared
+        # instance that is the likeliest way to lose work with this tool.
+        pulled = meta.get("sha")
+        entry["local_changed"] = bool(pulled) and digest(entry["local"]) != pulled
+        entry["remote_changed"] = bool(pulled) and digest(entry["remote"]) != pulled
+
+        if entry["remote"] == entry["local"]:
+            entry["state"] = "same"
+        elif entry["local_changed"] and entry["remote_changed"]:
+            entry["state"] = "conflict"
+        elif entry["remote_changed"] and not entry["local_changed"]:
+            # Only T4 moved: pushing would put the old version back.
+            entry["state"] = "behind"
+        else:
+            entry["state"] = "changed"
         results.append(entry)
     return results
 

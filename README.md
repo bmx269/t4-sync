@@ -1,5 +1,6 @@
 # t4-sync
 
+**A T4 CMS Local Development Tool.**
 Work on a Terminal Four site from your own computer: bring the templates down,
 edit them in a normal editor, see the result immediately, and send them back
 when you are happy.
@@ -204,6 +205,21 @@ writes to T4.
 
 `push` offers only files that genuinely differ, shows a diff, and asks per file
 (`y`/`N`/`q`). Every record is snapshotted to `_backup/` before being modified.
+
+**It tells you who moved.** The manifest records what each file looked like
+when it was pulled, so "these differ" splits three ways:
+
+| | |
+|---|---|
+| you changed it | the normal case — push it |
+| **T4 changed it, you did not** | pushing would put the old version back, a silent revert. `t4 pull` first |
+| **both changed it** | a conflict. Pushing discards whoever edited it in the CMS |
+
+A conflict stops the push and names the files; `--ignore-conflicts` proceeds
+and keeps your side. On a shared instance this is the likeliest way to lose
+work with this tool, so it is refused rather than warned about. The idea is
+borrowed from Salesforce DX source tracking, whose rule is that a deploy must
+not silently overwrite what changed in the org.
 Pushing is **disabled per environment by default** — set `"push_allowed": true`
 in `.t4/config.json` for the environments you want writable, and leave
 production off unless you mean it.
