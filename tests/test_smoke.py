@@ -2697,7 +2697,10 @@ class TestConflictDetection(unittest.TestCase):
         self.tmp.cleanup()
 
     def _entry(self, local, remote):
-        (self.env / "a.html").write_text(local, encoding="utf-8")
+        # newline="" like the tool itself: without it Windows translates \n
+        # to \r\n on write, the hash no longer matches what was recorded,
+        # and every file looks edited.
+        extract.write_text(self.env / "a.html", local)
         manifest = {"a.html": {"endpoint": "media", "id": 1, "field": "text",
                                "sha": extract.digest(self.pulled)}}
 
