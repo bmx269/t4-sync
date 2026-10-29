@@ -249,8 +249,8 @@ def setup(p):
 
 def app_panel(p):
     """What the control panel shows, drawn from the running thing."""
-    c = Canvas(880, 928, p)
-    c.box(16, 16, 848, 834, fill=p["bg"], width=2)
+    c = Canvas(880, 964, p)
+    c.box(16, 16, 848, 870, fill=p["bg"], width=2)
 
     # Header
     c.box(16, 16, 848, 40, fill=p["card"])
@@ -321,32 +321,41 @@ def app_panel(p):
         c.text(494, ry + 14, "push", size=9, anchor="middle", fill=p["accent"])
         ry += 26
 
-    c.box(588, 228, 264, 178)
+    c.box(588, 228, 264, 214)
     c.text(604, 250, "HISTORY", size=10, weight="700", fill=p["dim"])
-    hy = 274
+    hy = 272
+
+    def when_row(y, label, when, detail=None):
+        c.text(604, y, label, size=9.5, fill=p["dim"])
+        c.text(836, y, when, size=9.5, anchor="end")
+        if detail:
+            c.text(836, y + 11, detail, size=8, anchor="end", fill=p["dim"],
+                   mono=True)
+            return y + 24
+        return y + 18
+
     for label, when, detail in [
             ("Pulled", "2 hours ago", None),
             ("Pushed", "yesterday", "4 files"),
+            ("Edited", "20 minutes ago", "media/site.css")]:
+        hy = when_row(hy, label, when, detail)
+
+    # The panel keeps a running log beneath the per-kind summary.
+    c.text(604, hy + 12, "RECENT ACTIVITY", size=9, weight="700", fill=p["dim"])
+    hy += 30
+    for label, when, detail in [
             ("Committed", "7 hours ago", "a1b2c3d - 4 files"),
-            ("Edited", "20 minutes ago", "media/site.css"),
             ("Mapped", "34 minutes ago", "2801 sections")]:
-        c.text(604, hy, label, size=10, fill=p["dim"])
-        c.text(836, hy, when, size=10, anchor="end")
-        if detail:
-            c.text(836, hy + 12, detail, size=8.5, anchor="end", fill=p["dim"],
-                   mono=True)
-            hy += 26
-        else:
-            hy += 20
+        hy = when_row(hy, label, when, detail)
 
     # Tag builder
-    c.box(28, 418, 824, 296)
-    c.text(44, 440, "TAG BUILDER", size=10, weight="700", fill=p["dim"])
-    c.pill(126, 431, "48 CONTENT TYPES, 1920 TAGS READ", size=8)
-    c.text(44, 461, "Attributes come from the T4 tag reference; element names "
+    c.box(28, 454, 824, 296)
+    c.text(44, 476, "TAG BUILDER", size=10, weight="700", fill=p["dim"])
+    c.pill(126, 467, "48 CONTENT TYPES, 1920 TAGS READ", size=8)
+    c.text(44, 497, "Attributes come from the T4 tag reference; element names "
                     "from this project's own content types.", size=9.5,
            fill=p["dim"])
-    c.text(44, 474, "The content type is not named in the tag \u2014 a content "
+    c.text(44, 510, "The content type is not named in the tag \u2014 a content "
                     "tag names an element.", size=9.5, fill=p["dim"])
 
     fields = [("Tag", "content"), ("Content type", "Staff profile"),
@@ -354,14 +363,14 @@ def app_panel(p):
               ("Output", "Normal (inline) \u00b7 normal")]
     fx = 44
     for label, value in fields:
-        c.text(fx, 494, label, size=8.5, fill=p["dim"])
-        c.box(fx, 500, 186, 20, fill=p["bg"], radius=5)
-        c.text(fx + 8, 514, value, size=9)
-        c.text(fx + 174, 514, "\u25be", size=8, fill=p["dim"])
+        c.text(fx, 530, label, size=8.5, fill=p["dim"])
+        c.box(fx, 536, 186, 20, fill=p["bg"], radius=5)
+        c.text(fx + 8, 550, value, size=9)
+        c.text(fx + 174, 550, "\u25be", size=8, fill=p["dim"])
         fx += 196
 
     # The output explains itself in the documentation's own words.
-    c.text(44, 536, "Outputs the element, adopting the text style of the "
+    c.text(44, 572, "Outputs the element, adopting the text style of the "
                     "page.", size=9, fill=p["dim"])
 
     # Modifiers read as what they do.
@@ -372,7 +381,7 @@ def app_panel(p):
              ("Parse for Media Library t4 tags", "medialibrary (62)")],
             [("Escape quotes and newlines for JavaScript", "js-var (18)"),
              ("Encode email addresses to ASCII", "encode_emails (3)")]]
-    my = 562
+    my = 598
     for row in rows:
         mx = 44
         for label, name in row:
@@ -382,11 +391,11 @@ def app_panel(p):
             mx += 400
         my += 18
 
-    c.text(44, 630, "T4 tag", size=8.5, fill=p["dim"])
-    c.box(786, 620, 52, 16, fill=p["card"], radius=4)
-    c.text(812, 632, "copy", size=9, anchor="middle")
-    c.box(44, 636, 794, 18, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
-    c.runs(54, 649, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
+    c.text(44, 666, "T4 tag", size=8.5, fill=p["dim"])
+    c.box(786, 656, 52, 16, fill=p["card"], radius=4)
+    c.text(812, 668, "copy", size=9, anchor="middle")
+    c.box(44, 672, 794, 18, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.runs(54, 685, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
                      ("=", p["code_fg"]), ('"content"', "#9ece6a"),
                      (" name", "#e0af68"), ("=", p["code_fg"]),
                      ('"Job title"', "#9ece6a"), (" output", "#e0af68"),
@@ -395,38 +404,38 @@ def app_panel(p):
 
     # Tasks, and the log the running one writes into.
     # The panel shows both syntaxes; the drawing showed only one.
-    c.text(44, 672, "Handlebars", size=8.5, fill=p["dim"])
-    c.box(786, 662, 52, 16, fill=p["card"], radius=4)
-    c.text(812, 674, "copy", size=9, anchor="middle")
-    c.box(44, 678, 794, 18, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
-    c.runs(54, 691, [('{{element name="Job title"}}', "#bb9af7")],
+    c.text(44, 708, "Handlebars", size=8.5, fill=p["dim"])
+    c.box(786, 698, 52, 16, fill=p["card"], radius=4)
+    c.text(812, 710, "copy", size=9, anchor="middle")
+    c.box(44, 714, 794, 18, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.runs(54, 727, [('{{element name="Job title"}}', "#bb9af7")],
            size=9, mono=True)
-    c.text(44, 712, "A layout is either Standard or Handlebars. T4 will not "
+    c.text(44, 748, "A layout is either Standard or Handlebars. T4 will not "
                     "evaluate T4 tags inside a Handlebars layout.", size=8.5,
            fill=p["dim"])
 
-    c.box(28, 726, 824, 112)
-    c.text(44, 748, "TASKS", size=10, weight="700", fill=p["dim"])
-    c.text(44, 766, "Nothing running.", size=10, fill=p["dim"])
-    c.text(44, 790, "OUTPUT", size=10, weight="700", fill=p["dim"])
-    c.box(100, 781, 26, 12, fill=p["bg"], radius=999, width=1)
-    c.box(778, 780, 54, 16, fill=p["bg"], stroke=p["warn"], radius=5,
+    c.box(28, 762, 824, 112)
+    c.text(44, 784, "TASKS", size=10, weight="700", fill=p["dim"])
+    c.text(44, 802, "Nothing running.", size=10, fill=p["dim"])
+    c.text(44, 826, "OUTPUT", size=10, weight="700", fill=p["dim"])
+    c.box(100, 817, 26, 12, fill=p["bg"], radius=999, width=1)
+    c.box(778, 816, 54, 16, fill=p["bg"], stroke=p["warn"], radius=5,
           dash="3 3", width=1)
-    c.text(805, 792, "Stop", size=9, anchor="middle", fill=p["warn"])
-    c.box(44, 800, 788, 26, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
-    c.text(56, 817, "Pick an action to begin.", size=9.5, mono=True,
+    c.text(805, 828, "Stop", size=9, anchor="middle", fill=p["warn"])
+    c.box(44, 836, 788, 26, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.text(56, 853, "Pick an action to begin.", size=9.5, mono=True,
            fill=p["code_fg"])
 
     # The footer says where this runs, what it is not, and where it lives.
-    c.text(28, 862, "Every button runs the matching t4 command as a "
+    c.text(28, 898, "Every button runs the matching t4 command as a "
                     "subprocess in ~/Sites/MySite. Tasks run side by side; "
                     "only commands", size=8.5, fill=p["dim"])
-    c.text(28, 874, "writing the same files wait for each other.", size=8.5,
+    c.text(28, 910, "writing the same files wait for each other.", size=8.5,
            fill=p["dim"])
-    c.text(28, 892, "t4-sync is an independent, unofficial tool. Not "
+    c.text(28, 928, "t4-sync is an independent, unofficial tool. Not "
                     "produced, endorsed or supported by TERMINALFOUR "
                     "Solutions Ltd.", size=8.5, fill=p["dim"])
-    c.runs(28, 910, [("Built on GitHub with ", p["dim"]), ("\u2665", "#e0536b"),
+    c.runs(28, 946, [("Built on GitHub with ", p["dim"]), ("\u2665", "#e0536b"),
                      ("  \u00b7  github.com/bmx269/t4-sync", p["accent"])],
            size=8.5)
     return c
