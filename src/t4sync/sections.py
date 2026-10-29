@@ -178,7 +178,7 @@ class ContentItems:
 def by_url_path(sections):
     """Map a published URL path to its section record.
 
-    Section paths are rooted at the CMS tree ("/UFV/about"), while published
+    Section paths are rooted at the CMS tree ("/SiteRoot/about"), while published
     URLs are rooted at the channel ("/about/"). The leading component is the
     site root, so both the full path and the path without it are indexed.
     """

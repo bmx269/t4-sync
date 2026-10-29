@@ -1548,8 +1548,8 @@ class TestLayoutGrouping(unittest.TestCase):
 class TestOneSourceOfTruth(unittest.TestCase):
     """An override of a pulled file is two copies; the tool must not help."""
 
-    MANIFEST = {"media/ufv-v.css": {"endpoint": "media", "id": 1,
-                                    "field": "text", "name": "ufv-v.css"},
+    MANIFEST = {"media/site.css": {"endpoint": "media", "id": 1,
+                                    "field": "text", "name": "site.css"},
                 "media/site.js": {"endpoint": "media", "id": 2,
                                   "field": "text", "name": "site.js"}}
 
@@ -1558,7 +1558,7 @@ class TestOneSourceOfTruth(unittest.TestCase):
         self.root = pathlib.Path(self.tmp.name)
         self.env = self.root / "t4-source" / "test"
         (self.env / "media").mkdir(parents=True)
-        (self.env / "media" / "ufv-v.css").write_text("a{}", encoding="utf-8")
+        (self.env / "media" / "site.css").write_text("a{}", encoding="utf-8")
         (self.env / "_manifest.json").write_text(json.dumps(self.MANIFEST),
                                                  encoding="utf-8")
         self.overrides = self.root / "overrides"
@@ -1574,14 +1574,14 @@ class TestOneSourceOfTruth(unittest.TestCase):
         return path
 
     def test_an_override_of_a_pulled_file_is_reported(self):
-        self._override("media/web/b3/css/ufv-v.css")
+        self._override("media/web/css/site.css")
         self.assertEqual(serve.shadowing_overrides(str(self.overrides), self.media),
-                         ["media/web/b3/css/ufv-v.css"])
+                         ["media/web/css/site.css"])
 
     def test_matching_is_by_filename_not_path(self):
         # The published URL and the pulled file agree on the name, not the
         # path, which is also how serving resolves it.
-        self._override("totally/different/place/ufv-v.css")
+        self._override("totally/different/place/site.css")
         self.assertEqual(len(serve.shadowing_overrides(str(self.overrides), self.media)), 1)
 
     def test_an_override_of_something_not_pulled_is_fine(self):
@@ -1915,11 +1915,11 @@ class TestServePicksTheRightMirror(unittest.TestCase):
         (self.root / ".t4" / "config.json").write_text(json.dumps({
             "source_dir": "t4-source", "mirror_dir": "site-mirror",
             "environments": {
-                "test": {"base": "https://cms", "published_url": "https://webtest.ufv.ca"},
-                "prod": {"base": "https://cms", "published_url": "https://www.ufv.ca"}},
+                "test": {"base": "https://cms", "published_url": "https://webtest.example.edu"},
+                "prod": {"base": "https://cms", "published_url": "https://www.example.edu"}},
         }), encoding="utf-8")
         self.project = Project(self.root)
-        for host in ("webtest.ufv.ca", "www.ufv.ca"):
+        for host in ("webtest.example.edu", "www.example.edu"):
             page = self.root / "site-mirror" / host / "index.html"
             page.parent.mkdir(parents=True)
             page.write_text("<html></html>", encoding="utf-8")
@@ -1946,13 +1946,13 @@ class TestServePicksTheRightMirror(unittest.TestCase):
     def test_prod_serves_the_prod_mirror(self):
         # "webtest" sorts before "www", so picking the first directory served
         # the test site for prod -- silently, with prod source mapped over it.
-        self.assertEqual(self._served("prod"), "www.ufv.ca")
+        self.assertEqual(self._served("prod"), "www.example.edu")
 
     def test_test_serves_the_test_mirror(self):
-        self.assertEqual(self._served("test"), "webtest.ufv.ca")
+        self.assertEqual(self._served("test"), "webtest.example.edu")
 
     def test_the_host_comes_from_the_published_url(self):
-        self.assertEqual(site.host_of(self.project, "prod"), "www.ufv.ca")
+        self.assertEqual(site.host_of(self.project, "prod"), "www.example.edu")
         self.assertIsNone(site.host_of(Project(self.root), "nope")
                           if False else None)
 
@@ -2622,3 +2622,46 @@ class TestDocsSite(unittest.TestCase):
         rendered, _headings = self.site.render("Use `**not bold**` here.")
         self.assertIn("<code>**not bold**</code>", rendered)
         self.assertNotIn("<strong>", rendered)
+
+
+class TestDiagramContent(unittest.TestCase):
+    """A public repo's illustrations must name no client and no person."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    def _svg_text(self):
+        import xml.etree.ElementTree as ET
+        ns = "{http://www.w3.org/2000/svg}"
+        for path in (self.ROOT / "docs" / "img").glob("*.svg"):
+            for element in ET.parse(path).getroot().iter(ns + "text"):
+                yield path.name, "".join(element.itertext())
+
+    def test_no_real_hostnames(self):
+        # example.edu and 127.0.0.1 are placeholders; anything else is a
+        # site someone actually runs.
+        for name, text in self._svg_text():
+            for found in re.findall(r"\b[\w.-]+\.(?:ca|com|edu|org|uk)\b", text):
+                self.assertTrue(found.endswith("example.edu"),
+                                "%s names %s" % (name, found))
+
+    def test_labels_do_not_overlap(self):
+        # Two captions side by side printed over each other and looked fine
+        # in the source. Geometry is checkable; a rendered picture is not.
+        import xml.etree.ElementTree as ET
+        ns = "{http://www.w3.org/2000/svg}"
+        for path in (self.ROOT / "docs" / "img").glob("*-light.svg"):
+            labels = []
+            for element in ET.parse(path).getroot().iter(ns + "text"):
+                size = float(element.get("font-size"))
+                text = "".join(element.itertext())
+                mono = "mono" in element.get("font-family")
+                width = len(text) * size * (0.60 if mono else 0.52)
+                x, y = float(element.get("x")), float(element.get("y"))
+                anchor = element.get("text-anchor")
+                left = (x - width / 2 if anchor == "middle"
+                        else x - width if anchor == "end" else x)
+                labels.append((left, left + width, y, text))
+            for index, (l1, r1, y1, t1) in enumerate(labels):
+                for l2, r2, y2, t2 in labels[index + 1:]:
+                    if abs(y1 - y2) < 9 and l1 < r2 - 2 and l2 < r1 - 2:
+                        self.fail("%s: %r overlaps %r" % (path.name, t1, t2))

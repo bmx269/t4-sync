@@ -102,7 +102,7 @@ def _esc(value):
 
 def overview(p):
     """Where things live, and what moves between them."""
-    c = Canvas(880, 430, p)
+    c = Canvas(880, 440, p)
 
     c.box(40, 30, 330, 92, fill=p["accent_soft"], stroke=p["accent"])
     c.text(56, 56, "TERMINAL FOUR", size=11, weight="700", fill=p["accent"])
@@ -114,30 +114,41 @@ def overview(p):
     c.text(526, 78, "the finished pages visitors see", size=12.5)
     c.text(526, 98, "webtest.example.edu", size=11.5, fill=p["dim"], mono=True)
 
-    c.arrow(150, 128, 150, 196, label="t4 pull")
-    c.text(158, 178, "bring templates down", size=10.5, fill=p["dim"])
-    c.arrow(262, 196, 262, 128, label="t4 push", label_side="left")
-    c.text(254, 178, "send changes back", size=10.5, fill=p["dim"], anchor="end")
-    c.arrow(675, 128, 675, 196, stroke=p["ok"], label="t4 mirror")
-    c.text(683, 178, "copy the pages (one way)", size=10.5, fill=p["dim"])
-
-    c.box(40, 204, 800, 196, width=2)
-    c.text(62, 234, "YOUR COMPUTER", size=11, weight="700", fill=p["dim"])
-
-    c.box(62, 250, 360, 60, fill=p["bg"])
-    c.text(78, 274, "t4-source/", size=12.5, weight="600", mono=True)
-    c.text(78, 294, "the templates - these are what you edit", size=11.5,
+    c.arrow(120, 130, 120, 170)
+    c.text(120, 186, "t4 pull", size=11, weight="700", anchor="middle",
+           fill=p["accent"], mono=True)
+    c.text(120, 200, "bring templates down", size=10, anchor="middle",
            fill=p["dim"])
 
-    c.box(458, 250, 360, 60, fill=p["bg"])
-    c.text(474, 274, "site-mirror/", size=12.5, weight="600", mono=True)
-    c.text(474, 294, "a copy of the finished pages", size=11.5, fill=p["dim"])
+    c.arrow(292, 170, 292, 130)
+    c.text(292, 186, "t4 push", size=11, weight="700", anchor="middle",
+           fill=p["accent"], mono=True)
+    c.text(292, 200, "send changes back", size=10, anchor="middle",
+           fill=p["dim"])
 
-    c.box(62, 326, 756, 56, fill=p["accent_soft"], stroke=p["accent"])
-    c.text(78, 350, "t4 serve", size=12.5, weight="700", mono=True,
+    c.arrow(675, 130, 675, 170, stroke=p["ok"])
+    c.text(675, 186, "t4 mirror", size=11, weight="700", anchor="middle",
+           fill=p["ok"], mono=True)
+    c.text(675, 200, "copy the pages (one way)", size=10, anchor="middle",
+           fill=p["dim"])
+
+    c.box(40, 214, 800, 196, width=2)
+    c.text(62, 244, "YOUR COMPUTER", size=11, weight="700", fill=p["dim"])
+
+    c.box(62, 260, 360, 60, fill=p["bg"])
+    c.text(78, 284, "t4-source/", size=12.5, weight="600", mono=True)
+    c.text(78, 304, "the templates - these are what you edit", size=11.5,
+           fill=p["dim"])
+
+    c.box(458, 260, 360, 60, fill=p["bg"])
+    c.text(474, 284, "site-mirror/", size=12.5, weight="600", mono=True)
+    c.text(474, 304, "a copy of the finished pages", size=11.5, fill=p["dim"])
+
+    c.box(62, 336, 756, 56, fill=p["accent_soft"], stroke=p["accent"])
+    c.text(78, 360, "t4 serve", size=12.5, weight="700", mono=True,
            fill=p["accent"])
-    c.text(148, 350, "http://127.0.0.1:8321", size=12, mono=True)
-    c.text(78, 370, "the two combined: real pages, with your edits applied "
+    c.text(148, 360, "http://127.0.0.1:8321", size=12, mono=True)
+    c.text(78, 380, "the two combined: real pages, with your edits applied "
                     "as you save", size=11.5, fill=p["dim"])
     return c
 
@@ -242,8 +253,8 @@ def app_panel(p):
     c.box(36, 226, 540, 150)
     c.text(54, 250, "Changes", size=12, weight="700")
     c.text(124, 250, "5 changed", size=11, fill=p["dim"])
-    rows = [("media/ufv-v.css", "media #971148"),
-            ("pageLayout/m-open.footer.html", "pageLayout #1027039")]
+    rows = [("media/site.css", "media #4120"),
+            ("pageLayout/standard.footer.html", "pageLayout #1180")]
     ry = 272
     for path, record in rows:
         c.box(54, ry, 13, 13, fill=p["accent"], stroke=p["accent"], radius=3)
@@ -289,12 +300,12 @@ def inspector(p):
            fill=p["dim"])
     c.box(52, 124, 346, 120, fill=p["card"], stroke=p["accent"], width=2.5,
           dash="5 4")
-    c.text(68, 146, "Contact . Elaine Newman", size=10.5, weight="700",
+    c.text(68, 146, "Staff profile . A. Example", size=10.5, weight="700",
            fill=p["accent"])
     c.box(68, 156, 60, 60, fill=p["bg"], radius=4)
     c.text(98, 191, "photo", size=10, anchor="middle", fill=p["dim"])
-    c.text(144, 178, "Elaine Newman", size=12.5, weight="600")
-    c.text(144, 196, "Academic Advisor", size=11.5, fill=p["dim"])
+    c.text(144, 178, "A. Example", size=12.5, weight="600")
+    c.text(144, 196, "Job title", size=11.5, fill=p["dim"])
     c.text(52, 272, "click any element", size=11.5, fill=p["accent"],
            weight="600")
 
@@ -311,8 +322,8 @@ def inspector(p):
 
     c.text(486, 150, "Selected", size=11, weight="700", fill=p["dim"])
     c.parts.append('<circle cx="492" cy="172" r="5" fill="%s"/>' % p["accent"])
-    c.text(506, 176, "Contact . Elaine Newman", size=11.5, weight="600")
-    c.text(506, 194, "contentLayout/contact--texthtml.html", size=10.5,
+    c.text(506, 176, "Staff profile . A. Example", size=11.5, weight="600")
+    c.text(506, 194, "contentLayout/staff-profile--texthtml.html", size=10.5,
            mono=True, fill=p["dim"])
     for index, label in enumerate(("edit", "folder", "copy")):
         bx = 506 + index * 62
@@ -320,8 +331,8 @@ def inspector(p):
         c.text(bx + 27, 216, label, size=10, anchor="middle")
 
     c.parts.append('<circle cx="492" cy="246" r="5" fill="%s"/>' % p["dim"])
-    c.text(506, 250, "page layout u_webpage", size=11.5, weight="600")
-    c.text(506, 268, "pageLayout/u-webpage.production.header.html", size=10.5,
+    c.text(506, 250, "page layout standard", size=11.5, weight="600")
+    c.text(506, 268, "pageLayout/standard.header.html", size=10.5,
            mono=True, fill=p["dim"])
     for index, label in enumerate(("edit", "folder", "copy")):
         bx = 506 + index * 62

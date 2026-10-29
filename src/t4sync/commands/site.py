@@ -103,7 +103,7 @@ def run_serve(args, project):
         candidates = mirrors()
         tried = False
         # Match the environment first. Picking the alphabetically first
-        # directory meant `t4 serve --env prod` served webtest.ufv.ca,
+        # directory meant `t4 serve --env prod` served the test mirror,
         # because "webtest" sorts before "www" -- the wrong site, silently,
         # with the prod source and inspector mapped over it.
         wanted = host_of(project, env_name)
