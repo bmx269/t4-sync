@@ -842,7 +842,7 @@ class TestLocalPath(unittest.TestCase):
     def test_single_segment(self):
         self.assertEqual(local_path("base", "x.css"), os.path.join("base", "x.css"))
 
-    def test_normalised(self):
+    def test_normalized(self):
         self.assertEqual(local_path("base", "a/../b.css"),
                          os.path.join("base", "b.css"))
 
@@ -2868,3 +2868,69 @@ class TestNoCustomerContent(unittest.TestCase):
                                    "terminalfour.com", "github.io",
                                    "www.w3.org")),
                     "%s references %s" % (name, host))
+
+
+class TestSyntaxHighlighting(unittest.TestCase):
+    """Code is highlighted by a tokenizer here, not by a fetched library."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "site_builder", cls.ROOT / "docs" / "site.py")
+        cls.site = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.site)
+
+    def test_shell_commands_and_flags_are_marked(self):
+        out = self.site.highlight("t4 pull --force   # bring it down", "sh")
+        self.assertIn('class="t-command"', out)
+        self.assertIn('class="t-flag"', out)
+        self.assertIn('class="t-comment"', out)
+
+    def test_t4_tags_are_marked(self):
+        out = self.site.highlight('<t4 type="content" name="Body" />', "html")
+        self.assertIn('class="t-tag"', out)
+        self.assertIn('class="t-attr"', out)
+        self.assertIn('class="t-string"', out)
+
+    def test_handlebars_is_marked(self):
+        out = self.site.highlight('{{element name="Heading"}}', "handlebars")
+        self.assertIn('class="t-hbs"', out)
+
+    def test_json_keys_are_told_from_values(self):
+        out = self.site.highlight('{"push_allowed": true}', "json")
+        self.assertIn('class="t-key"', out)
+        self.assertIn('class="t-literal"', out)
+
+    def test_an_unknown_language_is_escaped_not_dropped(self):
+        out = self.site.highlight("a < b && c", "klingon")
+        self.assertIn("&lt;", out)
+        self.assertIn("&amp;&amp;", out)
+        self.assertNotIn("<span", out)
+
+    def test_markup_inside_code_cannot_escape_its_span(self):
+        # Escaping happens as each token is emitted, never before, so a
+        # token's text cannot be mistaken for the markup wrapping it.
+        out = self.site.highlight('<t4 name="</span><script>" />', "html")
+        self.assertNotIn("<script>", out)
+        self.assertIn("&lt;script&gt;", out)
+
+    def test_the_site_needs_no_highlighting_library(self):
+        out = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(out, ignore_errors=True))
+        self.site.build(str(out))
+        for page in out.glob("*.html"):
+            text = page.read_text(encoding="utf-8")
+            for probe in ("highlight.js", "prism", "cdn.jsdelivr", "unpkg"):
+                self.assertNotIn(probe, text.lower(), page.name)
+
+    def test_the_panel_builds_highlighted_tags_as_nodes(self):
+        page = app.PAGE % {"token": "x"}
+        js = page.split("<script>")[1].split("</scr" + "ipt>")[0]
+        # Element names come from the CMS; innerHTML would make a content
+        # type called <script> a problem rather than a curiosity.
+        self.assertIn("function paint(", js)
+        self.assertIn('span.className = "t-"', js)
+        self.assertNotIn("tg-tag\").innerHTML", js)

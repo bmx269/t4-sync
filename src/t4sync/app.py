@@ -315,7 +315,7 @@ class AppHandler(BaseHTTPRequestHandler):
 
     # -- plumbing ----------------------------------------------------------
 
-    def _authorised(self):
+    def _authorized(self):
         sent = (self.headers.get("X-T4-Token")
                 or self._query().get("t", [None])[0])
         return bool(self.token) and secrets.compare_digest(str(sent), self.token)
@@ -362,11 +362,11 @@ class AppHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self._path()
         if path in ("/", "/index.html"):
-            if not self._authorised():
+            if not self._authorized():
                 return self._send(403, FORBIDDEN, "text/html; charset=utf-8")
             return self._send(200, PAGE % {"token": html.escape(self.token)},
                               "text/html; charset=utf-8")
-        if not self._authorised():
+        if not self._authorized():
             return self._json({"error": "bad or missing token"}, 403)
         if path == "/api/state":
             return self._json(state(self.project, self.jobs))
@@ -381,7 +381,7 @@ class AppHandler(BaseHTTPRequestHandler):
         return self._json({"error": "not found"}, 404)
 
     def do_POST(self):
-        if not self._authorised():
+        if not self._authorized():
             return self._json({"error": "bad or missing token"}, 403)
         path = self._path()
         if path == "/api/run":
@@ -648,7 +648,7 @@ def run_app(project, port=DEFAULT_PORT, host="127.0.0.1", open_browser=True):
         print("t4-sync control panel")
         print("Project   %s" % project.root)
         print("URL       %s" % url)
-        print("\nThe token in that URL is what authorises the page; it is new")
+        print("\nThe token in that URL is what authorizes the page; it is new")
         print("each time this starts. Ctrl-C to stop.")
         if open_browser:
             threading.Thread(target=webbrowser.open, args=(url,),
@@ -668,7 +668,7 @@ FORBIDDEN = """<!doctype html><meta charset="utf-8">
 <style>body{font:14px/1.6 system-ui,sans-serif;margin:3rem auto;max-width:34rem;
 padding:0 1rem;color:#1a1d25}code{background:#f1f3f7;padding:.1rem .3rem;
 border-radius:3px}</style>
-<h1>Not authorised</h1>
+<h1>Not authorized</h1>
 <p>This page needs the one-time token printed by <code>t4 app</code>. Open the
 full URL from that command's output rather than typing the address by hand.</p>
 <p>The token exists so that another page in your browser cannot reach this one
@@ -736,7 +736,13 @@ main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
 .taghead{display:flex;justify-content:space-between;align-items:baseline;
  font-size:11px;margin:.5rem 0 .2rem}
 .tagcode{display:block;background:#0b0d12;color:#dbe1ee;border-radius:6px;
- padding:.5rem .6rem;font-size:12px;white-space:pre-wrap;word-break:break-all}
+ padding:.5rem .6rem;font-size:12px;white-space:pre-wrap;word-break:break-all;
+ font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.t-tag{color:#f7768e}
+.t-attr{color:#e0af68}
+.t-string{color:#9ece6a}
+.t-hbs{color:#bb9af7;font-weight:600}
+.t-comment{color:#7d8799;font-style:italic}
 @media (max-width:980px){
  main{grid-template-columns:minmax(0,1fr);
   grid-template-areas:"project" "changes" "history" "build" "tasks"}
@@ -1765,12 +1771,61 @@ function fillElements() {
   }));
 }
 
+// Tokenised into DOM nodes rather than assembled as an HTML string: the
+// element names come from the CMS, so a content type named after a script
+// tag would be a problem rather than a curiosity if this used innerHTML.
+var TOKENS = [
+  ["hbs", /\{\{[^}]*\}\}/y],
+  ["comment", /<!--[\s\S]*?-->/y],
+  ["tag", /<\/?[\w:-]+|\/?>/y],
+  ["string", /"[^"]*"|'[^']*'/y],
+  ["attr", /[\w:-]+(?==)/y]
+];
+
+function paint(target, code) {
+  // Try every token at every position and accumulate the rest as plain
+  // text. Scanning ahead for "the next interesting character" was subtly
+  // wrong -- it landed on the "=" rather than the start of the attribute
+  // name before it, so attributes never matched.
+  target.textContent = "";
+  var at = 0, plain = "";
+
+  function flush() {
+    if (plain) { target.appendChild(text_(plain)); plain = ""; }
+  }
+
+  while (at < code.length) {
+    var hit = null;
+    for (var i = 0; i < TOKENS.length && !hit; i++) {
+      TOKENS[i][1].lastIndex = at;
+      var m = TOKENS[i][1].exec(code);
+      if (m && m[0]) hit = [TOKENS[i][0], m[0]];
+    }
+    if (hit) {
+      flush();
+      var span = document.createElement("span");
+      span.className = "t-" + hit[0];
+      span.appendChild(text_(hit[1]));
+      target.appendChild(span);
+      at += hit[1].length;
+    } else {
+      plain += code.charAt(at);
+      at += 1;
+    }
+  }
+  flush();
+}
+
 function renderTag() {
   if (!tagData) return;
   api("/api/tag", {method: "POST", body: JSON.stringify(tagSpec())})
     .then(function (d) {
-      el("tg-tag").textContent = d.tag || "";
-      el("tg-hbs").textContent = d.handlebars || "(no Handlebars equivalent)";
+      paint(el("tg-tag"), d.tag || "");
+      if (d.handlebars) {
+        paint(el("tg-hbs"), d.handlebars);
+      } else {
+        el("tg-hbs").textContent = "(no Handlebars equivalent)";
+      }
       el("tg-note").textContent = [d.note, tagData.mixing_warning]
         .filter(Boolean).join("  ");
     })

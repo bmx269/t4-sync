@@ -1226,7 +1226,7 @@ SCRIPT = """
   })();
 
   function componentAt(node) {
-    // Nearest enclosing element that collect() recognised. Walking up rather
+    // Nearest enclosing element that collect() recognized. Walking up rather
     // than matching exactly: a click lands on a heading or a link inside a
     // component far more often than on the component's own box.
     var items = collect();

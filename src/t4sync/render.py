@@ -445,7 +445,7 @@ def preview_every(page, published_src, edited_src, span_markers=None,
     """
     # T4 stores layout source with CRLF but publishes output with LF, so the
     # literal runs never match byte for byte and alignment fails with
-    # "literal chunk not found". Normalised for the comparison only: the files
+    # "literal chunk not found". Normalized for the comparison only: the files
     # on disk keep their CRLF, because `t4 push` has to send back what it
     # pulled rather than rewriting every line of the record.
     published_src = published_src.replace("\r\n", "\n")

@@ -29,7 +29,7 @@ def run(args, project=None):
     config_path = root / CONFIG_DIR / CONFIG_FILE
 
     if config_path.is_file() and not args.force:
-        print("Already initialised: %s" % config_path)
+        print("Already initialized: %s" % config_path)
         print("Use --force to overwrite.")
         return 0
 
@@ -51,7 +51,7 @@ def run(args, project=None):
             fh.write("\n" + block)
         print("Updated .gitignore")
 
-    print("Initialised %s" % config_path)
+    print("Initialized %s" % config_path)
     print("\nNext:")
     print("  t4 env add test https://myweb-test.example.edu")
     print("  t4 token set test")

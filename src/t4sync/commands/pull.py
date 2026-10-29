@@ -110,7 +110,7 @@ def pull_env(project, env_name, only=None, detail=True, timeout=60,
                         if v.get("endpoint") not in (only or [])}
         existing.update(manifest)
         # A file kept because of local edits keeps its OLD hash, so the edit is
-        # still recognised as an edit on the next run rather than being adopted.
+        # still recognized as an edit on the next run rather than being adopted.
         for rel in kept_total:
             if rel in previous and rel in existing:
                 existing[rel]["sha"] = previous[rel]["sha"]
@@ -266,7 +266,7 @@ def pull_media(client, root, manifest, env, previous, force=False, binary=False)
             # The media item's own name carries its extension (v8.css,
             # app.js), so use it rather than slugging it into a .html file --
             # the extension is what gives an editor its syntax highlighting,
-            # and what makes the file recognisable as the asset it is.
+            # and what makes the file recognizable as the asset it is.
             rel = "media/%s" % media_filename(record.get("name"), media_id)
             target = root / rel
             prior = previous.get(rel, {}).get("sha")

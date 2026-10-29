@@ -9,7 +9,7 @@ becomes a page, each `###` an entry in that page's contents.
 
 The Markdown support here is a subset -- exactly what the README uses, and no
 more. A general parser would be a dependency or a thousand lines, and neither
-is worth it to render one file we control. Anything unrecognised is passed
+is worth it to render one file we control. Anything unrecognized is passed
 through as HTML, which is also how the `<picture>` blocks survive.
 
 Standard library only, like the rest of the project.
@@ -27,7 +27,7 @@ ROOT = HERE.parent
 # so the walkthrough is not buried in them.
 GROUPS = [
     ("Start here", ["What it does", "Getting started"]),
-    ("Using it", ["How it is organised", "Commands"]),
+    ("Using it", ["How it is organized", "Commands"]),
     ("Knowing the limits", ["What this does not do", "Things that will bite you"]),
     ("The project", ["Development", "Licence"]),
 ]
@@ -90,7 +90,7 @@ def render(markdown):
                 index += 1
             out.append('<pre class="code%s"><code>%s</code></pre>'
                        % (" lang-" + slug(language) if language else "",
-                          html.escape("\n".join(body))))
+                          highlight("\n".join(body), language)))
             index += 1
             continue
 
@@ -171,6 +171,81 @@ def render(markdown):
 
     flush()
     return "\n".join(out), headings
+
+
+# -- syntax highlighting ------------------------------------------------
+#
+# A tokeniser per language rather than a dependency: the README uses five,
+# and highlighting them badly is worse than not highlighting at all, so each
+# pattern set is deliberately small and only claims what it is sure of.
+#
+# Everything is escaped as it is emitted, never before, so a token's text
+# cannot be mistaken for the markup wrapping it.
+
+GRAMMARS = {
+    "sh": [
+        ("comment", r"#[^\n]*"),
+        ("string", r"\"[^\"\n]*\"|'[^'\n]*'"),
+        ("flag", r"(?<=\s)--?[\w-]+"),
+        ("command", r"^(?:\$ )?(?:t4|git|python3|cd|mkdir|open|curl)\b"),
+        ("path", r"(?<![\w/])(?:~|\./)?[\w.-]+/[\w./-]+"),
+    ],
+    "powershell": [
+        ("comment", r"#[^\n]*"),
+        ("string", r"\"[^\"\n]*\""),
+        ("flag", r"(?<=\s)-[A-Za-z]\w*"),
+        ("command", r"^(?:\.\\)?[\w.-]+\b"),
+    ],
+    "html": [
+        ("comment", r"&lt;!--.*?--&gt;|<!--.*?-->"),
+        ("hbs", r"\{\{[^}]*\}\}"),
+        ("tag", r"</?[\w:-]+|/?>"),
+        ("attr", r"[\w:-]+(?==)"),
+        ("string", r"\"[^\"]*\"|'[^']*'"),
+    ],
+    "json": [
+        ("key", r"\"[^\"]*\"(?=\s*:)"),
+        ("string", r"\"[^\"]*\""),
+        ("number", r"\b-?\d+(?:\.\d+)?\b"),
+        ("literal", r"\b(?:true|false|null)\b"),
+    ],
+    "diff": [
+        ("hunk", r"^@@.*$"),
+        ("add", r"^\+.*$"),
+        ("del", r"^-.*$"),
+    ],
+    "handlebars": [
+        ("comment", r"\{\{!.*?\}\}"),
+        ("hbs", r"\{\{[^}]*\}\}"),
+        ("tag", r"</?[\w:-]+|/?>"),
+        ("attr", r"[\w:-]+(?==)"),
+        ("string", r"\"[^\"]*\"|'[^']*'"),
+    ],
+}
+GRAMMARS["console"] = GRAMMARS["sh"]
+GRAMMARS["bash"] = GRAMMARS["sh"]
+GRAMMARS["hbs"] = GRAMMARS["handlebars"]
+
+_COMPILED = {
+    name: re.compile("|".join("(?P<%s>%s)" % (kind, pattern)
+                              for kind, pattern in rules), re.S | re.M)
+    for name, rules in GRAMMARS.items()
+}
+
+
+def highlight(code, language):
+    """Wrap recognized tokens in spans. Unknown languages pass through."""
+    grammar = _COMPILED.get((language or "").lower())
+    if not grammar:
+        return html.escape(code)
+    out, last = [], 0
+    for match in grammar.finditer(code):
+        out.append(html.escape(code[last:match.start()]))
+        out.append('<span class="t-%s">%s</span>'
+                   % (match.lastgroup, html.escape(match.group(0))))
+        last = match.end()
+    out.append(html.escape(code[last:]))
+    return "".join(out)
 
 
 # -- the site ------------------------------------------------------------
@@ -307,6 +382,19 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;
 pre.code{background:var(--code-bg);color:var(--code-fg);padding:.8rem 1rem;
  border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.55}
 pre.code code{background:none;padding:0;color:inherit;font-size:inherit}
+.t-comment{color:#7d8799;font-style:italic}
+.t-string{color:#9ece6a}
+.t-flag{color:#e0af68}
+.t-command{color:#7aa2f7;font-weight:600}
+.t-path{color:#89ddff}
+.t-tag{color:#f7768e}
+.t-attr{color:#e0af68}
+.t-hbs{color:#bb9af7;font-weight:600}
+.t-key{color:#7aa2f7}
+.t-number,.t-literal{color:#ff9e64}
+.t-hunk{color:#7aa2f7;font-weight:600}
+.t-add{color:#9ece6a}
+.t-del{color:#f7768e}
 table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:14px;
  display:block;overflow-x:auto}
 th,td{border:1px solid var(--line);padding:.4rem .6rem;text-align:left;

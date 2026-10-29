@@ -296,7 +296,7 @@ class MediaSources:
         """Local file for a published asset URL, or None.
 
         Manifest keys always use "/" -- they are portable identifiers, not
-        filesystem paths -- so the result is normalised. Windows tolerates the
+        filesystem paths -- so the result is normalized. Windows tolerates the
         mixed separators that joining produces, but anything comparing the
         path afterwards does not.
         """

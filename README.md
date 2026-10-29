@@ -151,7 +151,7 @@ Once set up, a day looks like this:
 | Let the inspector name everything | `t4 sections` — slow, but once only |
 | Work on production | Nothing: production is read-only until deliberately enabled |
 
-## How it is organised
+## How it is organized
 
 A **project** is any directory containing `.t4/config.json`, found by walking
 up from the working directory — the way git finds `.git`. The tool is generic;
@@ -176,6 +176,65 @@ your-project/
 
 `t4 init` writes a `.gitignore` block covering tokens, raw responses, backups
 and the mirror.
+
+### Every setting, and its default
+
+`t4 init` writes only `source_dir`, `mirror_dir` and `overrides_dir`; the rest
+have defaults and are there when you want them. Nothing here is secret —
+tokens live in `.t4/tokens/`, one file each, and are never written to this
+file.
+
+```json
+{
+  "source_dir": "t4-source",
+  "mirror_dir": "site-mirror",
+  "overrides_dir": "overrides",
+  "default_environment": "test",
+
+  "require_commit": true,
+  "component_markers": null,
+  "span_markers": null,
+
+  "environments": {
+    "test": {
+      "base": "https://myweb-test.example.edu/terminalfour/rs",
+      "label": "TEST",
+      "published_url": "https://webtest.example.edu",
+      "push_allowed": false,
+      "require_commit": false,
+      "language": "en",
+      "root_section": null
+    }
+  }
+}
+```
+
+| Setting | Default | What it does |
+|---|---|---|
+| `source_dir` | `t4-source` | Where pulled layout source lands |
+| `mirror_dir` | `site-mirror` | Where `t4 mirror` saves the published pages |
+| `overrides_dir` | `overrides` | Local-only files that shadow the mirror |
+| `default_environment` | first alphabetically | Which environment a command uses without `--env` |
+| `require_commit` | `true` | Whether `t4 push` refuses uncommitted files. Set per environment to override |
+| `component_markers` | none | Extra patterns for the inspector to recognise as component boundaries |
+| `span_markers` | none | Extra patterns the preview engine uses to align layout output |
+
+Per environment:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `base` | — | The CMS Web Services endpoint, ending `/terminalfour/rs` |
+| `label` | the environment name | What `t4 status` and the panel display |
+| `published_url` | none | The site `t4 mirror` crawls and `t4 serve` proxies |
+| `push_allowed` | `false` | Whether `t4 push` may write here at all |
+| `require_commit` | the project setting | Whether a push must come from a commit |
+| `language` | `en` | The language segment several API paths require |
+| `root_section` | none | Where `t4 sections` starts walking |
+
+The two that matter most are deliberately the cautious way round:
+`push_allowed` is **off** until you turn it on, so a production instance
+cannot be written to by accident, and `require_commit` is **on** unless you
+turn it off.
 
 ## Commands
 
@@ -451,7 +510,7 @@ The site's own markers are left in place; the note is added after them. A
 marker whose id is not in the local pull says so rather than pointing at the
 wrong file.
 
-**These conventions are per-site, not a T4 feature.** The defaults recognise
+**These conventions are per-site, not a T4 feature.** The defaults recognize
 `<!-- ct:ID Name -->`, `<!-- ct-ID Name -->`, `<!-- content type: Name -->` and
 `<!-- n:Name (ID) -->`. Set `component_markers` in `.t4/config.json` for other
 conventions — a list of `[regex, endpoint]` pairs, where the regex has an `id`
@@ -709,7 +768,7 @@ different id — has never produced anything to reuse:
 **Tags whose output cannot be told apart.** Where several tags sit together
 with no literal markup between them, their output is one undivided run. If the
 site's layouts bracket a tag's output with comments, that tag can be isolated
-(the defaults recognise `<!-- n:Name (ID) -->…<!-- /n:ID -->` and the `ct:`
+(the defaults recognize `<!-- n:Name (ID) -->…<!-- /n:ID -->` and the `ct:`
 equivalent; set `span_markers` in `.t4/config.json` for other conventions).
 Otherwise, placing markup around one tag of the run would silently wrap all of
 them, so it says so:

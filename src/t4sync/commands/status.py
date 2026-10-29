@@ -18,7 +18,7 @@ from ..errors import T4Error
 from ..vcs import open_repo, requires_commit
 from .edit import overrides_root
 
-# Printed in this order; anything unrecognised follows, sorted.
+# Printed in this order; anything unrecognized follows, sorted.
 KIND_ORDER = ["pageLayout", "layout", "media", "contenttype", "navigation",
               "list", "channel"]
 KIND_LABEL = {
