@@ -3300,3 +3300,54 @@ class TestDocsAnchorsAreReachable(unittest.TestCase):
                 landing = (out / ("%s.html" % target)).read_text(encoding="utf-8")
                 self.assertIn('id="%s"' % anchor, landing,
                               "%s links to %s#%s" % (page.name, target, anchor))
+
+
+class TestDiagramMatchesTheApp(unittest.TestCase):
+    """A diagram of the panel should look like the panel.
+
+    It drifts silently: the diagram is drawn by hand and the panel by CSS,
+    and nothing connects them. These check the handful of things that made
+    the two look different enough to notice.
+    """
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import xml.etree.ElementTree as ET
+        cls.ns = "{http://www.w3.org/2000/svg}"
+        cls.svg = ET.parse(cls.ROOT / "docs" / "img" / "app-light.svg").getroot()
+        cls.css = (app.PAGE % {"token": "x"}).split("<style>")[1].split("</style>")[0]
+
+    def _pills(self):
+        found = []
+        for rect in self.svg.iter(self.ns + "rect"):
+            if rect.get("x") is None:
+                continue
+            height = float(rect.get("height"))
+            radius = float(rect.get("rx") or 0)
+            if height < 24 and radius >= height / 2 - 0.01:
+                found.append(rect)
+        return found
+
+    def test_the_panels_badges_are_quiet(self):
+        # .pill is a border and dim text, with no fill. Drawn as filled
+        # accent chips, three counters shouted louder than the buttons.
+        rule = self.css.split(".pill{")[1].split("}")[0]
+        self.assertIn("border:1px solid var(--line)", rule)
+        self.assertIn("color:var(--dim)", rule)
+        self.assertNotIn("background", rule)
+
+    def test_the_diagram_draws_them_the_same_way(self):
+        pills = self._pills()
+        self.assertGreaterEqual(len(pills), 3)
+        for pill in pills:
+            self.assertEqual(pill.get("fill"), "#ffffff", "a badge is filled")
+            self.assertNotEqual(pill.get("stroke"), "none")
+
+    def test_the_badges_the_panel_shows_are_in_the_diagram(self):
+        drawn = {"".join(node.itertext())
+                 for node in self.svg.iter(self.ns + "text")}
+        self.assertIn("writable", drawn)
+        self.assertTrue(any("CHANGED" in label for label in drawn))
+        self.assertTrue(any("CONTENT TYPES" in label for label in drawn))

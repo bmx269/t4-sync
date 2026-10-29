@@ -71,6 +71,21 @@ class Canvas:
             attrs.append('opacity="%g"' % opacity)
         self.parts.append("<text %s>%s</text>" % (" ".join(attrs), _esc(value)))
 
+    def pill(self, x, y, label, size=8.5, fill=None, colour=None, pad=7):
+        """A badge drawn the way the panel's own .pill is drawn.
+
+        Bordered, dim text, no fill. Drawing them as filled accent chips
+        made three quiet counters shout louder than the buttons beside them,
+        which is not what the panel does.
+        """
+        width = len(label) * size * 0.60 + pad * 2
+        height = size + 7
+        self.box(x, y, width, height, fill=fill or self.p["bg"],
+                 stroke=self.p["edge"], radius=999, width=1)
+        self.text(x + width / 2, y + height - 5, label, size=size,
+                  anchor="middle", fill=colour or self.p["dim"], weight="700")
+        return width
+
     def runs(self, x, y, pieces, size=13, mono=False):
         """One line of text whose parts are coloured differently.
 
@@ -244,8 +259,7 @@ def app_panel(p):
     c.box(170, 25, 190, 22, fill=p["bg"], radius=5)
     c.text(180, 41, "TEST (cms.example.edu)", size=10.5, mono=True)
     c.text(352, 41, "\u25be", size=9, fill=p["dim"])
-    c.box(372, 26, 62, 20, fill=p["bg"], radius=999)
-    c.text(403, 40, "writable", size=9.5, anchor="middle", fill=p["warn"])
+    c.pill(372, 26, "writable", size=9.5, colour=p["warn"])
     c.box(782, 25, 66, 22, fill=p["btn"] if "btn" in p else p["card"], radius=5)
     c.text(815, 40, "Refresh", size=10.5, anchor="middle")
 
@@ -286,9 +300,7 @@ def app_panel(p):
     # Changes, and what happened, side by side
     c.box(28, 228, 548, 178)
     c.text(44, 250, "CHANGES", size=10, weight="700", fill=p["dim"])
-    c.box(104, 240, 76, 16, fill=p["accent_soft"], radius=999)
-    c.text(142, 252, "3 CHANGED", size=8.5, anchor="middle", fill=p["accent"],
-           weight="700")
+    c.pill(104, 241, "3 CHANGED")
     c.box(498, 240, 62, 18, fill=p["card"], radius=5)
     c.text(529, 253, "Rescan", size=9.5, anchor="middle")
     c.text(44, 272, "Files you have edited since the last pull. diff opens "
@@ -330,9 +342,7 @@ def app_panel(p):
     # Tag builder
     c.box(28, 418, 824, 234)
     c.text(44, 440, "TAG BUILDER", size=10, weight="700", fill=p["dim"])
-    c.box(126, 430, 186, 16, fill=p["accent_soft"], radius=999)
-    c.text(219, 442, "48 CONTENT TYPES, 1920 TAGS READ", size=8,
-           anchor="middle", fill=p["accent"], weight="700")
+    c.pill(126, 431, "48 CONTENT TYPES, 1920 TAGS READ", size=8)
     c.text(44, 461, "Attributes come from the T4 tag reference; element names "
                     "from this project's own content types.", size=9.5,
            fill=p["dim"])
@@ -341,7 +351,7 @@ def app_panel(p):
 
     fields = [("Tag", "content"), ("Content type", "Staff profile"),
               ("Element", "Job title \u00b7 plain text"),
-              ("Output", "Only if filled in")]
+              ("Output", "Normal (inline) \u00b7 normal")]
     fx = 44
     for label, value in fields:
         c.text(fx, 494, label, size=8.5, fill=p["dim"])
@@ -350,33 +360,37 @@ def app_panel(p):
         c.text(fx + 174, 514, "\u25be", size=8, fill=p["dim"])
         fx += 196
 
-    # The output explains itself, and brings its own field.
-    c.text(44, 536, "Outputs nothing when the element is empty. The "
-                    "surrounding markup goes in format, with $value where "
-                    "the value belongs.", size=9, fill=p["accent"])
-    c.text(44, 556, "Markup around the value", size=8.5, fill=p["dim"])
-    c.box(44, 562, 382, 20, fill=p["bg"], radius=5)
-    c.runs(52, 576, [("<p>Phone: ", "#f7768e"), ("$value", "#e0af68"),
-                     ("</p>", "#f7768e")], size=9, mono=True)
+    # The output explains itself in the documentation's own words.
+    c.text(44, 536, "Outputs the element, adopting the text style of the "
+                    "page.", size=9, fill=p["dim"])
 
     # Modifiers read as what they do.
-    mx = 44
-    for label, name in (("Encode special characters", "htmlentities (489)"),
-                        ("Strip out all HTML tags", "striptags (413)")):
-        c.box(mx, 594, 11, 11, fill=p["bg"], radius=3)
-        c.runs(mx + 17, 604, [(label + "  ", p["fg"]), (name, p["dim"])],
-               size=9)
-        mx += 290
+    rows = [[("Encode special characters to their HTML equivalent",
+              "htmlentities (489)"),
+             ("Strip out all HTML tags", "striptags (413)")],
+            [("Change new lines to HTML line breaks", "nl2br (63)"),
+             ("Parse for Media Library t4 tags", "medialibrary (62)")],
+            [("Escape quotes and newlines for JavaScript", "js-var (18)"),
+             ("Encode email addresses to ASCII", "encode_emails (3)")]]
+    my = 562
+    for row in rows:
+        mx = 44
+        for label, name in row:
+            c.box(mx, my, 10, 10, fill=p["bg"], radius=3)
+            c.runs(mx + 15, my + 9, [(label + "  ", p["fg"]), (name, p["dim"])],
+                   size=8.5)
+            mx += 400
+        my += 18
 
-    c.text(44, 626, "T4 tag", size=8.5, fill=p["dim"])
-    c.box(786, 616, 52, 16, fill=p["card"], radius=4)
-    c.text(812, 628, "copy", size=9, anchor="middle")
-    c.box(44, 632, 794, 16, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
-    c.runs(54, 644, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
+    c.text(44, 630, "T4 tag", size=8.5, fill=p["dim"])
+    c.box(786, 620, 52, 16, fill=p["card"], radius=4)
+    c.text(812, 632, "copy", size=9, anchor="middle")
+    c.box(44, 636, 794, 18, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.runs(54, 649, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
                      ("=", p["code_fg"]), ('"content"', "#9ece6a"),
                      (" name", "#e0af68"), ("=", p["code_fg"]),
                      ('"Job title"', "#9ece6a"), (" output", "#e0af68"),
-                     ("=", p["code_fg"]), ('"selective-output"', "#9ece6a"),
+                     ("=", p["code_fg"]), ('"normal"', "#9ece6a"),
                      (" />", "#f7768e")], size=9, mono=True)
 
     c.box(28, 664, 824, 40)
