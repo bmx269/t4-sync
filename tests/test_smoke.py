@@ -1,6 +1,7 @@
 """Smoke tests that need no network and no T4 instance."""
 import argparse
 import contextlib
+import html as html_mod
 import io
 import json
 import os
@@ -3179,3 +3180,57 @@ class TestOutputSettings(unittest.TestCase):
         js = page.split("<script>")[1].split("</scr" + "ipt>")[0]
         self.assertIn("modifier_help", js)
         self.assertIn("output_help", js)
+
+
+class TestSiteNavSubsections(unittest.TestCase):
+    """The sidebar shows what a page contains, not only that it exists."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "site_builder", cls.ROOT / "docs" / "site.py")
+        cls.site = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.site)
+        cls.out = pathlib.Path(tempfile.mkdtemp())
+        cls.site.build(str(cls.out))
+
+    @classmethod
+    def tearDownClass(cls):
+        __import__("shutil").rmtree(cls.out, ignore_errors=True)
+
+    def _sidebar(self, page):
+        text = (self.out / page).read_text(encoding="utf-8")
+        return text[text.index('<nav class="side">'):text.index("</nav>")]
+
+    def test_a_pages_subsections_are_listed_under_it(self):
+        side = self._sidebar("commands.html")
+        # These are the things a reader looks for and cannot guess live
+        # inside a page called "Commands".
+        for heading in ("Version control", "The control panel",
+                        "The inspector", "The editing loop"):
+            self.assertIn(heading, side, heading)
+
+    def test_they_link_to_the_anchor_on_that_page(self):
+        side = self._sidebar("commands.html")
+        self.assertIn('href="commands.html#the-inspector"', side)
+
+    def test_the_anchor_exists_on_the_page(self):
+        page = (self.out / "commands.html").read_text(encoding="utf-8")
+        self.assertIn('id="the-inspector"', page)
+
+    def test_only_the_current_page_is_expanded(self):
+        # Every page's subheadings at once is a wall.
+        side = self._sidebar("getting-started.html")
+        self.assertIn("Install the tool", side)
+        self.assertNotIn("The inspector", side)
+
+    def test_every_section_still_appears(self):
+        readme = (self.ROOT / "README.md").read_text(encoding="utf-8")
+        titles = [t for t, _b in self.site.split_sections(readme)
+                  if t != "Overview"]
+        side = self._sidebar("index.html")
+        for title in titles:
+            self.assertIn(html_mod.escape(title), side, title)

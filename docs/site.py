@@ -260,7 +260,14 @@ def split_sections(markdown):
 
 
 def nav(sections, current):
-    """The sidebar, grouped so the walkthrough is not lost in the reference."""
+    """The sidebar, grouped so the walkthrough is not lost in the reference.
+
+    Each page's own subheadings sit under it, so the sidebar shows what a
+    page contains rather than only that it exists -- "Version control" and
+    "The control panel" are inside Commands, and a reader looking for them
+    has no way to know that from a page title.
+    """
+    by_title = {title: body for title, body in sections}
     titles = [title for title, _body in sections]
     placed, out = set(), []
     for label, wanted in GROUPS:
@@ -270,12 +277,38 @@ def nav(sections, current):
         out.append('<div class="navgroup">%s</div>' % html.escape(label))
         for title in items:
             placed.add(title)
-            out.append(_nav_link(title, current))
+            out += _nav_entry(title, by_title[title], current)
     rest = [t for t in titles if t not in placed and t != "Overview"]
     if rest:
         out.append('<div class="navgroup">More</div>')
-        out += [_nav_link(t, current) for t in rest]
+        for title in rest:
+            out += _nav_entry(title, by_title[title], current)
     return "\n".join(out)
+
+
+def _nav_entry(title, body, current):
+    """A page, and its subheadings beneath it."""
+    out = [_nav_link(title, current)]
+    # Only for the page being read: every page's subheadings at once is a
+    # wall, and the ones you can act on are the ones in front of you.
+    if title != current:
+        return out
+    for text, anchor in subheadings(body):
+        out.append('<a class="navsub" href="%s.html#%s">%s</a>'
+                   % (slug(title), anchor, html.escape(text)))
+    return out
+
+
+def subheadings(body):
+    """[(text, anchor)] for the `###` headings in a section."""
+    found = []
+    for line in body.split("\n"):
+        match = re.match(r"^###\s+(.*)$", line)
+        if match:
+            text = match.group(1)
+            found.append((re.sub(r"[`*]", "", text),
+                          slug(re.sub(r"[`*]", "", text))))
+    return found
 
 
 def _nav_link(title, current):
@@ -284,9 +317,12 @@ def _nav_link(title, current):
 
 
 def page(title, body, sections, headings, home=False):
+    # The sidebar already lists this page's subheadings, so the right-hand
+    # column shows the `####` level instead of repeating them.
     contents = ""
     if headings:
-        contents = ('<nav class="toc"><div class="navgroup">On this page</div>%s</nav>'
+        contents = ('<nav class="toc"><div class="navgroup">On this page</div>'
+                    '%s</nav>'
                     % "".join('<a href="#%s">%s</a>' % (anchor, html.escape(text))
                               for text, anchor in headings))
     return TEMPLATE % {
@@ -370,6 +406,9 @@ nav.side,.toc{position:sticky;top:3.6rem;font-size:13.5px}
  text-decoration:none;border-left:2px solid transparent;padding-left:.6rem}
 .navlink:hover,.toc a:hover{color:var(--accent);border-left-color:var(--line)}
 .navlink.on{color:var(--accent);border-left-color:var(--accent);font-weight:600}
+.navsub{display:block;padding:.12rem 0 .12rem 1.4rem;font-size:12.5px;
+ color:var(--dim);text-decoration:none;border-left:2px solid var(--line)}
+.navsub:hover{color:var(--accent);border-left-color:var(--accent)}
 .toc a{color:var(--dim);font-size:12.5px}
 main{min-width:0}
 h1{font-size:1.9rem;line-height:1.2;margin:.2rem 0 1rem}
