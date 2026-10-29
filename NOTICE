@@ -1,7 +1,33 @@
-t4-sync
+t4-sync — T4 CMS Local Development Tool
 Copyright 2026 Trent Stromkins
 
 This product includes software developed by Trent Stromkins.
 
 Licensed under the Apache License, Version 2.0. You may obtain a copy of the
 License at https://www.apache.org/licenses/LICENSE-2.0
+
+
+NOT AFFILIATED WITH TERMINALFOUR
+--------------------------------
+
+This is an independent, unofficial tool. It is not produced, endorsed,
+sponsored, supported, reviewed or approved by TERMINALFOUR Solutions Ltd, and
+it is not TERMINALFOUR software.
+
+"TERMINALFOUR", "Terminalfour", "T4" and any related names, marks, logos and
+product names are trademarks of TERMINALFOUR Solutions Ltd. They are used here
+only descriptively, to identify the software this tool interoperates with, as
+permitted by nominative fair use. No claim is made to any such mark, and no
+affiliation, association, sponsorship or endorsement is claimed or implied.
+
+This tool talks to a TERMINALFOUR instance through its published Web Services
+API. It contains no TERMINALFOUR source code, no decompiled or reverse
+engineered material, and no content from any customer site. Support for this
+tool comes from this project, not from TERMINALFOUR; do not raise issues about
+it with them.
+
+Using this tool against a TERMINALFOUR instance is your responsibility, under
+whatever agreement governs your use of that instance. It can write to a CMS
+and can therefore change or remove content. See the warranty and liability
+terms in sections 7 and 8 of the LICENSE: the software is provided "AS IS",
+without warranties or conditions of any kind.

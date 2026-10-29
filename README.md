@@ -9,6 +9,10 @@ Standard library only — no dependencies beyond Python 3.11+.
 
 **[Documentation →](https://bmx269.github.io/t4-sync/)**
 
+> An independent, unofficial tool. Not produced or endorsed by TERMINALFOUR
+> Solutions Ltd, and not TERMINALFOUR software. "T4" and "TERMINALFOUR" are
+> their trademarks, used here only to say what this works with.
+
 ## What it does
 
 Terminal Four keeps your templates inside the CMS, and publishes finished pages
@@ -895,7 +899,7 @@ python3 -m unittest discover -s tests
 
 The tests need no network and no T4 instance.
 
-## Licence
+## Licence and trademarks
 
 Copyright © 2026 Trent Stromkins.
 
@@ -904,3 +908,23 @@ Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 Use it, change it, ship it, including commercially. Keep the copyright notice
 and the NOTICE file, and say what you changed. The licence includes an express
 patent grant from contributors.
+
+### Not affiliated with TERMINALFOUR
+
+**This is an independent, unofficial tool.** It is not produced, endorsed,
+sponsored, supported, reviewed or approved by TERMINALFOUR Solutions Ltd, and
+it is not TERMINALFOUR software.
+
+"TERMINALFOUR", "Terminalfour" and "T4" are trademarks of TERMINALFOUR
+Solutions Ltd, used here only to identify the software this tool works with.
+No affiliation or endorsement is claimed or implied.
+
+It talks to a TERMINALFOUR instance through its published Web Services API,
+and contains no TERMINALFOUR source code and no content from any customer
+site. **Support comes from this project, not from TERMINALFOUR** — please do
+not raise issues about it with them.
+
+It can write to a CMS, and can therefore change content. Using it against an
+instance is your responsibility under whatever agreement governs that
+instance. The software is provided **"AS IS", without warranties or
+conditions of any kind** — see sections 7 and 8 of the LICENSE.

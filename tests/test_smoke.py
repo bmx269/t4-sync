@@ -2747,3 +2747,51 @@ class TestConflictDetection(unittest.TestCase):
     def test_push_offers_an_escape_hatch(self):
         args = build_parser().parse_args(["push", "--ignore-conflicts"])
         self.assertTrue(args.ignore_conflicts)
+
+
+class TestAttribution(unittest.TestCase):
+    """An unofficial tool has to say so, wherever someone meets it."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    def test_the_notice_disclaims_affiliation(self):
+        notice = (self.ROOT / "NOTICE").read_text(encoding="utf-8")
+        for required in ("not produced, endorsed", "trademarks of TERMINALFOUR",
+                         "no TERMINALFOUR source code", "AS IS"):
+            self.assertIn(required, notice)
+
+    def test_the_copyright_is_present_and_whole(self):
+        for name in ("NOTICE", "README.md"):
+            text = (self.ROOT / name).read_text(encoding="utf-8")
+            self.assertIn("Trent Stromkins", text)
+            self.assertIn("2026", text)
+        self.assertIn("Apache License", (self.ROOT / "LICENSE").read_text(
+            encoding="utf-8"))
+
+    def test_the_readme_says_it_before_the_instructions(self):
+        readme = (self.ROOT / "README.md").read_text(encoding="utf-8")
+        disclaimer = readme.index("independent, unofficial")
+        self.assertLess(disclaimer, readme.index("## Getting started"))
+
+    def test_the_panel_says_it_too(self):
+        # Someone can use the tool daily without ever opening the repository.
+        page = app.PAGE % {"token": "x"}
+        self.assertIn('id="legal"', page)
+        self.assertIn("independent, unofficial tool", page)
+        self.assertIn("TERMINALFOUR", page)
+
+    def test_the_documentation_site_says_it_on_every_page(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "site_builder", self.ROOT / "docs" / "site.py")
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        out = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(out, ignore_errors=True))
+        builder.build(str(out))
+        pages = list(out.glob("*.html"))
+        self.assertTrue(pages)
+        for page in pages:
+            text = page.read_text(encoding="utf-8")
+            self.assertIn("independent, unofficial", text, page.name)
+            self.assertIn("Trent Stromkins", text, page.name)

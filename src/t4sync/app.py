@@ -887,6 +887,7 @@ pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
 .dot.live{background:var(--accent);animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{0%%,100%%{opacity:1}50%%{opacity:.25}}
 footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
+.legal{margin-top:.35rem;opacity:.8}
 </style>
 
 <header>
@@ -1037,7 +1038,7 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
   </section>
 </main>
 
-<footer id="foot"></footer>
+<footer><div id="foot"></div><div id="legal" class="legal"></div></footer>
 
 <script>
 var TOKEN = "%(token)s";
@@ -1132,6 +1133,12 @@ function render() {
   el("foot").textContent = "Every button runs the matching t4 command as a "
     + "subprocess in " + state.root + ". Tasks run side by side; only "
     + "commands writing the same files wait for each other.";
+  var legal = el("legal");
+  if (legal) {
+    legal.textContent = "t4-sync is an independent, unofficial tool. Not "
+      + "produced, endorsed or supported by TERMINALFOUR Solutions Ltd. "
+      + "\u201cT4\u201d and \u201cTERMINALFOUR\u201d are their trademarks.";
+  }
 }
 
 function load() {

@@ -333,7 +333,9 @@ li{margin:.25rem 0}
 .cta.ghost{background:var(--btn);color:var(--fg);
  border:1px solid var(--btn-edge)}
 footer{border-top:1px solid var(--line);color:var(--dim);font-size:12.5px;
- padding:1rem 1.2rem 2rem;text-align:center}
+ padding:1.2rem 1.2rem 2.5rem;text-align:center}
+footer p{margin:.4rem auto;max-width:46rem}
+footer .disclaimer{font-size:11.5px}
 """
 
 TEMPLATE = """<!doctype html>
@@ -354,8 +356,12 @@ TEMPLATE = """<!doctype html>
   %(toc)s
 </div>
 <footer>
-  Apache-2.0 &middot;
-  <a href="https://github.com/bmx269/t4-sync">github.com/bmx269/t4-sync</a>
+  <p class="disclaimer">An independent, unofficial tool. Not produced,
+  endorsed or supported by TERMINALFOUR Solutions Ltd, and not TERMINALFOUR
+  software. &ldquo;T4&rdquo; and &ldquo;TERMINALFOUR&rdquo; are their
+  trademarks, used here only to identify the software this works with.</p>
+  <p>Copyright &copy; 2026 Trent Stromkins &middot; Apache-2.0 &middot;
+  <a href="https://github.com/bmx269/t4-sync">github.com/bmx269/t4-sync</a></p>
 </footer>
 </html>
 """
