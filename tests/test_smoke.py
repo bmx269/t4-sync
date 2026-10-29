@@ -2437,3 +2437,34 @@ class TestTagBuilder(unittest.TestCase):
 
     def test_the_two_syntaxes_cannot_be_mixed_and_that_is_stated(self):
         self.assertIn("either Standard or Handlebars", tags.MIXING_WARNING)
+
+
+class TestTagBuilderPanel(unittest.TestCase):
+    """The builder posts a spec and shows what came back; it invents nothing."""
+
+    @classmethod
+    def setUpClass(cls):
+        page = app.PAGE % {"token": "x"}
+        cls.body = page.split("</style>")[1].split("<script>")[0]
+        cls.js = page.split("<script>")[1].split("</scr" + "ipt>")[0]
+
+    def test_the_controls_exist(self):
+        for control in ("tg-type", "tg-ct", "tg-el", "tg-out", "tg-meta",
+                        "tg-obj", "tg-date", "tg-mods", "tg-tag", "tg-hbs"):
+            self.assertIn('id="%s"' % control, self.body, control)
+
+    def test_both_syntaxes_are_shown(self):
+        self.assertIn("T4 tag", self.body)
+        self.assertIn("Handlebars", self.body)
+
+    def test_the_page_does_not_build_tags_itself(self):
+        # One implementation, on the server, so the panel and `t4` cannot
+        # drift into emitting different markup.
+        self.assertIn('api("/api/tag"', self.js)
+        self.assertNotIn("<t4 type=", self.js)
+
+    def test_it_says_it_cannot_evaluate_them(self):
+        self.assertIn("T4 evaluates tags at publish time", self.body)
+
+    def test_the_mixing_warning_reaches_the_page(self):
+        self.assertIn("mixing_warning", self.js)

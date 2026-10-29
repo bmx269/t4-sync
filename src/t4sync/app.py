@@ -374,6 +374,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._changes()
         if path == "/api/diff":
             return self._diff()
+        if path == "/api/tags":
+            return self._tags()
         if path.startswith("/api/jobs/") and path.endswith("/stream"):
             return self._stream(path.split("/")[3])
         return self._json({"error": "not found"}, 404)
@@ -396,6 +398,14 @@ class AppHandler(BaseHTTPRequestHandler):
             except Conflict as exc:
                 # 409, not 400: the request is fine, the timing is not.
                 return self._json({"error": str(exc), "conflict": True}, 409)
+        if path == "/api/tag":
+            from . import tags as tagdata
+            spec = self._body()
+            if not isinstance(spec, dict):
+                return self._json({"error": "expected an object"}, 400)
+            handlebars, note = tagdata.build_handlebars(spec)
+            return self._json({"tag": tagdata.build_tag(spec),
+                               "handlebars": handlebars, "note": note})
         if path.startswith("/api/jobs/") and path.endswith("/stop"):
             job = self.jobs.get(path.split("/")[3])
             if not job:
@@ -468,6 +478,19 @@ class AppHandler(BaseHTTPRequestHandler):
                 "why": ", ".join(why),
             })
         return self._json({"env": env_name, "changed": found})
+
+    def _tags(self):
+        """Everything the tag builder offers, all of it read from the pull."""
+        from . import tags as tagdata
+
+        env_dir = str(self.project.env_dir(self._env_arg()))
+        return self._json({
+            "types": tagdata.content_types(env_dir),
+            "navigation": tagdata.named_objects(env_dir, "navigation"),
+            "lists": tagdata.named_objects(env_dir, "list"),
+            "vocabulary": tagdata.vocabulary(env_dir),
+            "mixing_warning": tagdata.MIXING_WARNING,
+        })
 
     def _diff(self):
         """One file, against the last commit or against T4.
@@ -689,16 +712,34 @@ h2{font-size:13px;margin:0 0 .5rem;color:var(--dim);font-weight:600;
    behave differently depending on where the pointer is. */
 main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
  grid-template-columns:minmax(0,70fr) minmax(0,30fr);
- grid-template-areas:"project project" "changes history" "tasks tasks"}
+ grid-template-areas:"project project" "changes history" "build build"
+                     "tasks tasks"}
 .area-project h2{margin-top:.6rem}
 .area-project{padding-bottom:.85rem}
 .area-project{grid-area:project}
 .area-changes{grid-area:changes}
 .area-history{grid-area:history}
+.area-build{grid-area:build}
 .area-tasks{grid-area:tasks}
+.build{display:grid;gap:.5rem;
+ grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}
+.build label{display:flex;flex-direction:column;gap:.15rem;font-size:11px;
+ color:var(--dim);min-width:0}
+.build select,.build input{width:100%%;font-size:12px}
+.build input{background:var(--bg);color:var(--fg);border:1px solid var(--btn-edge);
+ border-radius:6px;padding:.3rem .5rem}
+.build label[hidden]{display:none}
+.mods{display:flex;flex-wrap:wrap;gap:.3rem .7rem;margin:.5rem 0 .2rem;
+ font-size:11.5px}
+.mods label{display:flex;gap:.3rem;align-items:center;cursor:pointer}
+.tagout{margin-top:.4rem}
+.taghead{display:flex;justify-content:space-between;align-items:baseline;
+ font-size:11px;margin:.5rem 0 .2rem}
+.tagcode{display:block;background:#0b0d12;color:#dbe1ee;border-radius:6px;
+ padding:.5rem .6rem;font-size:12px;white-space:pre-wrap;word-break:break-all}
 @media (max-width:980px){
  main{grid-template-columns:minmax(0,1fr);
-  grid-template-areas:"project" "changes" "history" "tasks"}
+  grid-template-areas:"project" "changes" "history" "build" "tasks"}
 }
 
 /* Project details are reference, not the thing you came for. */
@@ -955,6 +996,36 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
     <div id="recent"></div>
   </section>
 
+  <section class="card area-build">
+    <h2>Tag builder <span id="tagcount" class="pill"></span></h2>
+    <p class="dim" style="margin:.1rem 0 .5rem;font-size:12px">
+      Builds a T4 tag from this project's own content types, so the element
+      name and the attributes are the ones that exist. Composes only &mdash;
+      T4 evaluates tags at publish time, nothing local can.
+    </p>
+    <div class="build">
+      <label>Tag<select id="tg-type"></select></label>
+      <label id="tg-ctwrap">Content type<select id="tg-ct"></select></label>
+      <label id="tg-elwrap">Element<select id="tg-el"></select></label>
+      <label id="tg-objwrap" hidden>Object<select id="tg-obj"></select></label>
+      <label id="tg-metawrap" hidden>Meta<select id="tg-meta"></select></label>
+      <label id="tg-outwrap">Output<select id="tg-out"></select></label>
+      <label>Date format
+        <input id="tg-date" type="text" placeholder="dd MMMM yyyy">
+      </label>
+    </div>
+    <div id="tg-mods" class="mods"></div>
+    <div class="tagout">
+      <div class="taghead"><span class="dim">T4 tag</span>
+        <button class="tog" data-copytag="tag">copy</button></div>
+      <code id="tg-tag" class="tagcode"></code>
+      <div class="taghead"><span class="dim">Handlebars</span>
+        <button class="tog" data-copytag="hbs">copy</button></div>
+      <code id="tg-hbs" class="tagcode"></code>
+      <p id="tg-note" class="dim" style="margin:.35rem 0 0;font-size:11.5px"></p>
+    </div>
+  </section>
+
   <section class="card area-tasks">
     <h2>Tasks</h2>
     <div id="tasks"><p class="dim" style="margin:.2rem 0">Nothing running.</p></div>
@@ -1081,6 +1152,7 @@ function load() {
     syncButtons();
     renderTasks();
     loadChanges();
+    if (!tagData) loadTagData();
   });
 }
 
@@ -1619,6 +1691,145 @@ document.addEventListener("click", function (e) {
 
   var row = e.target.closest(".chg");
   if (row) toggleDiff(row);
+});
+
+// -- tag builder -------------------------------------------------------
+var tagData = null;
+
+function fillSelect(id, values, label) {
+  var sel = el(id);
+  if (!sel) return;
+  var keep = sel.value;
+  sel.innerHTML = "";
+  values.forEach(function (v) {
+    var o = document.createElement("option");
+    o.value = v.value; o.textContent = v.text || v.value;
+    if (v.count) o.textContent += "  (" + v.count + ")";
+    sel.appendChild(o);
+  });
+  if (keep && values.some(function (v) { return v.value === keep; })) {
+    sel.value = keep;
+  }
+  if (label) sel.title = label;
+}
+
+function tagSpec() {
+  var kind = el("tg-type").value;
+  var spec = {type: kind};
+  if (kind === "content" || kind === "media") {
+    spec.name = el("tg-el").value;
+    spec.output = el("tg-out").value;
+    spec.modifiers = [].slice
+      .call(document.querySelectorAll("#tg-mods input:checked"))
+      .map(function (b) { return b.value; });
+    if (el("tg-date").value) spec.date_format = el("tg-date").value;
+  } else if (kind === "meta") {
+    spec.meta = el("tg-meta").value;
+  } else {
+    spec.id = el("tg-obj").value;
+  }
+  return spec;
+}
+
+function showForKind() {
+  var kind = el("tg-type").value;
+  var element = kind === "content" || kind === "media";
+  el("tg-ctwrap").hidden = !element;
+  el("tg-elwrap").hidden = !element;
+  el("tg-outwrap").hidden = !element;
+  el("tg-mods").hidden = !element;
+  el("tg-metawrap").hidden = kind !== "meta";
+  el("tg-objwrap").hidden = element || kind === "meta";
+  if (!el("tg-objwrap").hidden) {
+    var source = kind === "navigation" ? tagData.navigation : tagData.lists;
+    fillSelect("tg-obj", (source || []).map(function (o) {
+      return {value: String(o.id), text: o.name + "  #" + o.id};
+    }));
+  }
+}
+
+function fillElements() {
+  var wanted = el("tg-ct").value;
+  var type = (tagData.types || []).filter(function (c) {
+    return String(c.id) === wanted;
+  })[0];
+  fillSelect("tg-el", ((type || {}).elements || []).map(function (e) {
+    return {value: e.name, text: e.name + "  \u00b7 " + e.type};
+  }));
+}
+
+function renderTag() {
+  if (!tagData) return;
+  api("/api/tag", {method: "POST", body: JSON.stringify(tagSpec())})
+    .then(function (d) {
+      el("tg-tag").textContent = d.tag || "";
+      el("tg-hbs").textContent = d.handlebars || "(no Handlebars equivalent)";
+      el("tg-note").textContent = [d.note, tagData.mixing_warning]
+        .filter(Boolean).join("  ");
+    })
+    .catch(function (e) { el("tg-note").textContent = e.message; });
+}
+
+function loadTagData() {
+  return api("/api/tags?env=" + encodeURIComponent(selected()))
+    .then(function (d) {
+      tagData = d;
+      var v = d.vocabulary || {};
+      el("tagcount").textContent = (d.types || []).length + " content types, "
+        + (v.tags_seen || 0) + " tags read";
+
+      fillSelect("tg-type", (v.type || []).map(function (o) {
+        return {value: o.value, count: o.count};
+      }));
+      fillSelect("tg-ct", (d.types || []).map(function (c) {
+        return {value: String(c.id), text: c.name};
+      }));
+      fillSelect("tg-out", (v.output || []).map(function (o) {
+        return {value: o.value, count: o.count};
+      }));
+      fillSelect("tg-meta", (v.meta || []).map(function (o) {
+        return {value: o.value, count: o.count};
+      }));
+
+      var mods = el("tg-mods");
+      mods.innerHTML = "";
+      (v.modifiers || []).forEach(function (o) {
+        var label = document.createElement("label");
+        var box = document.createElement("input");
+        box.type = "checkbox"; box.value = o.value;
+        label.appendChild(box);
+        label.appendChild(text_(o.value + (o.count ? "  (" + o.count + ")" : "")));
+        mods.appendChild(label);
+      });
+
+      fillElements();
+      showForKind();
+      renderTag();
+    })
+    .catch(function (e) { el("tagcount").textContent = e.message; });
+}
+
+document.addEventListener("change", function (e) {
+  if (!e.target.closest(".build, .mods")) return;
+  if (e.target.id === "tg-ct") fillElements();
+  if (e.target.id === "tg-type") showForKind();
+  renderTag();
+});
+document.addEventListener("input", function (e) {
+  if (e.target.id === "tg-date") renderTag();
+});
+document.addEventListener("click", function (e) {
+  var copy = e.target.closest("button[data-copytag]");
+  if (!copy) return;
+  var node = el(copy.dataset.copytag === "tag" ? "tg-tag" : "tg-hbs");
+  var done = function () {
+    var old = copy.textContent;
+    copy.textContent = "copied";
+    setTimeout(function () { copy.textContent = old; }, 1200);
+  };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(node.textContent).then(done, done);
+  } else { done(); }
 });
 
 el("rescan").addEventListener("click", loadChanges);
