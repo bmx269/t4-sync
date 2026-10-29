@@ -406,6 +406,52 @@ to loopback is not on its own a boundary — any page in any browser tab can
 POST to `127.0.0.1` — so without the token every request is refused. Open the
 URL the command prints rather than typing the address by hand.
 
+#### Choosing what to deploy
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/changes-dark.svg">
+  <img alt="The Changes list in the control panel. Each row has a tick box, the file path, the T4 record it maps to, and diff and push buttons. One row is open, showing it is comparing local changes against the last commit with a button to compare with T4 instead, a unified diff with added and removed lines coloured, and the commits that touched the file." src="docs/img/changes-light.svg" width="880">
+</picture>
+
+Changes lists what you have edited since the last pull, or have not committed
+yet — either counts, and the row says which. **diff** opens what changed since
+your last commit, with a toggle to compare against what T4 holds instead; the
+first is instant and the second costs one request, which is why the local one
+is the default. Under it, every commit that touched the file, and clicking one
+shows what it did. **push** deploys that single file; tick several and use
+Push to T4 to send them together.
+
+#### Building a tag
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/tagbuilder-dark.svg">
+  <img alt="The tag builder. Pickers for the tag type, content type, element, output and date format; a line explaining what the chosen output does; modifier checkboxes labelled with what each one does and marked where undocumented; and the resulting T4 tag and Handlebars equivalent, each with a copy button." src="docs/img/tagbuilder-light.svg" width="880">
+</picture>
+
+Writing a T4 tag by hand means remembering an element's exact name, which
+`output` value that element type takes, and which modifiers to apply. Getting
+any of them wrong fails at publish time, which is a slow way to find a typo.
+
+Attributes come from the [T4 tag
+reference](https://docs.terminalfour.com/documentation/page-management/generate-t4-tags/)
+— eighteen tag types, each with the attributes it actually accepts — and
+element names come from this project's own Content Types. The builder emits
+only what the chosen type takes, and says what it dropped and what is missing
+rather than producing markup that looks right.
+
+Each output explains itself in the documentation's wording and brings the
+fields it needs: `format` for selective output, `layout` for a repeater, `info`
+for a content owner. Modifiers read as what they do, with the identifier and
+this project's usage count beside them, and anything the reference does not
+list is marked. Both syntaxes come back together, with a note wherever
+Handlebars has no equivalent.
+
+**The content type is not named in the tag.** A content tag names an element,
+and the tag already sits inside that type's Content Layout, so T4 knows which
+type it is rendering. The picker is there to find the element name.
+
+It composes only. T4 evaluates tags at publish time and nothing local can.
+
 ### The editing loop
 
 ```sh

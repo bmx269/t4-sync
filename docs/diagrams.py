@@ -403,6 +403,158 @@ def app_panel(p):
     return c
 
 
+def tagbuilder(p):
+    """The tag builder on its own, close enough to read."""
+    c = Canvas(880, 430, p)
+    c.box(16, 16, 848, 398, fill=p["card"], width=1.5)
+
+    c.text(36, 44, "TAG BUILDER", size=10.5, weight="700", fill=p["dim"])
+    c.pill(124, 34, "290 CONTENT TYPES, 4627 TAGS READ", size=8)
+    c.text(36, 66, "Attributes come from the T4 tag reference; element names "
+                   "come from this project's own content types.", size=9.5,
+           fill=p["dim"])
+    c.runs(36, 80, [("The content type is not named in the tag. ", p["fg"]),
+                    ("A content tag names an element, and the tag already "
+                     "sits inside that type's Content Layout.", p["dim"])],
+           size=9.5)
+
+    fields = [("Tag", "content (2592)", False),
+              ("Content type", "2015 - Header Image", False),
+              ("Element", "MastheadImage \u00b7 image", False),
+              ("Output", "File \u00b7 file (32)", True),
+              ("Date format", "(none)", False)]
+    fx = 36
+    for label, value, focused in fields:
+        c.text(fx, 104, label, size=8.5, fill=p["dim"])
+        c.box(fx, 110, 158, 22, fill=p["bg"],
+              stroke=p["accent"] if focused else p["edge"],
+              radius=5, width=2 if focused else 1.5)
+        c.text(fx + 9, 125, value, size=9.5)
+        c.text(fx + 146, 125, "\u25be", size=8, fill=p["dim"])
+        fx += 166
+    # The custom pattern sits under the preset list.
+    c.box(700, 136, 158, 20, fill=p["bg"], radius=5)
+    c.text(709, 150, "or a custom pattern", size=9, fill=p["dim"])
+
+    c.text(36, 176, "Outputs a file and its path.", size=9.5, fill=p["dim"])
+
+    rows = [[("Encode special characters to their HTML equivalent",
+              "htmlentities (489)", True),
+             ("Strip out all HTML tags", "striptags (413)", True)],
+            [("Parse for navigation t4 tags", "nav_sections (201)", True),
+             ("tags", "tags (141) - undocumented", False)],
+            [("Change new lines to HTML line breaks", "nl2br (63)", True),
+             ("js-string", "js-string (30) - undocumented", False)]]
+    my = 194
+    for row in rows:
+        mx = 36
+        for label, name, documented in row:
+            c.box(mx, my, 10, 10, fill=p["bg"], radius=3)
+            c.runs(mx + 15, my + 9,
+                   [(label + "  ", p["fg"]),
+                    (name, p["dim"] if documented else p["warn"])], size=8.5)
+            mx += 420
+        my += 19
+
+    c.text(36, 274, "T4 tag", size=8.5, fill=p["dim"])
+    c.box(800, 264, 48, 16, fill=p["bg"], radius=4)
+    c.text(824, 276, "copy", size=9, anchor="middle")
+    c.box(36, 280, 812, 20, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.runs(48, 294, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
+                     ("=", p["code_fg"]), ('"content"', "#9ece6a"),
+                     (" name", "#e0af68"), ("=", p["code_fg"]),
+                     ('"MastheadImage"', "#9ece6a"), (" output", "#e0af68"),
+                     ("=", p["code_fg"]), ('"file"', "#9ece6a"),
+                     (" />", "#f7768e")], size=10, mono=True)
+
+    c.text(36, 326, "Handlebars", size=8.5, fill=p["dim"])
+    c.box(800, 316, 48, 16, fill=p["bg"], radius=4)
+    c.text(824, 328, "copy", size=9, anchor="middle")
+    c.box(36, 332, 812, 20, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.runs(48, 346, [('{{element name="MastheadImage" output="file"}}',
+                      "#bb9af7")], size=10, mono=True)
+
+    c.text(36, 378, "A layout is either Standard or Handlebars. T4 will not "
+                    "evaluate T4 tags inside a Handlebars layout, or "
+                    "Handlebars inside a Standard one.", size=9, fill=p["dim"])
+    return c
+
+
+def changes(p):
+    """The change list, with a row opened to show its diff and history."""
+    c = Canvas(880, 440, p)
+    c.box(16, 16, 848, 408, fill=p["card"], width=1.5)
+
+    c.text(36, 44, "CHANGES", size=10.5, weight="700", fill=p["dim"])
+    c.pill(106, 34, "3 CHANGED")
+    c.box(786, 32, 62, 20, fill=p["bg"], radius=5)
+    c.text(817, 46, "Rescan", size=9.5, anchor="middle")
+
+    c.runs(36, 68, [("Files you have edited since the last pull. ", p["dim"]),
+                    ("diff", p["fg"]),
+                    (" opens what would change since your last commit, "
+                     "with a toggle to", p["dim"])], size=9.5)
+    c.runs(36, 82, [("compare against what T4 holds instead. ", p["dim"]),
+                    ("push", p["fg"]),
+                    (" deploys that one file; tick several and use Push to "
+                     "T4 to send them together.", p["dim"])], size=9.5)
+
+    def row(y, path, record, open_row=False):
+        c.box(36, y + 2, 12, 12, fill=p["accent"], stroke=p["accent"], radius=3)
+        c.text(58, y + 12, path, size=10, mono=True,
+               fill=p["accent"] if open_row else p["fg"])
+        c.text(690, y + 12, record, size=9, fill=p["dim"], anchor="end")
+        c.box(700, y + 1, 52, 16, fill=p["bg"], radius=4,
+              stroke=p["accent"] if open_row else p["edge"],
+              width=2 if open_row else 1)
+        c.text(726, y + 13, ("\u25be" if open_row else "\u203a") + " diff",
+               size=9, anchor="middle")
+        c.box(760, y + 1, 48, 16, fill=p["bg"], radius=4)
+        c.text(784, y + 13, "push", size=9, anchor="middle", fill=p["accent"])
+
+    row(100, "contentLayout/image-card--texthtml.html", "layout #4210")
+    row(126, "media/site.css", "media #4120", open_row=True)
+
+    # The opened row: which side it is comparing, and the way to the other.
+    c.runs(58, 166, [("Local changes   ", p["fg"]),
+                     ("against your last commit", p["dim"])], size=9.5)
+    c.box(700, 154, 108, 18, fill=p["bg"], radius=5)
+    c.text(754, 167, "compare with T4", size=9, anchor="middle")
+
+    c.box(58, 180, 750, 110, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    diff = [("@@ -1109,10 +1109,10 @@ th { text-align: left; }", "hunk"),
+            ("  .table-bordered { border: 1px solid #ddd; }", "same"),
+            ("- .table-bordered > tbody > tr > td { border: 1px solid #ddd; }", "del"),
+            ("- /* 11242016", "del"),
+            ("+ .table-bordered > tbody > tr > td { border: 1px solid #ddd; }", "add"),
+            ("+ /* 11242016", "add"),
+            ("  white-space: nowrap;", "same")]
+    dy = 196
+    for text, kind in diff:
+        colour = {"hunk": "#7aa2f7", "add": "#9ece6a", "del": "#f7768e",
+                  "same": p["code_fg"]}[kind]
+        if kind in ("add", "del"):
+            c.box(58, dy - 10, 750, 13,
+                  fill="#1d2a1f" if kind == "add" else "#2a1d1f",
+                  stroke="none", radius=0, width=0)
+        c.text(68, dy, text, size=8.5, mono=True, fill=colour)
+        dy += 13
+
+    c.text(58, 312, "History - 2 commit(s) touched this file", size=9,
+           fill=p["dim"])
+    hy = 332
+    for date, subject, sha in (
+            ("2026-10-28", "Narrow the footer gutter on mobile", "a1b2c3d"),
+            ("2026-10-28", "Initial pull from T4", "5250a37")):
+        c.text(70, hy, date, size=9, mono=True, fill=p["dim"])
+        c.text(160, hy, subject, size=9.5)
+        c.text(808, hy, sha, size=9, mono=True, fill=p["dim"], anchor="end")
+        hy += 22
+
+    row(382, "pageLayout/standard.footer.html", "pageLayout #1180")
+    return c
+
+
 def inspector(p):
     """Click something on the page; the panel says what made it."""
     c = Canvas(880, 350, p)
@@ -457,7 +609,8 @@ def inspector(p):
 
 
 DIAGRAMS = {"overview": overview, "setup": setup, "workflow": workflow,
-            "app": app_panel, "inspector": inspector}
+            "app": app_panel, "tagbuilder": tagbuilder, "changes": changes,
+            "inspector": inspector}
 
 
 def main():

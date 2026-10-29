@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="430" viewBox="0 0 880 430" role="img">
+<rect width="880" height="430" fill="#ffffff"/>
+<rect x="16" y="16" width="848" height="398" rx="8" ry="8" fill="#f4f6fa" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="36" y="44" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="700" fill="#5a6376" text-anchor="start">TAG BUILDER</text>
+<rect x="124" y="34" width="172.4" height="15" rx="7.5" ry="7.5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1"/>
+<text x="210.2" y="44" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="700" fill="#5a6376" text-anchor="middle">290 CONTENT TYPES, 4627 TAGS READ</text>
+<text x="36" y="66" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#5a6376" text-anchor="start">Attributes come from the T4 tag reference; element names come from this project's own content types.</text>
+<text x="36" y="80" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" xml:space="preserve"><tspan fill="#1a1d25">The content type is not named in the tag. </tspan><tspan fill="#5a6376">A content tag names an element, and the tag already sits inside that type's Content Layout.</tspan></text>
+<text x="36" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#5a6376" text-anchor="start">Tag</text>
+<rect x="36" y="110" width="158" height="22" rx="5" ry="5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="45" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="start">content (2592)</text>
+<text x="182" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#5a6376" text-anchor="start">▾</text>
+<text x="202" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#5a6376" text-anchor="start">Content type</text>
+<rect x="202" y="110" width="158" height="22" rx="5" ry="5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="211" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="start">2015 - Header Image</text>
+<text x="348" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#5a6376" text-anchor="start">▾</text>
+<text x="368" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#5a6376" text-anchor="start">Element</text>
+<rect x="368" y="110" width="158" height="22" rx="5" ry="5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="377" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="start">MastheadImage · image</text>
+<text x="514" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#5a6376" text-anchor="start">▾</text>
+<text x="534" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#5a6376" text-anchor="start">Output</text>
+<rect x="534" y="110" width="158" height="22" rx="5" ry="5" fill="#ffffff" stroke="#2b4bbf" stroke-width="2"/>
+<text x="543" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="start">File · file (32)</text>
+<text x="680" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#5a6376" text-anchor="start">▾</text>
+<text x="700" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#5a6376" text-anchor="start">Date format</text>
+<rect x="700" y="110" width="158" height="22" rx="5" ry="5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="709" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="start">(none)</text>
+<text x="846" y="125" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#5a6376" text-anchor="start">▾</text>
+<rect x="700" y="136" width="158" height="20" rx="5" ry="5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="709" y="150" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#5a6376" text-anchor="start">or a custom pattern</text>
+<text x="36" y="176" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#5a6376" text-anchor="start">Outputs a file and its path.</text>
+<rect x="36" y="194" width="10" height="10" rx="3" ry="3" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="51" y="203" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" xml:space="preserve"><tspan fill="#1a1d25">Encode special characters to their HTML equivalent  </tspan><tspan fill="#5a6376">htmlentities (489)</tspan></text>
+<rect x="456" y="194" width="10" height="10" rx="3" ry="3" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="471" y="203" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" xml:space="preserve"><tspan fill="#1a1d25">Strip out all HTML tags  </tspan><tspan fill="#5a6376">striptags (413)</tspan></text>
+<rect x="36" y="213" width="10" height="10" rx="3" ry="3" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="51" y="222" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" xml:space="preserve"><tspan fill="#1a1d25">Parse for navigation t4 tags  </tspan><tspan fill="#5a6376">nav_sections (201)</tspan></text>
+<rect x="456" y="213" width="10" height="10" rx="3" ry="3" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="471" y="222" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" xml:space="preserve"><tspan fill="#1a1d25">tags  </tspan><tspan fill="#9a3412">tags (141) - undocumented</tspan></text>
+<rect x="36" y="232" width="10" height="10" rx="3" ry="3" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="51" y="241" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" xml:space="preserve"><tspan fill="#1a1d25">Change new lines to HTML line breaks  </tspan><tspan fill="#5a6376">nl2br (63)</tspan></text>
+<rect x="456" y="232" width="10" height="10" rx="3" ry="3" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="471" y="241" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" xml:space="preserve"><tspan fill="#1a1d25">js-string  </tspan><tspan fill="#9a3412">js-string (30) - undocumented</tspan></text>
+<text x="36" y="274" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#5a6376" text-anchor="start">T4 tag</text>
+<rect x="800" y="264" width="48" height="16" rx="4" ry="4" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="824" y="276" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#1a1d25" text-anchor="middle">copy</text>
+<rect x="36" y="280" width="812" height="20" rx="5" ry="5" fill="#0b0d12" stroke="#0b0d12" stroke-width="1.5"/>
+<text x="48" y="294" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" xml:space="preserve"><tspan fill="#f7768e">&lt;t4 </tspan><tspan fill="#e0af68">type</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"content"</tspan><tspan fill="#e0af68"> name</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"MastheadImage"</tspan><tspan fill="#e0af68"> output</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"file"</tspan><tspan fill="#f7768e"> /&gt;</tspan></text>
+<text x="36" y="326" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#5a6376" text-anchor="start">Handlebars</text>
+<rect x="800" y="316" width="48" height="16" rx="4" ry="4" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="824" y="328" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#1a1d25" text-anchor="middle">copy</text>
+<rect x="36" y="332" width="812" height="20" rx="5" ry="5" fill="#0b0d12" stroke="#0b0d12" stroke-width="1.5"/>
+<text x="48" y="346" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" xml:space="preserve"><tspan fill="#bb9af7">{{element name="MastheadImage" output="file"}}</tspan></text>
+<text x="36" y="378" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#5a6376" text-anchor="start">A layout is either Standard or Handlebars. T4 will not evaluate T4 tags inside a Handlebars layout, or Handlebars inside a Standard one.</text>
+</svg>

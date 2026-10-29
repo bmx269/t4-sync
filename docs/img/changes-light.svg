@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="440" viewBox="0 0 880 440" role="img">
+<rect width="880" height="440" fill="#ffffff"/>
+<rect x="16" y="16" width="848" height="408" rx="8" ry="8" fill="#f4f6fa" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="36" y="44" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="700" fill="#5a6376" text-anchor="start">CHANGES</text>
+<rect x="106" y="34" width="59.9" height="15.5" rx="7.75" ry="7.75" fill="#ffffff" stroke="#c3cbdb" stroke-width="1"/>
+<text x="135.95" y="44.5" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="700" fill="#5a6376" text-anchor="middle">3 CHANGED</text>
+<rect x="786" y="32" width="62" height="20" rx="5" ry="5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="817" y="46" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="middle">Rescan</text>
+<text x="36" y="68" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" xml:space="preserve"><tspan fill="#5a6376">Files you have edited since the last pull. </tspan><tspan fill="#1a1d25">diff</tspan><tspan fill="#5a6376"> opens what would change since your last commit, with a toggle to</tspan></text>
+<text x="36" y="82" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" xml:space="preserve"><tspan fill="#5a6376">compare against what T4 holds instead. </tspan><tspan fill="#1a1d25">push</tspan><tspan fill="#5a6376"> deploys that one file; tick several and use Push to T4 to send them together.</tspan></text>
+<rect x="36" y="102" width="12" height="12" rx="3" ry="3" fill="#2b4bbf" stroke="#2b4bbf" stroke-width="1.5"/>
+<text x="58" y="112" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#1a1d25" text-anchor="start">contentLayout/image-card--texthtml.html</text>
+<text x="690" y="112" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#5a6376" text-anchor="end">layout #4210</text>
+<rect x="700" y="101" width="52" height="16" rx="4" ry="4" fill="#ffffff" stroke="#c3cbdb" stroke-width="1"/>
+<text x="726" y="113" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#1a1d25" text-anchor="middle">› diff</text>
+<rect x="760" y="101" width="48" height="16" rx="4" ry="4" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="784" y="113" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#2b4bbf" text-anchor="middle">push</text>
+<rect x="36" y="128" width="12" height="12" rx="3" ry="3" fill="#2b4bbf" stroke="#2b4bbf" stroke-width="1.5"/>
+<text x="58" y="138" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#2b4bbf" text-anchor="start">media/site.css</text>
+<text x="690" y="138" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#5a6376" text-anchor="end">media #4120</text>
+<rect x="700" y="127" width="52" height="16" rx="4" ry="4" fill="#ffffff" stroke="#2b4bbf" stroke-width="2"/>
+<text x="726" y="139" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#1a1d25" text-anchor="middle">▾ diff</text>
+<rect x="760" y="127" width="48" height="16" rx="4" ry="4" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="784" y="139" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#2b4bbf" text-anchor="middle">push</text>
+<text x="58" y="166" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" xml:space="preserve"><tspan fill="#1a1d25">Local changes   </tspan><tspan fill="#5a6376">against your last commit</tspan></text>
+<rect x="700" y="154" width="108" height="18" rx="5" ry="5" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="754" y="167" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#1a1d25" text-anchor="middle">compare with T4</text>
+<rect x="58" y="180" width="750" height="110" rx="5" ry="5" fill="#0b0d12" stroke="#0b0d12" stroke-width="1.5"/>
+<text x="68" y="196" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#7aa2f7" text-anchor="start">@@ -1109,10 +1109,10 @@ th { text-align: left; }</text>
+<text x="68" y="209" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#dbe1ee" text-anchor="start">  .table-bordered { border: 1px solid #ddd; }</text>
+<rect x="58" y="212" width="750" height="13" rx="0" ry="0" fill="#2a1d1f" stroke="none" stroke-width="0"/>
+<text x="68" y="222" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#f7768e" text-anchor="start">- .table-bordered &gt; tbody &gt; tr &gt; td { border: 1px solid #ddd; }</text>
+<rect x="58" y="225" width="750" height="13" rx="0" ry="0" fill="#2a1d1f" stroke="none" stroke-width="0"/>
+<text x="68" y="235" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#f7768e" text-anchor="start">- /* 11242016</text>
+<rect x="58" y="238" width="750" height="13" rx="0" ry="0" fill="#1d2a1f" stroke="none" stroke-width="0"/>
+<text x="68" y="248" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#9ece6a" text-anchor="start">+ .table-bordered &gt; tbody &gt; tr &gt; td { border: 1px solid #ddd; }</text>
+<rect x="58" y="251" width="750" height="13" rx="0" ry="0" fill="#1d2a1f" stroke="none" stroke-width="0"/>
+<text x="68" y="261" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#9ece6a" text-anchor="start">+ /* 11242016</text>
+<text x="68" y="274" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#dbe1ee" text-anchor="start">  white-space: nowrap;</text>
+<text x="58" y="312" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#5a6376" text-anchor="start">History - 2 commit(s) touched this file</text>
+<text x="70" y="332" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" font-weight="400" fill="#5a6376" text-anchor="start">2026-10-28</text>
+<text x="160" y="332" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="start">Narrow the footer gutter on mobile</text>
+<text x="808" y="332" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" font-weight="400" fill="#5a6376" text-anchor="end">a1b2c3d</text>
+<text x="70" y="354" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" font-weight="400" fill="#5a6376" text-anchor="start">2026-10-28</text>
+<text x="160" y="354" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#1a1d25" text-anchor="start">Initial pull from T4</text>
+<text x="808" y="354" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" font-weight="400" fill="#5a6376" text-anchor="end">5250a37</text>
+<rect x="36" y="384" width="12" height="12" rx="3" ry="3" fill="#2b4bbf" stroke="#2b4bbf" stroke-width="1.5"/>
+<text x="58" y="394" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#1a1d25" text-anchor="start">pageLayout/standard.footer.html</text>
+<text x="690" y="394" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#5a6376" text-anchor="end">pageLayout #1180</text>
+<rect x="700" y="383" width="52" height="16" rx="4" ry="4" fill="#ffffff" stroke="#c3cbdb" stroke-width="1"/>
+<text x="726" y="395" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#1a1d25" text-anchor="middle">› diff</text>
+<rect x="760" y="383" width="48" height="16" rx="4" ry="4" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="784" y="395" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#2b4bbf" text-anchor="middle">push</text>
+</svg>
