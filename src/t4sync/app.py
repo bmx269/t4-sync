@@ -376,6 +376,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._diff()
         if path == "/api/tags":
             return self._tags()
+        if path == "/fixture":
+            return self._fixture()
         if path.startswith("/api/jobs/") and path.endswith("/stream"):
             return self._stream(path.split("/")[3])
         return self._json({"error": "not found"}, 404)
@@ -421,6 +423,26 @@ class AppHandler(BaseHTTPRequestHandler):
         name = self._query().get("env", [None])[0]
         return name or self.project.default_env()
 
+    def _fixture(self):
+        """Serve one rendering back, so it can be opened in a tab.
+
+        Only out of `.t4/fixtures/`, and only a bare filename: the name
+        arrives from the page, and a page is not a thing to take a path
+        from. A rendering is invented content with nothing secret in it,
+        but the directory it sits in is inside the project.
+        """
+        name = (self._query().get("file", [""])[0] or "").strip()
+        folder = (self.project.root / ".t4" / "fixtures").resolve()
+        try:
+            target = (folder / name).resolve()
+        except OSError:
+            return self._json({"error": "no such rendering"}, 404)
+        if ("/" in name or "\\" in name or not name.endswith(".html")
+                or target.parent != folder or not target.is_file()):
+            return self._json({"error": "no such rendering"}, 404)
+        return self._send(200, target.read_text(encoding="utf-8"),
+                          "text/html; charset=utf-8")
+
     def _changes(self):
         """Which files differ from T4, so they can be chosen one by one.
 
@@ -433,6 +455,7 @@ class AppHandler(BaseHTTPRequestHandler):
         comparison.
         """
         from .extract import digest, read_text
+        from . import fixtures as fixturelib
 
         env_name = self._env_arg()
         try:
@@ -475,6 +498,14 @@ class AppHandler(BaseHTTPRequestHandler):
                 "endpoint": meta.get("endpoint"),
                 "id": meta.get("id"),
                 "name": meta.get("name"),
+                "contentType": meta.get("contentType"),
+                # Where `t4 fixtures` would write this layout's rendering.
+                # Named here rather than worked out again in the page, so
+                # there is one rule for it rather than two that can drift.
+                "sample": (fixturelib.output_name(meta["contentType"],
+                                                  meta.get("name"))
+                           if meta.get("endpoint") == "layout"
+                           and meta.get("contentType") else None),
                 "bytes": len(local),
                 "since_pull": since_pull,
                 "committed": not dirty,
@@ -647,7 +678,7 @@ class AppHandler(BaseHTTPRequestHandler):
 # environment's URL and its credentials are set up once, deliberately, in a
 # terminal -- not somewhere a mis-click can reach them.
 ALLOWED = {"pull", "push", "save", "mirror", "serve", "status", "diff",
-           "sync", "sections", "doctor", "layouts", "compare"}
+           "sync", "sections", "doctor", "layouts", "compare", "fixtures"}
 
 
 def run_app(project, port=DEFAULT_PORT, host="127.0.0.1", open_browser=True):
@@ -728,12 +759,13 @@ h2{font-size:13px;margin:0 0 .5rem;color:var(--dim);font-weight:600;
    behave differently depending on where the pointer is. */
 main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
  grid-template-columns:minmax(0,70fr) minmax(0,30fr);
- grid-template-areas:"project project" "changes history" "build build"
-                     "tasks tasks"}
+ grid-template-areas:"project project" "changes history" "sample history"
+                     "build build" "tasks tasks"}
 .area-project h2{margin-top:.6rem}
 .area-project{padding-bottom:.85rem}
 .area-project{grid-area:project}
 .area-changes{grid-area:changes}
+.area-sample{grid-area:sample}
 .area-history{grid-area:history}
 .area-build{grid-area:build}
 .area-tasks{grid-area:tasks}
@@ -764,7 +796,8 @@ main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
 .t-comment{color:#7d8799;font-style:italic}
 @media (max-width:980px){
  main{grid-template-columns:minmax(0,1fr);
-  grid-template-areas:"project" "changes" "history" "build" "tasks"}
+  grid-template-areas:"project" "changes" "sample" "history" "build"
+   "tasks"}
 }
 
 /* Project details are reference, not the thing you came for. */
@@ -1018,6 +1051,22 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
       Push to T4 to send them together.
     </p>
     <div id="changes"></div>
+  </section>
+
+  <section class="card area-sample">
+    <h2>Sample data <span id="samplecount" class="pill"></span>
+      <label class="inline" style="float:right;font-weight:400">
+        <input type="checkbox" id="sample-lorem"> lorem ipsum
+      </label>
+    </h2>
+    <p class="dim" style="margin:.1rem 0 .5rem;font-size:12px">
+      Content Layouts you have edited, rendered with invented values so you
+      can see the markup nest and the CSS apply before anything is published.
+      Values come from each element's type &mdash; text, date, image, list.
+      <b>Not T4's renderer:</b> modifiers are not applied and anything needing
+      the CMS is left visibly marked.
+    </p>
+    <div id="sample"></div>
   </section>
 
   <section class="card area-history">
@@ -1444,6 +1493,7 @@ function stream(id) {
     syncButtons(); renderTasks();
     if (shown === id) el("stop").disabled = true;
     load();
+    if (entry.onEnd) { var f = entry.onEnd; entry.onEnd = null; f(entry.summary); }
   });
   source.onerror = function () { source.close(); entry.source = null; };
 }
@@ -1453,14 +1503,15 @@ function run(argv, opts) {
   argv = argv.slice();
   // Every command here takes --env, except the ones that do not accept it.
   if (["pull", "push", "save", "mirror", "sync", "sections", "status",
-       "diff", "serve", "doctor", "layouts"].indexOf(argv[0]) !== -1) {
+       "diff", "serve", "doctor", "layouts",
+       "fixtures"].indexOf(argv[0]) !== -1) {
     argv.push("--env", selected());
   }
   if (opts.extra) argv = argv.concat(opts.extra);
 
   return api("/api/run", {method: "POST", body: JSON.stringify({argv: argv})})
     .then(function (summary) {
-      track(summary);
+      track(summary).onEnd = opts.onEnd || null;
       showLog(summary.id);
       syncButtons();
       return summary;
@@ -1710,6 +1761,73 @@ function renderChanges() {
     box.appendChild(wrap);
   });
   syncButtons();
+  renderSample();
+}
+
+// -- sample data -------------------------------------------------------
+// The same changed files, read the other way round: not "what will I
+// deploy" but "what have I broken". A Content Layout is the only kind of
+// change that can be looked at, because it is the only one that renders.
+
+function renderSample() {
+  var box = el("sample");
+  if (!box) return;
+  box.innerHTML = "";
+  var layouts = changes.filter(function (c) { return c.sample; });
+  el("samplecount").textContent = layouts.length
+    ? layouts.length + " layout" + (layouts.length === 1 ? "" : "s") : "none";
+
+  if (!layouts.length) {
+    var p = document.createElement("p");
+    p.className = "dim"; p.style.margin = ".2rem 0";
+    p.appendChild(text_(changes.length
+      ? "No edited Content Layouts. Only layouts render, so only they can "
+        + "be shown with sample content."
+      : "Nothing edited since the last pull."));
+    box.appendChild(p);
+    return;
+  }
+
+  layouts.forEach(function (c) {
+    var row = document.createElement("div");
+    row.className = "chg";
+
+    var path = document.createElement("span");
+    path.className = "p"; path.appendChild(text_(c.path));
+
+    var rec = document.createElement("span");
+    rec.className = "rec";
+    rec.appendChild(text_(c.contentType + (c.name ? "  \u00b7  " + c.name : "")));
+
+    var go = document.createElement("button");
+    go.className = "tog one";
+    go.dataset.sample = c.contentType;
+    go.dataset.format = c.name || "";
+    go.dataset.file = c.sample;
+    go.appendChild(text_("add sample data"));
+
+    row.appendChild(path); row.appendChild(rec); row.appendChild(go);
+    box.appendChild(row);
+  });
+}
+
+function addSampleData(button) {
+  var extra = ["--format", button.dataset.format, "--no-open"];
+  if (el("sample-lorem").checked) extra.push("--lorem");
+  button.disabled = true;
+  run(["fixtures", button.dataset.sample], {
+    extra: extra,
+    onEnd: function (summary) {
+      button.disabled = false;
+      // Only open it if the command actually wrote something; otherwise the
+      // log already says why, and a blank tab would say nothing.
+      if (summary && summary.returncode === 0) {
+        window.open("/fixture?file=" + encodeURIComponent(button.dataset.file)
+                    + "&t=" + encodeURIComponent(TOKEN), "_blank",
+                    "noopener");
+      }
+    }
+  });
 }
 
 function loadChanges() {
@@ -1748,6 +1866,9 @@ document.addEventListener("click", function (e) {
     fillDiff(swap.closest(".dwrap"), swap.dataset.path, swap.dataset.against);
     return;
   }
+
+  var sample = e.target.closest("button[data-sample]");
+  if (sample) { e.stopPropagation(); addSampleData(sample); return; }
 
   var one = e.target.closest("button[data-pushone]");
   if (one) {

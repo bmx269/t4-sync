@@ -1039,6 +1039,31 @@ type it is rendering. The picker is there to find the element name.
 
 It composes only. T4 evaluates tags at publish time and nothing local can.
 
+### Sample data
+
+The same edited files as Changes, read the other way round: not *what am I
+about to deploy* but *what have I just broken*. Only Content Layouts appear,
+because a layout is the only kind of change that renders.
+
+**add sample data** on a row fills that layout with invented values and opens
+it in a tab. The values come from each element's declared type — text, date,
+image, list — so what comes back is the layout's shape with content in it:
+enough to see the markup nest and the CSS apply. **lorem ipsum** at the top
+right swaps the English for Latin, for when the wording would distract.
+
+It runs [`t4 fixtures`](#testing-a-tag) as a subprocess, like every other
+button here, so what you see in the browser and what the CLI produces cannot
+disagree. The rendering is written to `.t4/fixtures/`, which is not
+committed, and the panel serves it back from there — a bare filename out of
+that one directory and nothing else, because the name arrives from the page.
+
+**It is not T4's renderer.** The page says so across the top, modifiers are
+not applied, and anything needing the CMS is left visibly marked rather than
+blanked, so the output never looks more finished than it is. See
+[What this does not do](#what-this-does-not-do) for where the line falls —
+in particular, a layout that branches on whether an element is set will show
+you whichever branch the sample data happens to trigger.
+
 ### Tasks and output
 
 Tasks run side by side, so a pull does not stop you committing, and the local
@@ -1092,8 +1117,33 @@ publish cycle. The loop it does not shorten is changing a layout's logic.
 
 What it does give you for layout work is version control, diffing and review:
 you can see what changed in a layout, who changed it, commit it with
-[`t4 save`](#version-control-before-deploying) and push a reviewed change —
-you just cannot render it locally first.
+[`t4 save`](#version-control-before-deploying) and push a reviewed change.
+
+**Sample data is a partial exception, and it is worth being exact about how
+partial.** [`t4 fixtures`](#testing-a-tag) substitutes an invented value into
+every `<t4 type="content">` tag, using the element types the Content Type
+declares, so a layout can be seen with something in it before anything is
+published. That answers one question — does the markup nest correctly, does
+the CSS apply, does a long value wrap — and only that one.
+
+| | Locally, with sample data | Only in T4 |
+|---|---|---|
+| A content tag | Filled with an invented value | Resolved against the real item |
+| A modifier (`striptags`, `nl2br`) | Ignored | Applied |
+| `navigation`, `media`, `meta` | Left visibly marked | Resolved |
+| Handlebars (`{{#if}}`, `{{#each}}`) | Not evaluated | Evaluated |
+| A Programmable Layout | Not run | Run |
+
+So **conditional logic is still not testable locally**. A layout that shows
+one thing when an element is set and another when it is not has two
+behaviours, and sample data fills the element, so you see one of them. Which
+one you see is decided by the fixture, not by the layout. Emptying the
+element with `--values` shows the other branch, but you are choosing the
+answer rather than discovering it.
+
+For anything that branches, Preview, Direct Edit or a staging channel is
+still where it gets tested. Sample data shortens the loop on markup and
+styling; it does not shorten the loop on logic.
 
 ## Things that will bite you
 

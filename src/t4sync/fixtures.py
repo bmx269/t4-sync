@@ -237,3 +237,20 @@ def page(title, body, report, stylesheets=()):
                        for href in stylesheets)
     return PAGE % {"title": _attr(title), "body": body, "styles": styles,
                    "skipped": len(report.get("skipped") or [])}
+
+
+def slug(value):
+    return re.sub(r"[^a-z0-9]+", "-", str(value).lower()).strip("-") or "layout"
+
+
+def output_name(content_type_name, layout_name=None):
+    """The file a rendering is written to, by default.
+
+    The layout is in the name because a content type usually has several and
+    they would otherwise overwrite each other -- and because the web UI has
+    to be able to work out where a rendering went without reading the output
+    of the command that made it.
+    """
+    if layout_name:
+        return "%s--%s.html" % (slug(content_type_name), slug(layout_name))
+    return "%s.html" % slug(content_type_name)

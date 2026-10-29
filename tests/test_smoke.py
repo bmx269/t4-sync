@@ -3611,3 +3611,43 @@ class TestLorem(unittest.TestCase):
         values = fixtures.values_for(self.TYPE, {"Full name": "A. Example"},
                                      latin=True)
         self.assertEqual(values["Full name"], "A. Example")
+
+
+class TestSampleDataInTheWebUI(unittest.TestCase):
+    """The panel offers to render an edited Content Layout."""
+
+    def test_the_command_is_allowed_from_a_button(self):
+        self.assertIn("fixtures", app.ALLOWED)
+
+    def test_setting_up_an_environment_still_is_not(self):
+        self.assertNotIn("env", app.ALLOWED)
+        self.assertNotIn("token", app.ALLOWED)
+
+    def test_it_does_not_block_anything_else(self):
+        # Rendering writes only into .t4/fixtures/, so it races with
+        # nothing and should not hold up a pull or a commit.
+        self.assertNotIn("fixtures", app.LANES)
+
+    def test_the_page_and_the_command_agree_on_the_filename(self):
+        # The page opens what the command wrote. Two slug rules would
+        # drift and the tab would come up empty.
+        self.assertEqual(fixtures.output_name("Staff profile", "text/html"),
+                         "staff-profile--text-html.html")
+
+    def test_a_layout_is_named_once_per_format(self):
+        self.assertNotEqual(fixtures.output_name("Promo", "text/html"),
+                            fixtures.output_name("Promo", "text/plain"))
+
+    def test_the_card_is_in_the_page(self):
+        self.assertIn('id="sample"', app.PAGE)
+        self.assertIn("Sample data", app.PAGE)
+        self.assertIn('id="sample-lorem"', app.PAGE)
+
+    def test_the_card_has_a_place_in_the_layout(self):
+        # Declared in grid-template-areas but with no .area- rule, it
+        # would silently fall out of the grid.
+        self.assertIn(".area-sample{grid-area:sample}", app.PAGE)
+        self.assertIn('"sample history"', app.PAGE)
+
+    def test_the_page_says_it_is_not_a_publish(self):
+        self.assertIn("Not T4's renderer", app.PAGE)

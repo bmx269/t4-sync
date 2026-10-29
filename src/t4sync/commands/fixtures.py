@@ -124,7 +124,8 @@ def _write(args, project, env_name, content_type, source, what, values):
                           html, report, stylesheets)
 
     target = pathlib.Path(args.out) if args.out else (
-        project.root / ".t4" / "fixtures" / ("%s.html" % _slug(content_type["name"])))
+        project.root / ".t4" / "fixtures"
+        / fixturelib.output_name(content_type["name"], what))
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(out, encoding="utf-8")
 
@@ -144,8 +145,3 @@ def _write(args, project, env_name, content_type, source, what, values):
     if not args.no_open:
         webbrowser.open(target.resolve().as_uri())
     return 0
-
-
-def _slug(value):
-    import re
-    return re.sub(r"[^a-z0-9]+", "-", str(value).lower()).strip("-") or "layout"
