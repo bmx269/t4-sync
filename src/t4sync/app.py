@@ -741,9 +741,14 @@ select{font:inherit;color:var(--fg);background:var(--bg);
 /* One action per row, with what it does beside it: the buttons are not
    self-explanatory and a tooltip is no use to someone deciding. */
 /* Three columns, one per stage, each a stack of what you do at that stage.
-   The order is the order you work in, so the eye has somewhere to start. */
-.phases{display:grid;gap:.9rem;margin-top:.4rem;
- grid-template-columns:repeat(3,minmax(0,1fr))}
+   The order is the order you work in, so the eye has somewhere to start.
+   Capped at 300px: a button stretched across a wide screen is harder to
+   aim at, not easier, and the row has no more meaning for being wider. */
+.phases{display:grid;gap:.9rem;margin-top:.4rem;justify-content:start;
+ grid-template-columns:repeat(3,minmax(0,300px))}
+@media (max-width:980px){
+ .phases{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 @media (max-width:760px){.phases{grid-template-columns:minmax(0,1fr)}}
 .phase h3{margin:0 0 .3rem;font-size:11px;color:var(--dim);font-weight:600;
  text-transform:uppercase;letter-spacing:.06em}
