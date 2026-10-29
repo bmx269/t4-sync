@@ -75,7 +75,8 @@ TAG_TYPES = {
     "meta": {
         "label": "Metadata",
         "oneof": ["id", "meta"],
-        "attrs": ["id", "meta", "display_field", "format"],
+        "attrs": ["id", "meta", "display_field", "format",
+                  "output_to_index", "include_content_on_index"],
         "note": "In a Page Layout a meta tag names a Metadata definition by "
                 "id and writes the whole <meta> element. The meta= form is "
                 "the Content Type one, which writes just the value.",
@@ -86,7 +87,8 @@ TAG_TYPES = {
     "parentnames": {
         "label": "Ancestor or parent name",
         "attrs": ["start-level", "number-of-levels", "separator",
-                  "first-child", "empty-section"],
+                  "first-child", "empty-section", "use-element", "threshold",
+                  "first-content", "before", "after"],
         "needs": [],
     },
     "edit-page": {"label": "Edit page link", "attrs": ["text"], "needs": []},
@@ -94,7 +96,10 @@ TAG_TYPES = {
     "lang-var": {
         "label": "Language variable",
         "attrs": ["name", "default-language", "locale"],
-        "needs": ["name"],
+        "needs": [],
+        "note": "A language variable carries one attribute per language -- "
+                "en=\"Name\" ga=\"Irish Name\" -- so any language code is "
+                "accepted alongside the fixed attributes.",
     },
     "data-obj": {
         "label": "Data object",
@@ -111,9 +116,36 @@ TAG_TYPES = {
     "sslink": {"label": "Section link", "attrs": ["id", "output"], "needs": ["id"]},
     "fix-url": {"label": "Fix URL", "attrs": ["name"], "needs": []},
     "social": {"label": "Social poster", "attrs": ["id", "name"], "needs": []},
-    "exceltohtml": {"label": "Excel to HTML", "attrs": ["name"], "needs": ["name"]},
+    "exceltohtml": {
+        "label": "Excel to HTML",
+        "attrs": ["name", "filename-element", "output-sheet-name",
+                  "sheet-numbers-element", "default-font"],
+        "needs": [],
+    },
     "import-url": {"label": "Import URL", "attrs": ["name"], "needs": ["name"]},
+    "accesscontrol": {
+        "label": "Access control",
+        "attrs": ["action", "output", "attribute", "editable",
+                  "append-content", "append-element", "name", "id"],
+        "needs": [],
+    },
+    "pdfdoc": {
+        "label": "PDF document",
+        "attrs": ["element", "class", "base_url", "output"],
+        "needs": ["element"],
+    },
+    "post": {
+        "label": "Social post",
+        "attrs": ["post_type", "post_element", "expires", "resource", "id",
+                  "account_identifier"],
+        "needs": [],
+    },
 }
+
+# A language variable names a value per language, so its attributes are
+# language codes rather than a fixed list. Two letters, optionally with a
+# region, which is what the examples use (en, ga, fr, de, locale_es).
+LANGUAGE_ATTR = re.compile(r"^(?:locale_)?[a-z]{2}(?:[_-][A-Za-z]{2})?$")
 
 # Which kinds refer to another pulled object, and to which kind of object.
 TAKES_OBJECT = {name: spec["object"]
@@ -181,7 +213,8 @@ OUTPUT_HELP = {
 # page but not in the appendix, which predates them.
 OUTPUTS = ["normal", "selective-output", "repeater", "fulltext", "image",
            "imageurl", "file", "download", "linktext", "linkurl", "id",
-           "description", "fav-icon", "site-root", "userinfo",
+           "name", "description", "fav-icon", "site-root", "userinfo",
+           "groupnames", "embed", "hidden-file", "hidden-no-file",
            "lang_disclosure_style", "lang_disclosure_template"]
 
 # The eight documented modifiers, with what each is for.
@@ -455,6 +488,9 @@ def build_tag(spec):
         if value in ("", None, False):
             continue
         if key not in allowed:
+            if kind == "lang-var" and LANGUAGE_ATTR.match(key):
+                given[key] = value           # one value per language
+                continue
             problems.append("a %s tag does not take %s" % (kind, key))
             continue
         given[key] = value

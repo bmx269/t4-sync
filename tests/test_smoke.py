@@ -2510,8 +2510,28 @@ class TestTagBuilder(unittest.TestCase):
 
     def test_an_undocumented_output_is_refused(self):
         _markup, problems = tags.build_tag(
+            {"type": "content", "name": "X", "output": "invented"})
+        self.assertIn("invented is not a documented output value", problems)
+
+    def test_an_output_documented_only_on_a_sub_page_is_accepted(self):
+        # output="name" is absent from the appendix and used on the access
+        # control page. Reading the appendix alone had it refused.
+        _markup, problems = tags.build_tag(
             {"type": "content", "name": "X", "output": "name"})
-        self.assertIn("name is not a documented output value", problems)
+        self.assertEqual(problems, [])
+
+    def test_a_language_variable_takes_one_attribute_per_language(self):
+        markup, problems = tags.build_tag(
+            {"type": "lang-var", "default-language": "en",
+             "en": "Name", "ga": "Irish Name"})
+        self.assertEqual(problems, [])
+        self.assertIn('en="Name"', markup)
+        self.assertIn('ga="Irish Name"', markup)
+
+    def test_something_that_is_not_a_language_is_still_refused(self):
+        _markup, problems = tags.build_tag({"type": "lang-var",
+                                            "not_a_language": "x"})
+        self.assertTrue(any("does not take" in p for p in problems))
 
     def test_the_documented_modifier_conflict_is_caught(self):
         _markup, problems = tags.build_tag(
