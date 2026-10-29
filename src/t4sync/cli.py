@@ -5,7 +5,8 @@ import sys
 from . import __version__
 from .config import Project
 from .errors import T4Error
-from .commands import (app, compare, diff, doctor, edit, env, init, layouts,
+from .commands import (app, compare, diff, doctor, edit, env, fixtures, init,
+                       layouts,
                        preview, pull, push, save, sections, site, status, sync,
                        token)
 
@@ -170,6 +171,15 @@ def build_parser():
     sp.add_argument("--force", action="store_true", help="reset from the mirror")
     sp.add_argument("--host-dir", help="which mirror, if several")
 
+    sp = add("fixtures", "Render a Content Layout with made-up content.")
+    sp.add_argument("type", nargs="?", help="content type name, or omit to list")
+    sp.add_argument("--env", "-e")
+    sp.add_argument("--format", help="which layout, when a type has several")
+    sp.add_argument("--css", action="append", metavar="URL",
+                    help="a stylesheet to load; repeatable")
+    sp.add_argument("--out", help="where to write the HTML")
+    sp.add_argument("--no-open", action="store_true")
+
     sp = add("app", "Open a control panel in your browser.")
     sp.add_argument("--port", "-p", type=int, default=8320)
     sp.add_argument("--host", default="127.0.0.1")
@@ -225,6 +235,7 @@ HANDLERS = {
     "mirror": (site.run_mirror, True),
     "serve": (site.run_serve, True),
     "app": (app.run, True),
+    "fixtures": (fixtures.run, True),
 }
 
 

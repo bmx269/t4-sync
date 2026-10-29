@@ -3089,3 +3089,73 @@ class TestObjectPicker(unittest.TestCase):
         page = app.PAGE % {"token": "x"}
         js = page.split("<script>")[1].split("</scr" + "ipt>")[0]
         self.assertIn("takes_object", js)
+
+
+class TestOutputSettings(unittest.TestCase):
+    """An output is a choice about behaviour, and brings settings with it."""
+
+    def test_every_output_value_is_explained(self):
+        # "selective-output" says nothing about what it selects.
+        for value in tags.OUTPUTS:
+            spec = tags.OUTPUT_HELP.get(value)
+            if spec is None:
+                continue
+            self.assertTrue(spec.get("label"), value)
+            self.assertTrue(spec.get("help"), value)
+
+    def test_selective_output_needs_its_markup(self):
+        _markup, problems = tags.build_tag(
+            {"type": "content", "name": "Phone", "output": "selective-output"})
+        self.assertIn("selective-output output needs format", problems)
+
+    def test_format_keeps_its_markup(self):
+        # format="<p>Phone: $value</p>" is the documented form, so the angle
+        # brackets stay and only the quote that would end it is escaped.
+        markup, problems = tags.build_tag({
+            "type": "content", "name": "Phone", "output": "selective-output",
+            "format": '<p class="x">Phone: $value</p>'})
+        self.assertIn('format="<p class=&quot;x&quot;>Phone: $value</p>"', markup)
+        self.assertEqual(problems, [])
+
+    def test_an_element_name_is_still_escaped_whole(self):
+        markup, _problems = tags.build_tag({"type": "content",
+                                            "name": "<script>"})
+        self.assertIn("&lt;script&gt;", markup)
+        self.assertNotIn("<script>", markup)
+
+    def test_selective_output_is_refused_on_an_image(self):
+        _markup, problems = tags.build_tag({
+            "type": "content", "name": "Photo", "output": "selective-output",
+            "format": "<p>$value</p>", "element_type": "image"})
+        self.assertTrue(any("not available for a image" in p for p in problems))
+
+    def test_a_repeater_names_the_layout_to_repeat(self):
+        markup, problems = tags.build_tag({
+            "type": "content", "name": "Rows", "output": "repeater",
+            "layout": "text/example"})
+        self.assertIn('layout="text/example"', markup)
+        self.assertEqual(problems, [])
+
+    def test_content_owner_details_are_constrained(self):
+        _markup, problems = tags.build_tag({
+            "type": "content", "name": "Owner", "output": "userinfo",
+            "info": "nope"})
+        self.assertTrue(any("must be one of" in p for p in problems))
+        _markup, problems = tags.build_tag({
+            "type": "content", "name": "Owner", "output": "userinfo",
+            "info": "first_last"})
+        self.assertEqual(problems, [])
+
+    def test_the_attributes_the_docs_name_are_all_accepted(self):
+        accepted = set(tags.TAG_TYPES["content"]["attrs"])
+        for attr in ("layout", "info", "formatter", "display_field",
+                     "date_format", "format", "process-format",
+                     "format-modifiers", "delimiter",
+                     "textual-name-separator", "enable-dedit"):
+            self.assertIn(attr, accepted, attr)
+
+    def test_the_panel_shows_what_each_modifier_does(self):
+        page = app.PAGE % {"token": "x"}
+        js = page.split("<script>")[1].split("</scr" + "ipt>")[0]
+        self.assertIn("modifier_help", js)
+        self.assertIn("output_help", js)

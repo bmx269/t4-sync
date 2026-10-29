@@ -51,7 +51,8 @@ TAG_TYPES = {
         "label": "Content element",
         "needs": ["name"],
         "attrs": ["name", "output", "modifiers", "display_field", "date_format",
-                  "format", "process-format", "format-modifiers",
+                  "format", "process-format", "format-modifiers", "layout",
+                  "info", "formatter", "alt-element", "style",
                   "enable-dedit", "delimiter", "separator",
                   "textual-name-separator"],
     },
@@ -117,6 +118,64 @@ TAG_TYPES = {
 # Which kinds refer to another pulled object, and to which kind of object.
 TAKES_OBJECT = {name: spec["object"]
                 for name, spec in TAG_TYPES.items() if "object" in spec}
+
+# What each output does, in the words of the documentation, plus the extra
+# attributes it brings with it. An output is a choice about behaviour, and
+# "selective-output" tells you nothing about what it selects.
+OUTPUT_HELP = {
+    "normal": {
+        "label": "Normal (inline)",
+        "help": "Outputs the element, adopting the text style of the page.",
+    },
+    "selective-output": {
+        "label": "Only if filled in",
+        "help": "Outputs nothing when the element is empty. The surrounding "
+                "markup goes in format, with $value where the value belongs.",
+        "attrs": ["format", "process-format", "format-modifiers"],
+        "needs": ["format"],
+        "not_for": ["file", "image"],
+    },
+    "repeater": {
+        "label": "Repeater",
+        "help": "Outputs a Repeater element. layout names which Content "
+                "Layout to repeat; without it T4 falls back to the one set "
+                "in the Repeater config.",
+        "attrs": ["layout"],
+    },
+    "fulltext": {
+        "label": "Full text (separate page)",
+        "help": "Outputs the element on a page of its own, which can have "
+                "its own layout.",
+    },
+    "image": {"label": "Image", "help": "Outputs an image and its path."},
+    "imageurl": {"label": "Image URL only",
+                 "help": "Outputs just the path to the image."},
+    "file": {"label": "File", "help": "Outputs a file and its path."},
+    "download": {
+        "label": "Download",
+        "help": "Outputs a file and its path, and links to this Content Item "
+                "go straight to the file.",
+    },
+    "linktext": {
+        "label": "Link text",
+        "help": "The text of a Section or Content link, without the anchor.",
+    },
+    "linkurl": {
+        "label": "Link URL",
+        "help": "The URL of a Section or Content link, without the anchor.",
+    },
+    "userinfo": {
+        "label": "Content owner",
+        "help": "Details of the user who owns the content.",
+        "attrs": ["info"],
+        "needs": ["info"],
+        "values": {"info": ["username", "first_last", "last_first"]},
+    },
+    "id": {"label": "Id", "help": "Outputs the identifier."},
+    "description": {"label": "Description", "help": "Outputs the description."},
+    "site-root": {"label": "Site root", "help": "Outputs the site root path."},
+    "fav-icon": {"label": "Favicon", "help": "Outputs the favicon."},
+}
 
 # Every documented output value. `repeater` and `download` are on the content
 # page but not in the appendix, which predates them.
@@ -389,7 +448,7 @@ def build_tag(spec):
     allowed = set(rules["attrs"])
     given = {}
     for key, value in spec.items():
-        if key in ("type", "modifiers"):
+        if key in ("type", "modifiers", "element_type"):
             continue
         if isinstance(value, str):
             value = value.strip()
@@ -428,17 +487,31 @@ def build_tag(spec):
     output = given.get("output")
     if output and output not in OUTPUTS:
         problems.append("%s is not a documented output value" % output)
+    help_for_output = OUTPUT_HELP.get(output or "", {})
+    for required in help_for_output.get("needs", []):
+        if required not in given:
+            problems.append("%s output needs %s" % (output, required))
+    allowed_values = help_for_output.get("values", {})
+    for key, values in allowed_values.items():
+        if key in given and given[key] not in values:
+            problems.append("%s must be one of %s"
+                            % (key, ", ".join(values)))
+    forbidden = help_for_output.get("not_for", [])
+    element_kind = (spec.get("element_type") or "").lower()
+    if element_kind and any(word in element_kind for word in forbidden):
+        problems.append("%s output is not available for a %s element"
+                        % (output, element_kind))
 
     parts = ['type="%s"' % _attr(kind)]
     for key in ("name", "id", "meta", "output"):
         if key in given:
-            parts.append('%s="%s"' % (key, _attr(given.pop(key))))
+            parts.append('%s="%s"' % (key, _attr(given.pop(key), key)))
         elif key in placeholders:
             parts.append('%s=""' % key)
     if modifiers:
         parts.append('modifiers="%s"' % _attr(",".join(modifiers)))
     for key in sorted(given):
-        parts.append('%s="%s"' % (key, _attr(given[key])))
+        parts.append('%s="%s"' % (key, _attr(given[key], key)))
 
     return "<t4 %s />" % " ".join(parts), problems
 
@@ -496,6 +569,16 @@ MIXING_WARNING = ("A layout is either Standard or Handlebars. T4 will not "
                   "inside a Standard one.")
 
 
-def _attr(value):
+# `format` holds markup on purpose -- format="<p>Phone: $value</p>" is the
+# documented form -- so its angle brackets are left alone and only the quote
+# that would end the attribute is escaped. Everything else is escaped whole,
+# because an element name has no business containing markup.
+MARKUP_ATTRS = {"format"}
+
+
+def _attr(value, key=None):
     """Keep a value from breaking out of the attribute it sits in."""
-    return str(value).replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+    value = str(value).replace("&", "&amp;").replace('"', "&quot;")
+    if key in MARKUP_ATTRS:
+        return value
+    return value.replace("<", "&lt;").replace(">", "&gt;")

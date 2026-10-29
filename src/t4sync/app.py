@@ -498,6 +498,7 @@ class AppHandler(BaseHTTPRequestHandler):
                                  "attrs": spec["attrs"]}
                           for name, spec in tagdata.TAG_TYPES.items()},
             "modifier_help": tagdata.MODIFIERS,
+            "output_help": tagdata.OUTPUT_HELP,
             "id_hints": tagdata.ID_HINTS,
             "date_formats": [{"value": value, "example": example}
                              for value, example in tagdata.DATE_FORMATS],
@@ -746,6 +747,9 @@ main{display:grid;gap:.75rem;padding:.75rem;align-items:start;
  border-radius:6px;padding:.3rem .5rem}
 .mods{display:flex;flex-wrap:wrap;gap:.3rem .7rem;margin:.5rem 0 .2rem;
  font-size:11.5px}
+.mods label{cursor:help}
+.tghelp{font-size:11.5px;margin:.35rem 0 .1rem;min-height:1.2em}
+#tg-extra{margin-top:.4rem}
 .mods label{display:flex;gap:.3rem;align-items:center;cursor:pointer}
 .tagout{margin-top:.4rem}
 .taghead{display:flex;justify-content:space-between;align-items:baseline;
@@ -1047,6 +1051,19 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
       <label id="tg-datewrap">Date format
         <select id="tg-datepick"></select>
         <input id="tg-date" type="text" placeholder="or a custom pattern">
+      </label>
+    </div>
+    <div id="tg-outhelp" class="dim tghelp"></div>
+    <div class="build" id="tg-extra">
+      <label id="tg-formatwrap" hidden>Markup around the value
+        <input id="tg-format" type="text"
+               placeholder="&lt;p&gt;Phone: $value&lt;/p&gt;">
+      </label>
+      <label id="tg-layoutwrap" hidden>Layout to repeat
+        <input id="tg-layout" type="text" placeholder="text/example">
+      </label>
+      <label id="tg-infowrap" hidden>Which detail
+        <select id="tg-info"></select>
       </label>
     </div>
     <div id="tg-mods" class="mods"></div>
@@ -1769,6 +1786,13 @@ function tagSpec() {
   if (kind === "content" || kind === "media") {
     spec.name = el("tg-el").value;
     spec.output = el("tg-out").value;
+    var element = currentElement();
+    if (element) spec.element_type = element.type;
+    if (el("tg-format").value) spec.format = el("tg-format").value;
+    if (el("tg-layout").value) spec.layout = el("tg-layout").value;
+    if (!el("tg-infowrap").hidden && el("tg-info").value) {
+      spec.info = el("tg-info").value;
+    }
     spec.modifiers = [].slice
       .call(document.querySelectorAll("#tg-mods input:checked"))
       .map(function (b) { return b.value; });
@@ -1789,6 +1813,8 @@ function tagSpec() {
 // choices the user had not made.
 function resetTagFields() {
   el("tg-date").value = "";
+  el("tg-format").value = "";
+  el("tg-layout").value = "";
   if (el("tg-datepick").options.length) el("tg-datepick").selectedIndex = 0;
   document.querySelectorAll("#tg-mods input:checked").forEach(function (box) {
     box.checked = false;
@@ -1812,6 +1838,22 @@ function showForKind() {
   el("tg-elwrap").hidden = !named;
   el("tg-outwrap").hidden = !takes("output");
   el("tg-mods").hidden = !takes("modifiers");
+  // What this output does, and the fields it brings with it. An output is
+  // a choice about behaviour, and "selective-output" says nothing about
+  // what it selects.
+  var chosen = el("tg-out").value;
+  var help = (tagData.output_help || {})[chosen] || {};
+  var extra = help.attrs || [];
+  el("tg-outhelp").textContent = takes("output") ? (help.help || "") : "";
+  el("tg-formatwrap").hidden = extra.indexOf("format") === -1;
+  el("tg-layoutwrap").hidden = extra.indexOf("layout") === -1;
+  el("tg-infowrap").hidden = extra.indexOf("info") === -1;
+  if (!el("tg-infowrap").hidden) {
+    fillSelect("tg-info", ((help.values || {}).info || []).map(function (v) {
+      return {value: v, text: v.replace(/_/g, " ")};
+    }));
+  }
+
   // Only where a date format applies: on a date element, or a meta tag.
   var element = currentElement();
   el("tg-datewrap").hidden = !(
@@ -1945,7 +1987,9 @@ function loadTagData() {
         return {value: String(c.id), text: c.name};
       }));
       fillSelect("tg-out", (v.output || []).map(function (o) {
-        return {value: o.value, count: o.count};
+        var spec = (d.output_help || {})[o.value] || {};
+        return {value: o.value, count: o.count,
+                text: (spec.label || o.value) + "  \u00b7 " + o.value};
       }));
       fillSelect("tg-meta", (v.meta || []).map(function (o) {
         return {value: o.value, count: o.count};
@@ -1958,11 +2002,22 @@ function loadTagData() {
       var mods = el("tg-mods");
       mods.innerHTML = "";
       (v.modifiers || []).forEach(function (o) {
+        var described = (d.modifier_help || {})[o.value];
         var label = document.createElement("label");
+        // T4's own wording, so the checkbox says what it does rather than
+        // only what it is called.
+        label.title = described
+          || "Used by this project, but not in the T4 reference.";
         var box = document.createElement("input");
         box.type = "checkbox"; box.value = o.value;
         label.appendChild(box);
-        label.appendChild(text_(o.value + (o.count ? "  (" + o.count + ")" : "")));
+        label.appendChild(text_(described || o.value));
+        var count = document.createElement("span");
+        count.className = "dim";
+        count.appendChild(text_(" " + o.value
+          + (o.count ? " (" + o.count + ")" : "")
+          + (o.documented ? "" : " - undocumented")));
+        label.appendChild(count);
         mods.appendChild(label);
       });
 
