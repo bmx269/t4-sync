@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.extract import local_path   # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
-from t4sync import app, cli, history, mirror, opener   # noqa: E402
+from t4sync import app, cli, history, mirror, opener, tags   # noqa: E402
 import urllib.error   # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
@@ -2335,3 +2335,105 @@ class TestActionIcons(unittest.TestCase):
         # Setting textContent on the button would delete its child <svg>.
         self.assertNotIn("start.textContent", self.js)
         self.assertIn("startLabel.textContent", self.js)
+
+
+class TestTagBuilder(unittest.TestCase):
+    """Compose T4 tags from pulled data. Composing is text; rendering is T4."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.env = pathlib.Path(self.tmp.name)
+        (self.env / "contenttype").mkdir()
+        (self.env / "contenttype" / "contact.json").write_text(json.dumps({
+            "id": 307, "name": "Contact", "alias": "contact",
+            "contentTypeElements": [
+                {"name": "First Name", "alias": "First Name", "type": 1, "id": 2},
+                {"name": "Photo", "alias": "Photo", "type": 3, "id": 7},
+                {"name": "Sort key", "alias": "Sort key", "type": 9, "id": 32},
+            ]}), encoding="utf-8")
+        (self.env / "contentLayout").mkdir()
+        (self.env / "contentLayout" / "a.html").write_text(
+            '<t4 type="content" name="First Name" output="normal" '
+            'modifiers="htmlentities" />'
+            '<t4 type="content" name="Photo" output="image" />'
+            '<t4 type="content" name="Bio" output="normal" '
+            'modifiers="striptags,htmlentities" />'
+            '<t4 type="navigation" id="275" />', encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_elements_come_from_the_pulled_content_type(self):
+        found = tags.content_types(str(self.env))
+        self.assertEqual([t["name"] for t in found], ["Contact"])
+        self.assertEqual([e["name"] for e in found[0]["elements"]],
+                         ["First Name", "Photo", "Sort key"])
+
+    def test_element_types_are_named_where_known(self):
+        elements = tags.content_types(str(self.env))[0]["elements"]
+        self.assertEqual(elements[0]["type"], "plain text")
+        self.assertEqual(elements[1]["type"], "image")
+
+    def test_an_unknown_element_type_is_reported_not_guessed(self):
+        self.assertEqual(tags.element_type(99), "type 99")
+
+    def test_vocabulary_is_mined_from_the_project(self):
+        vocab = tags.vocabulary(str(self.env))
+        self.assertEqual(vocab["tags_seen"], 4)
+        # Commonest first: what this site does outranks what a manual says.
+        self.assertEqual(vocab["modifiers"][0]["value"], "htmlentities")
+        self.assertEqual(vocab["modifiers"][0]["count"], 2)
+
+    def test_documented_values_are_offered_even_when_unused(self):
+        vocab = tags.vocabulary(str(self.env))
+        offered = {entry["value"] for entry in vocab["output"]}
+        self.assertIn("fulltext", offered)          # documented, unused here
+        self.assertIn("image", offered)             # used here
+
+    def test_a_project_with_no_layouts_still_offers_the_documented_set(self):
+        bare = pathlib.Path(self.tmp.name) / "bare"
+        bare.mkdir()
+        vocab = tags.vocabulary(str(bare))
+        self.assertEqual(vocab["tags_seen"], 0)
+        self.assertTrue({e["value"] for e in vocab["output"]})
+
+    def test_a_tag_is_built_in_the_order_t4_writes_them(self):
+        self.assertEqual(
+            tags.build_tag({"type": "content", "name": "First Name",
+                            "output": "normal", "modifiers": ["htmlentities"]}),
+            '<t4 type="content" name="First Name" output="normal" '
+            'modifiers="htmlentities" />')
+
+    def test_quotes_in_an_element_name_cannot_break_the_attribute(self):
+        built = tags.build_tag({"type": "content", "name": 'say "hi" <b>'})
+        self.assertIn("&quot;hi&quot;", built)
+        self.assertNotIn('"hi"', built)
+        self.assertNotIn("<b>", built)
+
+    def test_empty_attributes_are_left_out(self):
+        self.assertEqual(tags.build_tag({"type": "meta", "meta": "name"}),
+                         '<t4 type="meta" meta="name" />')
+
+    def test_handlebars_equivalent_for_an_element(self):
+        markup, note = tags.build_handlebars({"type": "content",
+                                              "name": "Heading"})
+        self.assertEqual(markup, '{{element name="Heading"}}')
+        self.assertIsNone(note)
+
+    def test_a_date_format_becomes_the_date_helper(self):
+        markup, _note = tags.build_handlebars({
+            "type": "content", "name": "When", "date_format": "dd MMMM yyyy"})
+        self.assertEqual(markup, '{{format-date element="When" format="dd MMMM yyyy"}}')
+
+    def test_modifiers_have_no_handlebars_equivalent_and_it_says_so(self):
+        _markup, note = tags.build_handlebars({
+            "type": "content", "name": "Body", "modifiers": ["striptags"]})
+        self.assertIn("no modifiers attribute", note)
+
+    def test_a_tag_with_no_handlebars_form_says_so_rather_than_inventing_one(self):
+        markup, note = tags.build_handlebars({"type": "navigation", "id": "275"})
+        self.assertEqual(markup, "")
+        self.assertIn("No Handlebars equivalent", note)
+
+    def test_the_two_syntaxes_cannot_be_mixed_and_that_is_stated(self):
+        self.assertIn("either Standard or Handlebars", tags.MIXING_WARNING)
