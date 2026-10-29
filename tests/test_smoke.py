@@ -104,11 +104,11 @@ class TestRules(unittest.TestCase):
     def test_tab_separated_rules(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "rewrites.conf"
-            path.write_text("# comment\nhttps://www\\.x\\.com/\t/\n\nbad-line-no-tab\n")
+            path.write_text("# comment\nhttps://www\\.example\\.com/\t/\n\nbad-line-no-tab\n")
             rules = load_rules(str(path))
             self.assertEqual(len(rules), 1)
             pattern, replacement = rules[0]
-            self.assertEqual(pattern.sub(replacement, 'href="https://www.x.com/a"'),
+            self.assertEqual(pattern.sub(replacement, 'href="https://www.example.com/a"'),
                              'href="/a"')
 
 
@@ -129,8 +129,8 @@ class TestServeTransforms(unittest.TestCase):
 
     def test_rules_and_injection_combine(self):
         import re
-        rules = [(re.compile(r"https://www\.x\.com/"), "/")]
-        out = transform_html('<body><a href="https://www.x.com/a"></a></body>',
+        rules = [(re.compile(r"https://www\.example\.com/"), "/")]
+        out = transform_html('<body><a href="https://www.example.com/a"></a></body>',
                              rules, inject_reload=True)
         self.assertIn('href="/a"', out)
         self.assertIn(RELOAD_PATH, out)
@@ -158,40 +158,40 @@ class TestServeGating(unittest.TestCase):
 class TestInspector(unittest.TestCase):
     MANIFEST = {
         "pageLayout/my-layout.header.html": {
-            "endpoint": "pageLayout", "id": 1027039,
+            "endpoint": "pageLayout", "id": 1180,
             "field": "headerCode", "name": "my_layout"},
         "pageLayout/my-layout.footer.html": {
-            "endpoint": "pageLayout", "id": 1027039,
+            "endpoint": "pageLayout", "id": 1180,
             "field": "footerCode", "name": "my_layout"},
         "contenttype/thing.json": {
             "endpoint": "contenttype", "id": 5, "field": None, "name": "Thing"},
     }
     PAGE = ('<html><head>'
             '<meta name="t4-layout" content="my_layout">'
-            '<meta name="t4-layout-id" content="1027039">'
+            '<meta name="t4-layout-id" content="1180">'
             '<link rel="stylesheet" href="/media/css/site.css">'
             '<script src="/media/js/app.js"></script>'
             '</head><body>hi</body></html>')
 
     def test_index_only_tracks_page_layouts(self):
         index = LayoutIndex(self.MANIFEST)
-        self.assertEqual(len(index.files_for(1027039)), 2)
+        self.assertEqual(len(index.files_for(1180)), 2)
         self.assertEqual(index.files_for(999), [])
 
     def test_panel_names_the_layout_and_its_files(self):
         panel = build_panel(self.PAGE, LayoutIndex(self.MANIFEST), env_name="test")
         self.assertIn("my_layout", panel)
-        self.assertIn("1027039", panel)
+        self.assertIn("1180", panel)
         self.assertIn("pageLayout/my-layout.header.html", panel)
         self.assertIn("pageLayout/my-layout.footer.html", panel)
 
     def test_panel_lists_local_assets_only(self):
         page = self.PAGE.replace("</head>",
-                                 '<link rel="stylesheet" href="https://cdn.example/x.css"></head>')
+                                 '<link rel="stylesheet" href="https://cdn.example.com/x.css"></head>')
         panel = build_panel(page, LayoutIndex(self.MANIFEST))
         self.assertIn("media/css/site.css", panel)
         self.assertIn("media/js/app.js", panel)
-        self.assertNotIn("cdn.example", panel)
+        self.assertNotIn("cdn.example.com", panel)
 
     def test_overridden_assets_are_marked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -220,31 +220,31 @@ class TestInspector(unittest.TestCase):
 class TestDebugComments(unittest.TestCase):
     AMBIGUOUS = {
         "pageLayout/a.header.html": {"endpoint": "pageLayout", "id": 1,
-                                     "field": "headerCode", "name": "u_webpage.production"},
+                                     "field": "headerCode", "name": "basic_page.production"},
         "pageLayout/b.header.html": {"endpoint": "pageLayout", "id": 2,
-                                     "field": "headerCode", "name": "u_webpage.webdev"},
+                                     "field": "headerCode", "name": "basic_page.webdev"},
     }
 
     def test_exact_name_resolves_to_a_file(self):
         manifest = {"pageLayout/m.header.html": {
-            "endpoint": "pageLayout", "id": 7, "field": "headerCode", "name": "m_open"}}
-        page = '<meta name="t4-layout" content="m_open">'
+            "endpoint": "pageLayout", "id": 7, "field": "headerCode", "name": "standard"}}
+        page = '<meta name="t4-layout" content="standard">'
         out = build_comment(page, LayoutIndex(manifest), env_name="test")
-        self.assertIn("PAGE LAYOUT: 'm_open'", out)
+        self.assertIn("PAGE LAYOUT: 'standard'", out)
         self.assertIn("x t4-source/test/pageLayout/m.header.html", out)
         self.assertNotIn("SUGGESTIONS", out)
 
     def test_ambiguous_name_lists_candidates(self):
         """A published name that maps to several layouts must not be guessed."""
-        page = '<meta name="t4-layout" content="u_webpage">'
+        page = '<meta name="t4-layout" content="basic_page">'
         out = build_comment(page, LayoutIndex(self.AMBIGUOUS), env_name="test")
         self.assertIn("LAYOUT NAME SUGGESTIONS", out)
-        self.assertIn("u_webpage.production", out)
-        self.assertIn("u_webpage.webdev", out)
+        self.assertIn("basic_page.production", out)
+        self.assertIn("basic_page.webdev", out)
         self.assertNotIn("x t4-source", out)      # nothing claimed as used
 
     def test_id_wins_over_an_ambiguous_name(self):
-        page = ('<meta name="t4-layout" content="u_webpage">'
+        page = ('<meta name="t4-layout" content="basic_page">'
                 '<meta name="t4-layout-id" content="2">')
         out = build_comment(page, LayoutIndex(self.AMBIGUOUS), env_name="test")
         self.assertIn("x t4-source/test/pageLayout/b.header.html", out)
@@ -382,8 +382,8 @@ class TestStripInjected(unittest.TestCase):
 
     def test_round_trip_with_rules_applied(self):
         import re
-        page = '<body><a href="https://www.x.com/a">x</a></body>'
-        rules = [(re.compile(r"https://www\.x\.com/"), "/")]
+        page = '<body><a href="https://www.example.com/a">x</a></body>'
+        rules = [(re.compile(r"https://www\.example\.com/"), "/")]
         out = transform_html(page, rules, inject_reload=True)
         # Rewrites are deliberate output changes and are NOT stripped.
         self.assertEqual(strip_injected(out), '<body><a href="/a">x</a></body>')
@@ -400,43 +400,43 @@ class TestStripInjected(unittest.TestCase):
 class TestLayoutResolver(unittest.TestCase):
     """Identifying which layout produced a page, from the page itself."""
 
-    A = {"id": 1, "name": "u_webpage.production",
+    A = {"id": 1, "name": "basic_page.production",
          "headerCode": '<!--top--><t4 type="media" id="100" />',
          "footerCode": "<!--bottom-->"}
-    B = {"id": 2, "name": "u_webpage.webdev",
+    B = {"id": 2, "name": "basic_page.webdev",
          "headerCode": '<!--top--><t4 type="media" id="200" />',
          "footerCode": "<!--bottom-->"}
-    C = {"id": 3, "name": "m_open",
+    C = {"id": 3, "name": "standard",
          "headerCode": "<!--other-->", "footerCode": "<!--end-->"}
 
     def resolver(self, *records):
         return LayoutResolver(None, list(records))
 
     def test_unique_name_needs_no_guessing(self):
-        rec, why = self.resolver(self.A, self.C).resolve("<html>", "m_open")
-        self.assertEqual(rec["name"], "m_open")
+        rec, why = self.resolver(self.A, self.C).resolve("<html>", "standard")
+        self.assertEqual(rec["name"], "standard")
         self.assertIn("uniquely", why)
 
     def test_id_is_preferred_when_published(self):
-        rec, _why = self.resolver(self.A, self.B).resolve("<html>", "u_webpage", 2)
-        self.assertEqual(rec["name"], "u_webpage.webdev")
+        rec, _why = self.resolver(self.A, self.B).resolve("<html>", "basic_page", 2)
+        self.assertEqual(rec["name"], "basic_page.webdev")
 
     def test_distinguishing_tag_id_decides(self):
         """Same literals; only the media id tells them apart."""
         page = "<html><!--top--><!-- 100 css -->rendered<!--bottom--></html>"
-        rec, why = self.resolver(self.A, self.B).resolve(page, "u_webpage")
-        self.assertEqual(rec["name"], "u_webpage.production")
+        rec, why = self.resolver(self.A, self.B).resolve(page, "basic_page")
+        self.assertEqual(rec["name"], "basic_page.production")
         self.assertIn("tag id", why)
 
     def test_alignment_alone_can_decide(self):
         page = "<html><!--other-->x<!--end--></html>"
-        rec, why = self.resolver(self.A, self.C).resolve(page, "m_open")
-        self.assertEqual(rec["name"], "m_open")
+        rec, why = self.resolver(self.A, self.C).resolve(page, "standard")
+        self.assertEqual(rec["name"], "standard")
 
     def test_truly_identical_layouts_are_not_guessed(self):
-        twin = dict(self.A, id=9, name="u_webpage.copy")
+        twin = dict(self.A, id=9, name="basic_page.copy")
         page = "<html><!--top--><!-- 100 css -->x<!--bottom--></html>"
-        rec, why = self.resolver(self.A, twin).resolve(page, "u_webpage")
+        rec, why = self.resolver(self.A, twin).resolve(page, "basic_page")
         self.assertIsNone(rec)
         self.assertIn("indistinguishable", why)
 
@@ -450,15 +450,15 @@ class TestPanelEscaping(unittest.TestCase):
     """The panel must not emit raw markup from data, nor escape its own."""
 
     def test_layout_note_is_escaped_not_double_escaped(self):
-        page = '<meta name="t4-layout" content="m_open">'
+        page = '<meta name="t4-layout" content="standard">'
 
         class FakeResolver:
             @staticmethod
             def resolve(_body, _name, _id=None):
-                return {"id": 1, "name": "m_open & co"}, "named uniquely"
+                return {"id": 1, "name": "standard & co"}, "named uniquely"
 
         panel = build_panel(page, LayoutIndex({}), resolver=FakeResolver())
-        self.assertIn("m_open &amp; co", panel)      # data is escaped
+        self.assertIn("standard &amp; co", panel)      # data is escaped
         self.assertNotIn("&lt;span", panel)          # our own markup is not
 
     def test_highlight_control_offers_every_mode(self):
@@ -572,11 +572,11 @@ class TestExactBeatsInference(unittest.TestCase):
         """The fallback used to be an `else`, clobbering the exact answer."""
         manifest = {"pageLayout/exact.header.html": {
             "endpoint": "pageLayout", "id": 100, "field": "headerCode",
-            "name": "u_webpage.production"}}
+            "name": "basic_page.production"}}
         sections = SectionLayouts({"10": {
             "id": 10, "name": "About", "path": "/Root/about",
             "channels": [{"id": 13, "pageLayout": 100}]}})
-        page = '<meta name="t4-layout" content="u_webpage">'
+        page = '<meta name="t4-layout" content="basic_page">'
         out = build_comment(page, LayoutIndex(manifest), env_name="test",
                             url_path="/about/", sections=sections)
         self.assertIn("assigned in T4 to section 10", out)
@@ -587,16 +587,16 @@ class TestExactBeatsInference(unittest.TestCase):
 class TestContentItemAnnotation(unittest.TestCase):
     """T4 emits <span id="d.en.<id>"> for every content item it renders."""
 
-    ITEMS = ContentItems({"980255": {"id": 980255, "name": "Action box A",
+    ITEMS = ContentItems({"4021": {"id": 4021, "name": "Promo box A",
                                      "contentTypeId": 326,
-                                     "contentTypeName": "Action boxes"}})
+                                     "contentTypeName": "Promo boxes"}})
 
     def test_anchor_is_named(self):
-        page = '<span id="d.en.980255"></span><p>x</p>'
+        page = '<span id="d.en.4021"></span><p>x</p>'
         out, n = annotate_content_items(page, self.ITEMS, env_name="test")
         self.assertEqual(n, 1)
-        self.assertIn("T4 CONTENT: #980255 'Action box A'", out)
-        self.assertIn("of type 'Action boxes'", out)
+        self.assertIn("T4 CONTENT: #4021 'Promo box A'", out)
+        self.assertIn("of type 'Promo boxes'", out)
         self.assertEqual(strip_injected(out), page)   # removable, exactly
 
     def test_unknown_anchor_is_left_alone(self):
@@ -605,38 +605,38 @@ class TestContentItemAnnotation(unittest.TestCase):
         self.assertEqual((out, n), (page, 0))
 
     def test_other_languages_match(self):
-        page = '<span id="d.fr.980255"></span>'
+        page = '<span id="d.fr.4021"></span>'
         out, n = annotate_content_items(page, self.ITEMS, env_name="test")
         self.assertEqual(n, 1)
 
     def test_no_data_is_a_no_op(self):
-        page = '<span id="d.en.980255"></span>'
+        page = '<span id="d.en.4021"></span>'
         self.assertEqual(annotate_content_items(page, ContentItems({})), (page, 0))
 
     def test_content_layout_file_is_named(self):
-        page = '<span id="d.en.980255"></span><p>x</p>'
+        page = '<span id="d.en.4021"></span><p>x</p>'
         out, _n = annotate_content_items(
             page, self.ITEMS, env_name="test",
             content_layouts=ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST))
-        self.assertIn("layout -> t4-source/test/contentLayout/action-boxes.html",
+        self.assertIn("layout -> t4-source/test/contentLayout/promo-boxes.html",
                       out)
         self.assertEqual(strip_injected(out), page)
 
     def test_missing_layout_is_reported_not_omitted(self):
-        out, _n = annotate_content_items('<span id="d.en.980255"></span>',
+        out, _n = annotate_content_items('<span id="d.en.4021"></span>',
                                          self.ITEMS, env_name="test",
                                          content_layouts=ContentLayoutIndex({}))
         self.assertIn("none pulled for this type", out)
 
 
 CONTENT_LAYOUT_MANIFEST = {
-    "contentLayout/action-boxes.html": {
-        "endpoint": "layout", "contentType": "Action boxes",
+    "contentLayout/promo-boxes.html": {
+        "endpoint": "layout", "contentType": "Promo boxes",
         "name": "text/html", "id": 975973},
-    "contentLayout/action-boxes-rss.html": {
-        "endpoint": "layout", "contentType": "Action boxes",
+    "contentLayout/promo-boxes-rss.html": {
+        "endpoint": "layout", "contentType": "Promo boxes",
         "name": "text/rss", "id": 975974},
-    "pageLayout/u_webpage.html": {"endpoint": "pageLayout", "id": 1},
+    "pageLayout/basic_page.html": {"endpoint": "pageLayout", "id": 1},
 }
 
 
@@ -646,19 +646,19 @@ class TestContentLayoutIndex(unittest.TestCase):
     INDEX = ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST)
 
     def test_groups_every_layout_of_a_type(self):
-        found = self.INDEX.for_type("Action boxes")
+        found = self.INDEX.for_type("Promo boxes")
         self.assertEqual([rel for rel, _label in found],
-                         ["contentLayout/action-boxes-rss.html",
-                          "contentLayout/action-boxes.html"])
+                         ["contentLayout/promo-boxes-rss.html",
+                          "contentLayout/promo-boxes.html"])
 
     def test_lookup_is_case_insensitive(self):
-        self.assertTrue(self.INDEX.for_type("ACTION BOXES"))
+        self.assertTrue(self.INDEX.for_type("PROMO BOXES"))
 
     def test_falls_through_to_the_alias(self):
-        self.assertTrue(self.INDEX.for_type("Not a type", "Action boxes"))
+        self.assertTrue(self.INDEX.for_type("Not a type", "Promo boxes"))
 
     def test_page_layouts_are_not_content_layouts(self):
-        self.assertEqual(self.INDEX.for_type("u_webpage"), [])
+        self.assertEqual(self.INDEX.for_type("basic_page"), [])
 
     def test_unknown_type_is_empty_not_an_error(self):
         self.assertEqual(self.INDEX.for_type(None), [])
@@ -668,8 +668,8 @@ class TestPageContent(unittest.TestCase):
     """What the panel lists: items on the page, grouped by content type."""
 
     ITEMS = ContentItems({
-        "1": {"id": 1, "name": "Box A", "contentTypeName": "Action boxes"},
-        "2": {"id": 2, "name": "Box B", "contentTypeName": "Action boxes"},
+        "1": {"id": 1, "name": "Box A", "contentTypeName": "Promo boxes"},
+        "2": {"id": 2, "name": "Box B", "contentTypeName": "Promo boxes"},
         "3": {"id": 3, "name": "Banner", "contentTypeName": "Hero"},
     })
     LAYOUTS = ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST)
@@ -688,7 +688,7 @@ class TestPageContent(unittest.TestCase):
 
     def test_grouping_collapses_by_type_and_keeps_the_count(self):
         groups = group_by_type(page_content(self.PAGE, self.ITEMS, None, self.LAYOUTS))
-        self.assertEqual([g["type"] for g in groups], ["Action boxes", "Hero"])
+        self.assertEqual([g["type"] for g in groups], ["Promo boxes", "Hero"])
         self.assertEqual(len(groups[0]["items"]), 2)
         self.assertEqual(len(groups[0]["layouts"]), 2)
         self.assertEqual(groups[1]["layouts"], [])
@@ -982,14 +982,14 @@ class TestCommentSafety(unittest.TestCase):
 
     def test_double_hyphen_in_a_path_survives(self):
         items = ContentItems({"1": {"id": 1, "name": "x",
-                                    "contentTypeName": "Code Only Template"}})
+                                    "contentTypeName": "Snippet"}})
         layouts = ContentLayoutIndex({
-            "contentLayout/code-only-template--textcode.html": {
-                "endpoint": "layout", "contentType": "Code Only Template",
+            "contentLayout/snippet--textcode.html": {
+                "endpoint": "layout", "contentType": "Snippet",
                 "name": "text/code"}})
         out, _n = annotate_content_items('<span id="d.en.1"></span>', items,
                                          env_name="test", content_layouts=layouts)
-        self.assertIn("contentLayout/code-only-template--textcode.html", out)
+        self.assertIn("contentLayout/snippet--textcode.html", out)
 
     def test_a_closing_sequence_in_data_is_broken(self):
         items = ContentItems({"1": {"id": 1, "name": "evil --> out",
@@ -1066,11 +1066,11 @@ class TestVcs(unittest.TestCase):
 
     def test_message_names_the_record_behind_the_file(self):
         message = message_for("test", [{
-            "path": "t4-source/test/pageLayout/u_webpage.footer.html",
-            "meta": {"endpoint": "pageLayout", "id": 1100982, "name": "u_webpage"},
+            "path": "t4-source/test/pageLayout/basic_page.footer.html",
+            "meta": {"endpoint": "pageLayout", "id": 1100982, "name": "basic_page"},
         }])
         self.assertIn("pageLayout #1100982", message)
-        self.assertIn("(u_webpage)", message)
+        self.assertIn("(basic_page)", message)
         self.assertIn("T4-Env: test", message)
 
 
@@ -1234,7 +1234,7 @@ class TestPickMode(unittest.TestCase):
     PANEL = build_panel(
         '<span id="d.en.5"></span>', LayoutIndex({}), env_name="test",
         content_items=ContentItems({"5": {"id": 5, "name": "Box A",
-                                          "contentTypeName": "Action boxes"}}))
+                                          "contentTypeName": "Promo boxes"}}))
 
     def test_the_control_names_its_side_effect(self):
         self.assertIn('id="t4i-pick"', self.PANEL)
@@ -1243,7 +1243,7 @@ class TestPickMode(unittest.TestCase):
     def test_type_rows_are_addressable_from_the_page(self):
         # Pick mode resolves a clicked element to a type, then has to find
         # the row listing that type's files.
-        self.assertIn('data-type="Action boxes"', self.PANEL)
+        self.assertIn('data-type="Promo boxes"', self.PANEL)
 
     def test_items_are_addressable_by_id(self):
         self.assertIn('data-item="5"', self.PANEL)
@@ -1477,7 +1477,7 @@ class TestInspectorFocus(unittest.TestCase):
     PANEL = build_panel(
         '<span id="d.en.5"></span>', LayoutIndex({}), env_name="test",
         content_items=ContentItems({"5": {"id": 5, "name": "Box A",
-                                          "contentTypeName": "Action boxes"}}),
+                                          "contentTypeName": "Promo boxes"}}),
         content_layouts=ContentLayoutIndex(CONTENT_LAYOUT_MANIFEST))
 
     def test_the_full_listing_is_hideable(self):
@@ -1853,15 +1853,15 @@ class TestPanelKeepsTheExactAnswer(unittest.TestCase):
 
     MANIFEST = {
         "pageLayout/u-webpage.production.header.html": {
-            "endpoint": "pageLayout", "id": 975522, "field": "headerCode",
-            "name": "u_webpage.production"},
+            "endpoint": "pageLayout", "id": 1180, "field": "headerCode",
+            "name": "basic_page.production"},
         "pageLayout/u-webpage.webdev.header.html": {
             "endpoint": "pageLayout", "id": 975523, "field": "headerCode",
-            "name": "u_webpage.webdev"},
+            "name": "basic_page.webdev"},
     }
-    PAGE = '<meta name="t4-layout" content="u_webpage">'
+    PAGE = '<meta name="t4-layout" content="basic_page">'
     TREE = {"1": {"id": 1, "name": "sec", "parent": 0, "path": "/sec",
-                  "channels": [{"id": 13, "pageLayout": 975522}]}}
+                  "channels": [{"id": 13, "pageLayout": 1180}]}}
 
     def test_an_exact_assignment_survives_with_no_resolver(self):
         # Written as an `else` of the resolver check, the ambiguous name
@@ -2795,3 +2795,76 @@ class TestAttribution(unittest.TestCase):
             text = page.read_text(encoding="utf-8")
             self.assertIn("independent, unofficial", text, page.name)
             self.assertIn("Trent Stromkins", text, page.name)
+
+
+class TestNoCustomerContent(unittest.TestCase):
+    """A public repo must not carry one customer's site in its examples.
+
+    Illustrations drift towards whatever project they were written against,
+    because that is the data in front of you. Record ids, layout names,
+    content item names and place names all leaked in this way, including a
+    member of staff by name.
+    """
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    # Names and strings that belonged to the site this was built against.
+    # Fenced so the check can skip its own list -- otherwise this file is
+    # the one file that always fails.
+    # LEAK-LIST-START
+    LEAKED = [
+        "ufv", "abbotsford", "chilliwack", "elaine", "newman",
+        "u_webpage", "m_open", "m-open", "ufv-v.css", "ufv-marcom",
+        "action boxes", "photo rollover", "code only template",
+        "1027039", "971148", "980255", "988797",
+    ]
+    # LEAK-LIST-END
+
+    def _tracked(self):
+        out = subprocess.run(["git", "ls-files"], cwd=self.ROOT,
+                             stdout=subprocess.PIPE, check=True)
+        for name in out.stdout.decode("utf-8").split("\n"):
+            if not name or name in ("LICENSE",) or name.endswith(".svg"):
+                continue
+            path = self.ROOT / name
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if "LEAK-LIST-START" in text:
+                head, _, rest = text.partition("# LEAK-LIST-START")
+                _, _, tail = rest.partition("# LEAK-LIST-END")
+                text = head + tail
+            yield name, text
+
+    def test_no_tracked_file_names_the_source_project(self):
+        found = []
+        for name, text in self._tracked():
+            lowered = text.lower()
+            for leak in self.LEAKED:
+                if leak in lowered:
+                    found.append("%s contains %r" % (name, leak))
+        self.assertEqual(found, [], "\n".join(found))
+
+    def test_example_hosts_are_placeholders(self):
+        for name, text in self._tracked():
+            # A URL split across two source lines yields a truncated host;
+            # join continuations before looking.
+            joined = re.sub(r'"\s*\n\s*"', "", text).replace("\\", "")
+            for host in re.findall(r"https?://([\w.-]+)", joined):
+                # A bare label ("cms", "x") is obviously a fixture, and
+                # .test/.invalid/.example are reserved for exactly this by
+                # RFC 2606. What matters is that no real site is named.
+                if "." not in host or host in ("127.0.0.1", "localhost"):
+                    continue
+                if host.endswith((".test", ".invalid", ".example", ".local")):
+                    continue
+                self.assertTrue(
+                    host.endswith(("example.edu", "example.com", "github.com",
+                                   "githubusercontent.com", "apache.org",
+                                   "python.org", "git-scm.com",
+                                   "terminalfour.com", "github.io",
+                                   "www.w3.org")),
+                    "%s references %s" % (name, host))

@@ -345,8 +345,8 @@ class LayoutResolver:
     """Works out which page layout actually produced a page.
 
     T4 publishes a layout *name* into nearly every page, but that name need
-    not identify one layout: a site can publish `u_webpage` from any of
-    several `u_webpage.*` layouts. Rather than ask for a mapping, identify the
+    not identify one layout: a site can publish `basic_page` from any of
+    several `basic_page.*` layouts. Rather than ask for a mapping, identify the
     layout from the page itself, using two signals:
 
       alignment   the layout's literal markup must appear, in order, in the

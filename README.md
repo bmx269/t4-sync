@@ -236,19 +236,19 @@ made or what else went with it. So the record of a deployment is kept on this
 side, in the repository the pulled source already sits in:
 
 ```sh
-t4 save -m "Narrow the action box gutter on mobile"
+t4 save -m "Narrow the promo box gutter on mobile"
 t4 push
 ```
 
 `t4 save` stages the environment's pulled source and commits it. The message
 it writes names the T4 record behind each file, because a reviewer looking at
-`contentLayout/action-boxes--texthtml.html` cannot otherwise tell which record
+`contentLayout/promo-boxes--texthtml.html` cannot otherwise tell which record
 that is:
 
 ```
-Narrow the action box gutter on mobile
+Narrow the promo box gutter on mobile
 
-  t4-source/test/contentLayout/action-boxes--texthtml.html  ->  layout #975973  (text/html)
+  t4-source/test/contentLayout/promo-boxes--texthtml.html  ->  layout #975973  (text/html)
 
 T4-Env: test
 ```
@@ -396,10 +396,10 @@ Drupal-style theme-debug comments in the served HTML:
 
 ```html
 <!-- T4 DEBUG -->
-<!-- PAGE LAYOUT: 'm_open' #1027039 -->
+<!-- PAGE LAYOUT: 'standard' #1180 -->
 <!-- SOURCE FILES:
-   x t4-source/test/pageLayout/m-open-2.header.html
-   x t4-source/test/pageLayout/m-open-2.footer.html
+   x t4-source/test/pageLayout/standard.header.html
+   x t4-source/test/pageLayout/standard.footer.html
 -->
 <!-- ASSETS (23, 1 overridden):
    x media/web/css/brand.css
@@ -408,8 +408,8 @@ Drupal-style theme-debug comments in the served HTML:
      directly - that file is served here and is what t4 push deploys.
 -->
 <!-- CHILD PAGES (25):
-   u_webpage: admissions, advising, aging, agriculture, ...
-   m_open: arts, alumni-weekend
+   basic_page: about, courses, news, events, ...
+   standard: alumni, giving
 -->
 ```
 
@@ -422,7 +422,7 @@ under the mirror are never modified.
 T4 publishes an anchor for every content item it renders:
 
 ```html
-<span id="d.en.980255"></span><!-- T4 CONTENT: #980255 'Full time program - action box' of type 'Action boxes' -> t4-source/test/contenttype/action-boxes.json -->
+<span id="d.en.4021"></span><!-- T4 CONTENT: #4021 'A promoted link' of type 'Promo boxes' -> t4-source/test/contenttype/promo-boxes.json -->
 ```
 
 This is T4's own markup rather than a site convention, so it works on any
@@ -494,8 +494,8 @@ inference below is used instead.
 #### How the layout is identified when there is no section map
 
 T4 publishes a layout *name* into nearly every page, but the name need not
-identify one layout: a site can publish `u_webpage` from any of several
-`u_webpage.*` layouts. Rather than asking for a mapping, the layout is
+identify one layout: a site can publish `basic_page` from any of several
+`basic_page.*` layouts. Rather than asking for a mapping, the layout is
 identified from the page itself:
 
 | Signal | What it does |
@@ -509,7 +509,7 @@ tag at all. Where two layouts are genuinely indistinguishable -- identical
 literals, identical tags -- it says so instead of picking one:
 
 ```html
-<!-- NOTE: indistinguishable from the published page: u_webpage.a, u_webpage.b -->
+<!-- NOTE: indistinguishable from the published page: basic_page.a, basic_page.b -->
 ```
 
 ### The inspector
@@ -529,9 +529,9 @@ is on, links do not navigate, so clicking a menu item tells you about it
 instead of taking you away.
 
 ```
-Page layout   m_open  #1027039
-              pageLayout/m-open-2.header.html      [edit]
-              pageLayout/m-open-2.footer.html      [edit]
+Page layout   standard  #1180
+              pageLayout/standard.header.html      [edit]
+              pageLayout/standard.footer.html      [edit]
 Assets        23, 1 overridden
               media/web/css/site.css           [edit]
               media/web/css/brand.css        [editing]
@@ -541,7 +541,7 @@ Assets        23, 1 overridden
 T4 publishes `<meta name="t4-layout">` and `<meta name="t4-layout-id">` into
 every page. The id is matched against the pull manifest, so the panel names the
 exact file on disk rather than leaving you to guess which of 58 layouts with
-names like `u_webpage.production` and `m_open_alt_no_menu` produced the page.
+names like `basic_page.production` and `standard_alt_no_menu` produced the page.
 Layout *names* are not reliably unique after slugging; the id is.
 
 Every file row carries **edit**, **folder** and **copy**: open it in your
@@ -558,7 +558,7 @@ Content       5 type(s), 32 item(s)
       contentLayout/contact--texthtml.html      text/html   [path]
       contentLayout/contact--textrss.html       text/rss    [path]
       contenttype/contact.json                              [path]
-      Abbotsford front desk · Chilliwack front desk · ...
+      Main reception · Second reception · ...
   ● Page Content                                       x3
       ...
 ```
@@ -683,8 +683,8 @@ t4 preview --out /tmp/x.html   # write the previewed HTML instead
 
 ```diff
 index.html
-  layout  m_open  #1027039
-  edited  pageLayout/m-open-2.footer.html
+  layout  standard  #1180
+  edited  pageLayout/standard.footer.html
 
 --- published
 +++ with local edits

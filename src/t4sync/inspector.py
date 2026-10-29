@@ -4,7 +4,7 @@ T4 publishes `<meta name="t4-layout">` and `<meta name="t4-layout-id">` into
 every page it renders. The id maps directly onto the pull manifest, so a page
 being viewed locally can be traced back to the exact file on disk that
 produced it -- which is otherwise guesswork across 58 layouts with names like
-`u_webpage.production` and `m_open_alt_no_menu`.
+`basic_page.production` and `standard_alt_no_menu`.
 
 The panel also lists the stylesheets and scripts the page loads, marking which
 are already overridden, because that is the other half of "what do I edit".
@@ -297,8 +297,8 @@ class LayoutIndex:
       t4-layout-id   exact, but rare -- it appears on a small minority of pages
       t4-layout      present on nearly every page, but it is the name the
                      layout writes into its own markup, which need not be the
-                     layout's name in T4. A site may publish `u_webpage` from
-                     any of u_webpage.production, u_webpage.webdev and so on.
+                     layout's name in T4. A site may publish `basic_page` from
+                     any of basic_page.production, basic_page.webdev and so on.
 
     So: resolve by id when present, else by name when the name identifies
     exactly one layout, and otherwise report the candidates rather than
@@ -352,7 +352,7 @@ class LayoutIndex:
                         "which" % (len(ids), ", #".join(sorted(ids))))
 
         # The common case: the published name is a prefix of several real
-        # layout names, e.g. u_webpage -> u_webpage.production, .webdev, ...
+        # layout names, e.g. basic_page -> basic_page.production, .webdev, ...
         near = sorted(n for n in self.by_name if n.split(".")[0] == layout_name)
         if len(near) == 1:
             return self.files_for(next(iter(self.by_name[near[0]]))), (
@@ -431,8 +431,8 @@ def build_comment(body, index, overrides_dir=None, env_name=None,
     Mirrors how Twig debug marks up a page: the hook, the candidate templates
     with the chosen one marked, and the file that actually produced the output.
     The candidate list is the useful part here, because T4 publishes a layout
-    name that often does not identify a single layout -- `u_webpage` can come
-    from any of seven `u_webpage.*` layouts.
+    name that often does not identify a single layout -- `basic_page` can come
+    from any of seven `basic_page.*` layouts.
 
     Injected at serve time only. Files under the mirror are never modified.
     """

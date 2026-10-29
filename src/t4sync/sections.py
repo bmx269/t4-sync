@@ -34,7 +34,7 @@ def child_ids(client, section_id, language):
 def contents(client, section_id, language):
     """Content items placed in a section.
 
-    T4 publishes an anchor for each one, `<span id="d.en.980255">`, so these
+    T4 publishes an anchor for each one, `<span id="d.en.4021">`, so these
     ids can be matched straight back to the published page. That anchor is
     T4's own, not a site convention, which makes this mapping work anywhere.
     """
