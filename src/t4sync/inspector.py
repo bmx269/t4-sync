@@ -909,9 +909,21 @@ def _render(rows, assets, children=(), url_path="/", content_groups=(),
 STYLE = """
 <style id="t4i-style">
 #t4-inspector{position:fixed;right:12px;bottom:12px;z-index:2147483647;
- font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e8eaf0;
+ font:12.5px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+ color:#e8eaf0;
  background:#161922;border:1px solid #2c3240;border-radius:8px;
- box-shadow:0 8px 28px rgba(0,0,0,.45);max-width:min(560px,92vw);}
+ box-shadow:0 8px 28px rgba(0,0,0,.45);width:min(420px,92vw);}
+/* The panel sits inside the page it is inspecting, so that page's own CSS
+   reaches it: a site styling `code` red painted every path in here red, and
+   a site setting `box-sizing:content-box` on everything pushed the rows out
+   of the panel. The panel says what it wants rather than inheriting it,
+   through `:where()` so the whole reset weighs nothing and every rule
+   below still wins without having to out-specify the page. */
+:where(#t4-inspector,#t4-inspector *){box-sizing:border-box;float:none;
+ text-align:left;text-transform:none;letter-spacing:normal;text-indent:0;
+ text-shadow:none;text-decoration:none;max-width:none;min-width:0;
+ margin:0;padding:0;list-style:none;background:none;border:0;
+ font:inherit;color:inherit;opacity:1;transform:none;position:static}
 #t4-inspector[data-collapsed="1"] #t4i-body{display:none}
 #t4i-toggle{all:unset;display:block;cursor:pointer;padding:6px 10px;
  font:600 11px/1 ui-monospace,monospace;letter-spacing:.08em;color:#9fb4ff}
@@ -919,22 +931,41 @@ STYLE = """
 .t4i-row{display:flex;gap:8px;align-items:baseline;padding:3px 0;
  border-top:1px solid #222733}
 .t4i-row:first-child{border-top:0}
-.t4i-head{color:#9fb4ff;font-weight:600;margin-top:6px}
+/* A section label, not a title: small, quiet and spaced, so the thing it
+   introduces is what the eye lands on. */
+.t4i-head{color:#8b93a7;font-weight:700;font-size:10px;letter-spacing:.09em;
+ text-transform:uppercase;margin-top:10px;padding-bottom:1px}
 .t4i-key{flex:0 0 84px;color:#8b93a7}
 .t4i-val{flex:1 1 auto;word-break:break-all}
 .t4i-dim{color:#8b93a7}
-#t4-inspector code{background:#0f1218;padding:1px 4px;border-radius:3px}
+/* Paths are the one thing here that has to be monospace: they get read
+   character by character and copied. Everything else is prose. */
+#t4-inspector code{background:#0f1218;color:#c7d2e8;padding:1px 4px;
+ border-radius:3px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+ font-size:11.5px;word-break:break-all}
 .t4i-asset.t4i-on code{background:#17331f;color:#8ff0a6}
 .t4i-copy{all:unset;cursor:pointer;flex:0 0 auto;color:#9fb4ff;
  border:1px solid #2c3240;border-radius:4px;padding:1px 6px;font-size:11px}
 .t4i-copy:hover{background:#222a3a}
 .t4i-child a{color:#9fb4ff;text-decoration:none}
 .t4i-child a:hover{text-decoration:underline}
-.t4i-controls{gap:12px;flex-wrap:wrap}
-.t4i-switch{cursor:pointer;user-select:none;display:flex;gap:6px;align-items:center}
+.t4i-controls{gap:6px;flex-wrap:wrap;border-top:0;padding:2px 0}
+/* Each control reads as a field, so the settings are plainly settings and
+   not another line of the listing. */
+.t4i-switch{cursor:pointer;user-select:none;display:flex;gap:6px;
+ align-items:center;background:#0f1218;border:1px solid #2c3240;
+ border-radius:5px;padding:3px 8px}
+.t4i-switch:hover{border-color:#3b4458}
 #t4i-hl{font:inherit;background:#0f1218;color:inherit;border:1px solid #2c3240;
  border-radius:4px;padding:1px 4px}
-.t4i-type{align-items:center}
+/* The reset above would flatten a tick box, which has to keep looking like
+   one. Stated at id weight so it survives the page's own form styling too. */
+#t4-inspector input[type=checkbox]{-webkit-appearance:checkbox;
+ appearance:auto;width:13px;height:13px;flex:0 0 auto;accent-color:#9fb4ff}
+/* The content type's name is the thing being named; the count beside it is
+   not. */
+.t4i-type{align-items:center;margin-top:4px}
+.t4i-type .t4i-val{font-weight:600}
 .t4i-dot{flex:0 0 auto;width:10px;height:10px;border-radius:2px;display:inline-block}
 .t4i-sub{padding-left:18px;border-top:0}
 
@@ -943,16 +974,23 @@ STYLE = """
  text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
 .t4i-label .t4i-dim{text-transform:none;letter-spacing:0;font-size:11px}
 
-.t4i-file{padding-left:18px;border-top:0;gap:6px;align-items:center}
-.t4i-fmt{flex:0 0 auto;font-size:11px}
-.t4i-badge{flex:0 0 auto;font-size:10px;padding:0 5px;border-radius:999px;
+/* The path on its own line and the buttons under it, left-aligned beneath
+   it. Flexed onto one line the path wrapped and the buttons ended up at the
+   far right of a wide panel, a long way from the thing they act on. */
+.t4i-file{display:block;padding:2px 0 5px 18px;border-top:0}
+.t4i-file .t4i-val{display:block}
+.t4i-fmt{font-size:11px;margin-left:6px}
+.t4i-badge{font-size:10px;padding:0 5px;border-radius:999px;margin-left:6px;
  background:#1d2a1f;color:#8ff0a6;border:1px solid #2a4030}
-.t4i-tools{flex:0 0 auto;display:flex;gap:3px}
-.t4i-tools .t4i-copy{padding:1px 5px}
+.t4i-tools{display:flex;gap:4px;margin-top:3px}
+.t4i-tools .t4i-copy{padding:1px 7px}
 
 /* Folded-away formats that did not render this page. */
 .t4i-more{padding-left:18px;font-size:11px}
-.t4i-more summary{cursor:pointer;color:#8b93a7;padding:2px 0}
+/* `list-style:none` in the reset takes the disclosure triangle with it, and
+   without it nothing says the line opens. */
+.t4i-more summary{cursor:pointer;color:#8b93a7;padding:2px 0;
+ list-style:revert;display:list-item}
 .t4i-more summary:hover{color:#9fb4ff}
 .t4i-more .t4i-file{padding-left:8px}
 
@@ -998,7 +1036,9 @@ html.t4c-on.t4c-labels [data-t4c-hl]::before{content:attr(data-t4c-hl);position:
  padding:1px 5px;border-radius:0 0 3px 0;pointer-events:none;white-space:nowrap}
 @media (prefers-color-scheme:light){
  #t4-inspector{background:#fff;color:#1a1d25;border-color:#d4d8e0}
- #t4-inspector code{background:#f1f3f7}
+ #t4-inspector code{background:#f1f3f7;color:#30405e}
+ .t4i-switch{background:#f7f8fa;border-color:#d4d8e0}
+ .t4i-switch:hover{border-color:#9aa3b5}
  .t4i-key,.t4i-dim{color:#5a6376}
  .t4i-asset.t4i-on code{background:#e6f7ec;color:#17603a}
  #t4i-hl{background:#fff;border-color:#d4d8e0}

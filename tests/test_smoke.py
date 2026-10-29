@@ -26,7 +26,7 @@ from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E40
                               InspectorContext, LayoutIndex,
                               annotate_components, annotate_content_items,
                               build_comment, build_panel, group_by_type,
-                              page_content, strip_injected, SCRIPT)
+                              page_content, strip_injected, SCRIPT, STYLE)
 from t4sync.progress import Progress   # noqa: E402
 from t4sync.render import (LayoutResolver, align,   # noqa: E402
                            preview, preview_every, render)
@@ -1491,6 +1491,35 @@ class TestInspectorFocus(unittest.TestCase):
     def test_each_file_offers_edit_and_reveal(self):
         self.assertIn('data-open="edit"', self.PANEL)
         self.assertIn('data-open="reveal"', self.PANEL)
+
+
+class TestInspectorIsolation(unittest.TestCase):
+    """The panel renders inside the site, so the site's CSS reaches it.
+
+    A page styling `code` red painted every file path in the panel red,
+    which read as an error. The panel states what it wants rather than
+    inheriting it -- but at zero specificity, so its own rules still win.
+    """
+
+    CSS = STYLE
+
+    def test_the_reset_cannot_outweigh_the_panels_own_rules(self):
+        # :where() makes the whole selector weigh nothing. Without it the
+        # #id in the reset would beat every class rule beneath it.
+        self.assertIn(":where(#t4-inspector,#t4-inspector *)", self.CSS)
+
+    def test_a_path_states_its_own_colour(self):
+        rule = re.search(r"#t4-inspector code\{([^}]*)\}", self.CSS, re.S)
+        self.assertIsNotNone(rule, "no rule for the panel's code spans")
+        self.assertIn("color:", rule.group(1))
+
+    def test_a_tick_box_still_looks_like_one(self):
+        self.assertIn("appearance:auto", self.CSS)
+
+    def test_a_foldaway_still_shows_it_opens(self):
+        rule = re.search(r"\.t4i-more summary\{([^}]*)\}", self.CSS, re.S)
+        self.assertIsNotNone(rule)
+        self.assertIn("list-style:revert", rule.group(1))
 
 
 class TestLayoutGrouping(unittest.TestCase):
