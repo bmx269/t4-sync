@@ -2529,3 +2529,96 @@ class TestDiagrams(unittest.TestCase):
         self.assertEqual(len(alts), readme.count("<picture>"))
         for alt in alts:
             self.assertGreater(len(alt), 60, "alt text is too thin: %r" % alt)
+
+
+class TestDocsSite(unittest.TestCase):
+    """The site is generated from the README, so it cannot drift from it."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "site_builder", cls.ROOT / "docs" / "site.py")
+        cls.site = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.site)
+
+    def _build(self):
+        out = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(out, ignore_errors=True))
+        self.site.build(str(out))
+        return out
+
+    def test_a_page_is_written_for_every_readme_section(self):
+        readme = (self.ROOT / "README.md").read_text(encoding="utf-8")
+        titles = [t for t, _b in self.site.split_sections(readme)]
+        out = self._build()
+        for title in titles:
+            name = "index" if title == "Overview" else self.site.slug(title)
+            self.assertTrue((out / ("%s.html" % name)).is_file(), title)
+
+    def test_every_internal_link_resolves(self):
+        out = self._build()
+        for page in out.glob("*.html"):
+            text = page.read_text(encoding="utf-8")
+            for link in set(re.findall(r'href="([^"#:]+\.html)"', text)):
+                self.assertTrue((out / link).is_file(),
+                                "%s links to missing %s" % (page.name, link))
+
+    def test_every_image_is_copied_alongside(self):
+        out = self._build()
+        for page in out.glob("*.html"):
+            for ref in re.findall(r'src(?:set)?="(docs/img/[^"]+)"',
+                                  page.read_text(encoding="utf-8")):
+                self.assertTrue((out / ref).is_file(), ref)
+
+    def test_the_html_is_balanced(self):
+        import html.parser
+
+        class Balanced(html.parser.HTMLParser):
+            VOID = {"meta", "link", "img", "br", "hr", "source", "input"}
+
+            def __init__(self):
+                super().__init__()
+                self.stack = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag not in self.VOID:
+                    self.stack.append(tag)
+
+            def handle_endtag(self, tag):
+                if self.stack and self.stack[-1] == tag:
+                    self.stack.pop()
+                elif tag in self.stack:
+                    self.stack.remove(tag)
+
+        out = self._build()
+        for page in out.glob("*.html"):
+            checker = Balanced()
+            checker.feed(page.read_text(encoding="utf-8"))
+            self.assertEqual(checker.stack, [], "%s: unclosed %s"
+                             % (page.name, checker.stack))
+
+    def test_raw_html_in_the_readme_survives(self):
+        # The <picture> blocks are raw HTML; a parser that escaped them would
+        # print the markup instead of showing the diagram.
+        out = self._build()
+        combined = "".join(p.read_text(encoding="utf-8") for p in out.glob("*.html"))
+        self.assertGreaterEqual(combined.count("<picture>"), 5)
+        self.assertNotIn("&lt;picture&gt;", combined)
+
+    def test_tables_and_code_blocks_render_as_such(self):
+        out = self._build()
+        combined = "".join(p.read_text(encoding="utf-8") for p in out.glob("*.html"))
+        self.assertIn("<table>", combined)
+        self.assertIn('<pre class="code', combined)
+
+    def test_it_is_served_as_plain_files(self):
+        # Without this GitHub treats it as a Jekyll site and rebuilds it.
+        self.assertTrue((self._build() / ".nojekyll").is_file())
+
+    def test_a_code_span_is_not_treated_as_markup(self):
+        rendered, _headings = self.site.render("Use `**not bold**` here.")
+        self.assertIn("<code>**not bold**</code>", rendered)
+        self.assertNotIn("<strong>", rendered)

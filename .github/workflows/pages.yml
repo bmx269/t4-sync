@@ -1,0 +1,54 @@
+name: docs
+
+# The site is generated from README.md, so it cannot drift from the thing
+# people read on GitHub. Nothing generated is committed: this builds on push
+# and publishes the result, so a README edit updates the site by itself.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and let a run in progress finish rather than
+# cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Build the site
+        run: python3 docs/site.py --out _site
+
+      - name: Check the diagrams are not stale
+        run: |
+          python3 docs/diagrams.py
+          git diff --exit-code -- docs/img || {
+            echo "::error::docs/img is out of date; run python3 docs/diagrams.py"
+            exit 1
+          }
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
