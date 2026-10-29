@@ -756,7 +756,13 @@ select{font:inherit;color:var(--fg);background:var(--bg);
 /* Button plus a ? that opens what it does. The explanations were worth
    having but not worth a third of the column every time. */
 .act{position:relative;display:flex;gap:.25rem;align-items:stretch}
-.act > button:first-child{flex:1 1 auto;text-align:left;padding:.25rem .5rem}
+.act > button:first-child{flex:1 1 auto;text-align:left;padding:.25rem .5rem;
+ display:flex;align-items:center;gap:.45rem}
+/* Sized in ems so it tracks the label, and never squeezed by a long one. */
+.ic{flex:0 0 auto;width:1.05em;height:1.05em;opacity:.85}
+button:hover:not(:disabled) .ic{opacity:1}
+.act > button:first-child span{flex:1 1 auto;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
 .qm{flex:0 0 auto;width:1.6rem;padding:.25rem 0;text-align:center;
  color:var(--btn-fg);line-height:1;font-weight:700}
 .qm:hover:not(:disabled){color:var(--accent)}
@@ -864,22 +870,22 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
         <h3>1 &middot; Get the files</h3>
         <div class="acts">
       <div class="act">
-        <button data-run='["pull"]'>Pull source</button>
+        <button data-run='["pull"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg><span>Pull source</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Downloads the templates from the CMS &mdash; page layouts, content layouts, content types and the Media Library CSS and JS. These are the files you edit. Needs the CMS reachable, so the VPN if you use one. It will not overwrite a file you have edited since the last pull.</div>
       </div>
       <div class="act">
-        <button data-run='["mirror"]'>Mirror site</button>
+        <button data-run='["mirror"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0m9-9a14 14 0 0 1 0 18a14 14 0 0 1 0-18M3.5 9h17M3.5 15h17"/></svg><span>Mirror site</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Crawls the <em>published</em> site and saves the finished pages, so there is something real to look at. A different server from the pull. Only needed when the published pages have changed a lot &mdash; editing templates does not require a fresh mirror.</div>
       </div>
       <div class="act">
-        <button data-run='["sections"]'>Map sections</button>
+        <button data-run='["sections"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v4H9zM3 16h6v4H3zM15 16h6v4h-6zM12 8v4M6 16v-2h12v2"/></svg><span>Map sections</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Walks the site tree recording which layout each section uses and which content items sit in it. This is what lets the inspector name exact files instead of guessing. Slow &mdash; a few thousand requests &mdash; but it resumes where it left off and is only needed occasionally.</div>
       </div>
       <div class="act">
-        <button data-run='["sync"]'>Sync</button>
+        <button data-run='["sync"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 4v4h-4M21 12a9 9 0 0 1-15 6.7L3 16M3 20v-4h4"/></svg><span>Sync</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Pulls, then reports what changed on each side. Never writes to the CMS. The usual way to start a session.</div>
       </div>
@@ -889,22 +895,22 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
         <h3>2 &middot; Work on it</h3>
         <div class="acts">
       <div class="act">
-        <button data-run='["serve"]'>Start local site</button>
+        <button data-run='["serve"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10-6.5z"/></svg><span>Start local site</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Runs the site on your machine from the mirrored pages, with your edits applied and the inspector switched on. It keeps running until you stop it, and everything else here still works meanwhile.</div>
       </div>
       <div class="act">
-        <button id="openserve" disabled>View site</button>
+        <button id="openserve" disabled><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></svg><span>View site</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Opens the local site in a new tab. It becomes available a moment after the server reports its address.</div>
       </div>
       <div class="act">
-        <button data-run='["status"]'>Status</button>
+        <button data-run='["status"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h2M4 12h2M4 18h2M9 6h11M9 12h11M9 18h7"/></svg><span>Status</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">What is pending, grouped by kind, with the repository state. Read only &mdash; it changes nothing.</div>
       </div>
       <div class="act">
-        <button data-run='["diff"]'>What differs</button>
+        <button data-run='["diff"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7v14H4zM13 5h7v14h-7M15 10h3M15 14h3M6 12h3"/></svg><span>What differs</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Compares every file against what the CMS holds right now and lists those that differ. Read only, and slow over a VPN: one request per record. For a single file, use the diff button in the Changes list.</div>
       </div>
@@ -914,12 +920,12 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
         <h3>3 &middot; Ship it</h3>
         <div class="acts">
       <div class="act">
-        <button data-run='["save"]'>Commit to git</button>
+        <button data-run='["save"]'><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h5m8 0h5M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7"/></svg><span>Commit to git</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Records your edits in the repository, with a message naming the CMS record behind each file. Whether a push requires this first is set per environment in <code>.t4/config.json</code>.</div>
       </div>
       <div class="act">
-        <button id="push" class="primary">Push to T4</button>
+        <button id="push" class="primary"><svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9m0 0 4 4m-4-4-4 4M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/></svg><span>Push to T4</span></button>
         <button class="qm" type="button" aria-label="What this does">?</button>
         <div class="help">Sends the ticked files to the CMS, backing up each record first. Only environments marked writable accept it. To send one file on its own, use the push button on its row in Changes.</div>
       </div>
@@ -1196,7 +1202,11 @@ function syncButtons() {
   });
 
   var start = document.querySelector('button[data-run=\'["serve"]\']');
-  if (start) start.textContent = serving ? "Site is running" : "Start local site";
+  // The label only: setting textContent on the button would delete its icon.
+  var startLabel = start && start.querySelector("span");
+  if (startLabel) {
+    startLabel.textContent = serving ? "Site is running" : "Start local site";
+  }
 }
 
 // "exit 0" is a shell detail. The question is whether it worked.

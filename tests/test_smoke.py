@@ -2296,3 +2296,42 @@ class TestButtonContrast(unittest.TestCase):
         rule = css.split("button:disabled{")[1].split("}")[0]
         self.assertIn("cursor:not-allowed", rule)
         self.assertIn("border-style:dashed", rule)
+
+
+class TestActionIcons(unittest.TestCase):
+    """Icons are inline SVG: nothing to fetch, so they work offline."""
+
+    @classmethod
+    def setUpClass(cls):
+        page = app.PAGE % {"token": "x"}
+        cls.body = page.split("</style>")[1].split("<script>")[0]
+        cls.js = page.split("<script>")[1].split("</scr" + "ipt>")[0]
+
+    def test_every_action_button_has_one(self):
+        self.assertEqual(self.body.count('<svg class="ic"'), 10)
+
+    def test_each_icon_is_well_formed(self):
+        import xml.etree.ElementTree as ET
+        found = re.findall(r'(<svg class="ic".*?</svg>)', self.body, re.S)
+        self.assertEqual(len(found), 10)
+        for markup in found:
+            ET.fromstring(markup)          # raises if malformed
+
+    def test_icons_are_hidden_from_screen_readers(self):
+        # The label beside them already says what the button does.
+        self.assertEqual(self.body.count('<svg class="ic"'),
+                         self.body.count('aria-hidden="true"'))
+
+    def test_they_follow_the_button_colour(self):
+        self.assertIn('stroke="currentColor"', self.body)
+        self.assertNotIn('stroke="#', self.body)
+
+    def test_nothing_fetches_an_icon(self):
+        for probe in ("<i class=", "font-awesome", "material-icons",
+                      "cdn", "<img "):
+            self.assertNotIn(probe, self.body.lower())
+
+    def test_the_serve_label_changes_without_eating_the_icon(self):
+        # Setting textContent on the button would delete its child <svg>.
+        self.assertNotIn("start.textContent", self.js)
+        self.assertIn("startLabel.textContent", self.js)
