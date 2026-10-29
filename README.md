@@ -6,6 +6,8 @@ when you are happy.
 
 Standard library only — no dependencies beyond Python 3.11+.
 
+**[Documentation →](https://bmx269.github.io/t4-sync/)**
+
 ## What it does
 
 Terminal Four keeps your templates inside the CMS, and publishes finished pages
