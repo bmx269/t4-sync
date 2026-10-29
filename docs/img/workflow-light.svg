@@ -1,30 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="190" viewBox="0 0 880 190" role="img">
 <rect width="880" height="190" fill="#ffffff"/>
-<rect x="34" y="48" width="142" height="92" rx="8" fill="#f4f6fa" stroke="#2b4bbf" stroke-width="1.5"/>
+<rect x="34" y="48" width="142" height="92" rx="8" ry="8" fill="#f4f6fa" stroke="#2b4bbf" stroke-width="1.5"/>
 <text x="105" y="80" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="700" fill="#2b4bbf" text-anchor="middle">t4 sync</text>
 <text x="105" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">get what</text>
 <text x="105" y="120" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">changed</text>
 <line x1="183" y1="94" x2="198" y2="94" stroke="#c3cbdb" stroke-width="2" stroke-linecap="round"/>
 <path d="M200 94 l-7 -5 l0 10 z" fill="#c3cbdb"/>
-<rect x="205" y="48" width="142" height="92" rx="8" fill="#f4f6fa" stroke="#c3cbdb" stroke-width="1.5"/>
+<rect x="205" y="48" width="142" height="92" rx="8" ry="8" fill="#f4f6fa" stroke="#c3cbdb" stroke-width="1.5"/>
 <text x="276" y="80" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="700" fill="#1a1d25" text-anchor="middle">edit</text>
 <text x="276" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">in your</text>
 <text x="276" y="120" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">editor</text>
 <line x1="354" y1="94" x2="369" y2="94" stroke="#c3cbdb" stroke-width="2" stroke-linecap="round"/>
 <path d="M371 94 l-7 -5 l0 10 z" fill="#c3cbdb"/>
-<rect x="376" y="48" width="142" height="92" rx="8" fill="#f4f6fa" stroke="#2b4bbf" stroke-width="1.5"/>
+<rect x="376" y="48" width="142" height="92" rx="8" ry="8" fill="#f4f6fa" stroke="#2b4bbf" stroke-width="1.5"/>
 <text x="447" y="80" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="700" fill="#2b4bbf" text-anchor="middle">t4 serve</text>
 <text x="447" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">see it</text>
 <text x="447" y="120" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">immediately</text>
 <line x1="525" y1="94" x2="540" y2="94" stroke="#c3cbdb" stroke-width="2" stroke-linecap="round"/>
 <path d="M542 94 l-7 -5 l0 10 z" fill="#c3cbdb"/>
-<rect x="547" y="48" width="142" height="92" rx="8" fill="#f4f6fa" stroke="#c3cbdb" stroke-width="1.5"/>
+<rect x="547" y="48" width="142" height="92" rx="8" ry="8" fill="#f4f6fa" stroke="#c3cbdb" stroke-width="1.5"/>
 <text x="618" y="80" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="700" fill="#1a1d25" text-anchor="middle">t4 save</text>
 <text x="618" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">record it</text>
 <text x="618" y="120" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">in git</text>
 <line x1="696" y1="94" x2="711" y2="94" stroke="#c3cbdb" stroke-width="2" stroke-linecap="round"/>
 <path d="M713 94 l-7 -5 l0 10 z" fill="#c3cbdb"/>
-<rect x="718" y="48" width="142" height="92" rx="8" fill="#f4f6fa" stroke="#17603a" stroke-width="1.5"/>
+<rect x="718" y="48" width="142" height="92" rx="8" ry="8" fill="#f4f6fa" stroke="#17603a" stroke-width="1.5"/>
 <text x="789" y="80" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="700" fill="#17603a" text-anchor="middle">t4 push</text>
 <text x="789" y="104" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">send it</text>
 <text x="789" y="120" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="middle">to T4</text>

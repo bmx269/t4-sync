@@ -2779,7 +2779,11 @@ class TestDiagramContent(unittest.TestCase):
         # site someone actually runs.
         for name, text in self._svg_text():
             for found in re.findall(r"\b[\w.-]+\.(?:ca|com|edu|org|uk)\b", text):
-                self.assertTrue(found.endswith("example.edu"),
+                # example.edu is the placeholder; this project's own
+                # repository is not a customer's site.
+                # example.edu is the placeholder domain; this project's own
+                # repository is not a customer's site.
+                self.assertTrue(found.endswith(("example.edu", "github.com")),
                                 "%s names %s" % (name, found))
 
     def test_labels_do_not_overlap(self):
@@ -3234,3 +3238,28 @@ class TestSiteNavSubsections(unittest.TestCase):
         side = self._sidebar("index.html")
         for title in titles:
             self.assertIn(html_mod.escape(title), side, title)
+
+
+class TestDiagramCorners(unittest.TestCase):
+    """Rounded corners have to survive whichever renderer draws them."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    def test_no_radius_is_larger_than_the_shape(self):
+        # rx="999" for a pill is meant to be clamped by the renderer, but
+        # they do not agree on it, so it is clamped before it is written.
+        for path in (self.ROOT / "docs" / "img").glob("*.svg"):
+            text = path.read_text(encoding="utf-8")
+            for rect in re.finditer(
+                    r'<rect[^>]*width="([\d.]+)"[^>]*height="([\d.]+)"'
+                    r'[^>]*rx="([\d.]+)"', text):
+                width, height, radius = (float(v) for v in rect.groups())
+                self.assertLessEqual(radius, width / 2 + 0.01, path.name)
+                self.assertLessEqual(radius, height / 2 + 0.01, path.name)
+
+    def test_both_radii_are_stated(self):
+        # ry defaults to rx, which is fine, but saying it leaves nothing to
+        # a default that has been read differently before.
+        for path in (self.ROOT / "docs" / "img").glob("*.svg"):
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(text.count("rx="), text.count("ry="), path.name)

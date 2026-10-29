@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="230" viewBox="0 0 880 230" role="img">
 <rect width="880" height="230" fill="#0d1017"/>
-<rect x="40" y="46" width="380" height="150" rx="8" fill="#1d2440" stroke="#9fb4ff" stroke-width="1.5"/>
+<rect x="40" y="46" width="380" height="150" rx="8" ry="8" fill="#1d2440" stroke="#9fb4ff" stroke-width="1.5"/>
 <text x="62" y="76" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="700" fill="#9fb4ff" text-anchor="start">THE TOOL</text>
 <text x="62" y="100" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#e8eaf0" text-anchor="start">installed once per computer</text>
 <text x="62" y="126" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#99a1b3" text-anchor="start">~/Sites/t4-sync/</text>
 <line x1="62" y1="142" x2="398" y2="142" stroke="#3b4455" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="3 4"/>
 <text x="62" y="164" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#99a1b3" text-anchor="start">gives you the `t4` command,</text>
 <text x="62" y="182" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#99a1b3" text-anchor="start">which serves every project</text>
-<rect x="460" y="46" width="380" height="150" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="460" y="46" width="380" height="150" rx="8" ry="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="482" y="76" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="700" fill="#99a1b3" text-anchor="start">A PROJECT</text>
 <text x="482" y="100" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#e8eaf0" text-anchor="start">one per website</text>
 <text x="482" y="126" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#99a1b3" text-anchor="start">~/Sites/MySite/</text>

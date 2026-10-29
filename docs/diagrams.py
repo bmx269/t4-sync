@@ -46,7 +46,12 @@ class Canvas:
 
     def box(self, x, y, w, h, fill=None, stroke=None, radius=8, dash=None,
             width=1.5):
-        attrs = ['x="%g" y="%g" width="%g" height="%g" rx="%g"' % (x, y, w, h, radius),
+        # Clamped, and ry given explicitly. A renderer is meant to clamp rx
+        # itself, but they do not agree on it, and rx="999" for a pill came
+        # out differently everywhere it was drawn.
+        radius = max(0, min(radius, w / 2.0, h / 2.0))
+        attrs = ['x="%g" y="%g" width="%g" height="%g" rx="%g" ry="%g"'
+                 % (x, y, w, h, radius, radius),
                  'fill="%s"' % (fill or self.p["card"]),
                  'stroke="%s"' % (stroke or self.p["edge"]),
                  'stroke-width="%g"' % width]
@@ -229,8 +234,8 @@ def setup(p):
 
 def app_panel(p):
     """What the control panel shows, drawn from the running thing."""
-    c = Canvas(880, 690, p)
-    c.box(16, 16, 848, 658, fill=p["bg"], width=2)
+    c = Canvas(880, 744, p)
+    c.box(16, 16, 848, 702, fill=p["bg"], width=2)
 
     # Header
     c.box(16, 16, 848, 40, fill=p["card"])
@@ -323,47 +328,64 @@ def app_panel(p):
             hy += 20
 
     # Tag builder
-    c.box(28, 418, 824, 190)
+    c.box(28, 418, 824, 234)
     c.text(44, 440, "TAG BUILDER", size=10, weight="700", fill=p["dim"])
     c.box(126, 430, 186, 16, fill=p["accent_soft"], radius=999)
     c.text(219, 442, "48 CONTENT TYPES, 1920 TAGS READ", size=8,
            anchor="middle", fill=p["accent"], weight="700")
-    c.text(44, 462, "Builds a T4 tag from this project's own content types. "
-                    "Composes only \u2014 T4 evaluates", size=9.5, fill=p["dim"])
-    c.text(44, 475, "tags at publish time, nothing local can.", size=9.5,
+    c.text(44, 461, "Attributes come from the T4 tag reference; element names "
+                    "from this project's own content types.", size=9.5,
            fill=p["dim"])
+    c.text(44, 474, "The content type is not named in the tag \u2014 a content "
+                    "tag names an element.", size=9.5, fill=p["dim"])
 
     fields = [("Tag", "content"), ("Content type", "Staff profile"),
-              ("Element", "Job title \u00b7 plain text"), ("Output", "normal (1426)")]
+              ("Element", "Job title \u00b7 plain text"),
+              ("Output", "Only if filled in")]
     fx = 44
     for label, value in fields:
         c.text(fx, 494, label, size=8.5, fill=p["dim"])
         c.box(fx, 500, 186, 20, fill=p["bg"], radius=5)
-        c.text(fx + 8, 514, value, size=9.5)
+        c.text(fx + 8, 514, value, size=9)
         c.text(fx + 174, 514, "\u25be", size=8, fill=p["dim"])
         fx += 196
 
-    mx = 44
-    for label in ("htmlentities (489)", "striptags (413)", "nl2br (63)"):
-        c.box(mx, 532, 11, 11, fill=p["bg"], radius=3)
-        c.text(mx + 17, 542, label, size=9, fill=p["dim"])
-        mx += 150
+    # The output explains itself, and brings its own field.
+    c.text(44, 536, "Outputs nothing when the element is empty. The "
+                    "surrounding markup goes in format, with $value where "
+                    "the value belongs.", size=9, fill=p["accent"])
+    c.text(44, 556, "Markup around the value", size=8.5, fill=p["dim"])
+    c.box(44, 562, 382, 20, fill=p["bg"], radius=5)
+    c.runs(52, 576, [("<p>Phone: ", "#f7768e"), ("$value", "#e0af68"),
+                     ("</p>", "#f7768e")], size=9, mono=True)
 
-    c.text(44, 566, "T4 tag", size=8.5, fill=p["dim"])
-    c.box(786, 556, 52, 16, fill=p["card"], radius=4)
-    c.text(812, 568, "copy", size=9, anchor="middle")
-    c.box(44, 572, 794, 24, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
-    # Coloured the way the panel colours it, as one line of tspans.
-    c.runs(56, 588, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
+    # Modifiers read as what they do.
+    mx = 44
+    for label, name in (("Encode special characters", "htmlentities (489)"),
+                        ("Strip out all HTML tags", "striptags (413)")):
+        c.box(mx, 594, 11, 11, fill=p["bg"], radius=3)
+        c.runs(mx + 17, 604, [(label + "  ", p["fg"]), (name, p["dim"])],
+               size=9)
+        mx += 290
+
+    c.text(44, 626, "T4 tag", size=8.5, fill=p["dim"])
+    c.box(786, 616, 52, 16, fill=p["card"], radius=4)
+    c.text(812, 628, "copy", size=9, anchor="middle")
+    c.box(44, 632, 794, 16, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.runs(54, 644, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
                      ("=", p["code_fg"]), ('"content"', "#9ece6a"),
                      (" name", "#e0af68"), ("=", p["code_fg"]),
                      ('"Job title"', "#9ece6a"), (" output", "#e0af68"),
-                     ("=", p["code_fg"]), ('"normal"', "#9ece6a"),
-                     (" />", "#f7768e")], size=9.5, mono=True)
+                     ("=", p["code_fg"]), ('"selective-output"', "#9ece6a"),
+                     (" />", "#f7768e")], size=9, mono=True)
 
-    c.box(28, 620, 824, 40)
-    c.text(44, 642, "TASKS", size=10, weight="700", fill=p["dim"])
-    c.text(96, 642, "Nothing running.", size=10, fill=p["dim"])
+    c.box(28, 664, 824, 40)
+    c.text(44, 686, "TASKS", size=10, weight="700", fill=p["dim"])
+    c.text(96, 686, "Nothing running.", size=10, fill=p["dim"])
+
+    c.text(440, 726, "Built on GitHub with \u2665  \u00b7  "
+                     "github.com/bmx269/t4-sync", size=9, anchor="middle",
+           fill=p["dim"])
     return c
 
 

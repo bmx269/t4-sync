@@ -1,93 +1,93 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="690" viewBox="0 0 880 690" role="img">
-<rect width="880" height="690" fill="#0d1017"/>
-<rect x="16" y="16" width="848" height="658" rx="8" fill="#0d1017" stroke="#3b4455" stroke-width="2"/>
-<rect x="16" y="16" width="848" height="40" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="744" viewBox="0 0 880 744" role="img">
+<rect width="880" height="744" fill="#0d1017"/>
+<rect x="16" y="16" width="848" height="702" rx="8" ry="8" fill="#0d1017" stroke="#3b4455" stroke-width="2"/>
+<rect x="16" y="16" width="848" height="40" rx="8" ry="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="34" y="42" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="13" font-weight="700" fill="#e8eaf0" text-anchor="start">t4-sync</text>
 <text x="96" y="42" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#99a1b3" text-anchor="start">Environment</text>
-<rect x="170" y="25" width="190" height="22" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="170" y="25" width="190" height="22" rx="5" ry="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
 <text x="180" y="41" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">TEST (cms.example.edu)</text>
 <text x="352" y="41" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="start">▾</text>
-<rect x="372" y="26" width="62" height="20" rx="999" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="372" y="26" width="62" height="20" rx="10" ry="10" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
 <text x="403" y="40" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#fca5a5" text-anchor="middle">writable</text>
-<rect x="782" y="25" width="66" height="22" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="782" y="25" width="66" height="22" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="815" y="40" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="middle">Refresh</text>
-<rect x="28" y="68" width="824" height="148" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="28" y="68" width="824" height="148" rx="8" ry="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="44" y="92" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="start">▸</text>
 <text x="58" y="92" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="12" font-weight="700" fill="#e8eaf0" text-anchor="start">Project</text>
 <text x="110" y="92" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#99a1b3" text-anchor="start">753 files  ·  768 pages mirrored  ·  main at a1b2c3d, clean</text>
 <text x="44" y="116" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="700" fill="#99a1b3" text-anchor="start">1 · GET THE FILES</text>
-<rect x="44" y="126" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="44" y="126" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="54" y="140" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Pull source</text>
-<rect x="246" y="126" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="246" y="126" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="256" y="140" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="44" y="150" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="44" y="150" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="54" y="164" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Mirror site</text>
-<rect x="246" y="150" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="246" y="150" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="256" y="164" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="44" y="174" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="44" y="174" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="54" y="188" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Map sections</text>
-<rect x="246" y="174" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="246" y="174" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="256" y="188" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="44" y="198" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="44" y="198" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="54" y="212" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Sync</text>
-<rect x="246" y="198" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="246" y="198" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="256" y="212" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
 <text x="314" y="116" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="700" fill="#99a1b3" text-anchor="start">2 · WORK ON IT</text>
-<rect x="314" y="126" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="314" y="126" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="324" y="140" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Start local site</text>
-<rect x="516" y="126" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="516" y="126" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="526" y="140" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="314" y="150" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5" stroke-dasharray="3 3"/>
+<rect x="314" y="150" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5" stroke-dasharray="3 3"/>
 <text x="324" y="164" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#99a1b3" text-anchor="start">View site</text>
-<rect x="516" y="150" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="516" y="150" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="526" y="164" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="314" y="174" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="314" y="174" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="324" y="188" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Status</text>
-<rect x="516" y="174" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="516" y="174" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="526" y="188" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="314" y="198" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="314" y="198" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="324" y="212" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">What differs</text>
-<rect x="516" y="198" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="516" y="198" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="526" y="212" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
 <text x="584" y="116" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="700" fill="#99a1b3" text-anchor="start">3 · SHIP IT</text>
-<rect x="584" y="126" width="196" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="584" y="126" width="196" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="594" y="140" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Commit to git</text>
-<rect x="786" y="126" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="786" y="126" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="796" y="140" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="584" y="150" width="196" height="20" rx="5" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
+<rect x="584" y="150" width="196" height="20" rx="5" ry="5" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
 <text x="594" y="164" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#0d1017" text-anchor="start">Push to T4</text>
-<rect x="786" y="150" width="20" height="20" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="786" y="150" width="20" height="20" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="796" y="164" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="middle">?</text>
-<rect x="28" y="228" width="548" height="178" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="28" y="228" width="548" height="178" rx="8" ry="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="44" y="250" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="start">CHANGES</text>
-<rect x="104" y="240" width="76" height="16" rx="999" fill="#1d2440" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="104" y="240" width="76" height="16" rx="8" ry="8" fill="#1d2440" stroke="#3b4455" stroke-width="1.5"/>
 <text x="142" y="252" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="700" fill="#9fb4ff" text-anchor="middle">3 CHANGED</text>
-<rect x="498" y="240" width="62" height="18" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="498" y="240" width="62" height="18" rx="5" ry="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="529" y="253" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#e8eaf0" text-anchor="middle">Rescan</text>
 <text x="44" y="272" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#99a1b3" text-anchor="start">Files you have edited since the last pull. diff opens what would change;</text>
 <text x="44" y="286" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#99a1b3" text-anchor="start">push deploys that one file.</text>
-<rect x="44" y="303" width="12" height="12" rx="3" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
+<rect x="44" y="303" width="12" height="12" rx="3" ry="3" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
 <text x="64" y="313" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="start">media/site.css</text>
 <text x="408" y="313" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="end">media #4120</text>
-<rect x="418" y="302" width="48" height="16" rx="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="418" y="302" width="48" height="16" rx="4" ry="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="442" y="314" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="middle">› diff</text>
-<rect x="472" y="302" width="44" height="16" rx="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="472" y="302" width="44" height="16" rx="4" ry="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="494" y="314" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#9fb4ff" text-anchor="middle">push</text>
-<rect x="44" y="329" width="12" height="12" rx="3" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
+<rect x="44" y="329" width="12" height="12" rx="3" ry="3" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
 <text x="64" y="339" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="start">pageLayout/standard.footer.html</text>
 <text x="408" y="339" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="end">pageLayout #1180</text>
-<rect x="418" y="328" width="48" height="16" rx="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="418" y="328" width="48" height="16" rx="4" ry="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="442" y="340" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="middle">› diff</text>
-<rect x="472" y="328" width="44" height="16" rx="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="472" y="328" width="44" height="16" rx="4" ry="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="494" y="340" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#9fb4ff" text-anchor="middle">push</text>
-<rect x="44" y="355" width="12" height="12" rx="3" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
+<rect x="44" y="355" width="12" height="12" rx="3" ry="3" fill="#9fb4ff" stroke="#9fb4ff" stroke-width="1.5"/>
 <text x="64" y="365" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="start">contentLayout/image-card--texthtml.html</text>
 <text x="408" y="365" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="end">layout #4210</text>
-<rect x="418" y="354" width="48" height="16" rx="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="418" y="354" width="48" height="16" rx="4" ry="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="442" y="366" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="middle">› diff</text>
-<rect x="472" y="354" width="44" height="16" rx="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="472" y="354" width="44" height="16" rx="4" ry="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="494" y="366" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#9fb4ff" text-anchor="middle">push</text>
-<rect x="588" y="228" width="264" height="178" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="588" y="228" width="264" height="178" rx="8" ry="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="604" y="250" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="start">HISTORY</text>
 <text x="604" y="274" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#99a1b3" text-anchor="start">Pulled</text>
 <text x="836" y="274" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="end">2 hours ago</text>
@@ -103,40 +103,43 @@
 <text x="604" y="372" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#99a1b3" text-anchor="start">Mapped</text>
 <text x="836" y="372" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="end">34 minutes ago</text>
 <text x="836" y="384" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="end">2801 sections</text>
-<rect x="28" y="418" width="824" height="190" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="28" y="418" width="824" height="234" rx="8" ry="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
 <text x="44" y="440" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="start">TAG BUILDER</text>
-<rect x="126" y="430" width="186" height="16" rx="999" fill="#1d2440" stroke="#3b4455" stroke-width="1.5"/>
+<rect x="126" y="430" width="186" height="16" rx="8" ry="8" fill="#1d2440" stroke="#3b4455" stroke-width="1.5"/>
 <text x="219" y="442" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="700" fill="#9fb4ff" text-anchor="middle">48 CONTENT TYPES, 1920 TAGS READ</text>
-<text x="44" y="462" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#99a1b3" text-anchor="start">Builds a T4 tag from this project's own content types. Composes only — T4 evaluates</text>
-<text x="44" y="475" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#99a1b3" text-anchor="start">tags at publish time, nothing local can.</text>
+<text x="44" y="461" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#99a1b3" text-anchor="start">Attributes come from the T4 tag reference; element names from this project's own content types.</text>
+<text x="44" y="474" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#99a1b3" text-anchor="start">The content type is not named in the tag — a content tag names an element.</text>
 <text x="44" y="494" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="start">Tag</text>
-<rect x="44" y="500" width="186" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
-<text x="52" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#e8eaf0" text-anchor="start">content</text>
+<rect x="44" y="500" width="186" height="20" rx="5" ry="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="52" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="start">content</text>
 <text x="218" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#99a1b3" text-anchor="start">▾</text>
 <text x="240" y="494" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="start">Content type</text>
-<rect x="240" y="500" width="186" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
-<text x="248" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Staff profile</text>
+<rect x="240" y="500" width="186" height="20" rx="5" ry="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="248" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="start">Staff profile</text>
 <text x="414" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#99a1b3" text-anchor="start">▾</text>
 <text x="436" y="494" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="start">Element</text>
-<rect x="436" y="500" width="186" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
-<text x="444" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#e8eaf0" text-anchor="start">Job title · plain text</text>
+<rect x="436" y="500" width="186" height="20" rx="5" ry="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="444" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="start">Job title · plain text</text>
 <text x="610" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#99a1b3" text-anchor="start">▾</text>
 <text x="632" y="494" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="start">Output</text>
-<rect x="632" y="500" width="186" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
-<text x="640" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9.5" font-weight="400" fill="#e8eaf0" text-anchor="start">normal (1426)</text>
+<rect x="632" y="500" width="186" height="20" rx="5" ry="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="640" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="start">Only if filled in</text>
 <text x="806" y="514" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8" font-weight="400" fill="#99a1b3" text-anchor="start">▾</text>
-<rect x="44" y="532" width="11" height="11" rx="3" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
-<text x="61" y="542" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="start">htmlentities (489)</text>
-<rect x="194" y="532" width="11" height="11" rx="3" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
-<text x="211" y="542" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="start">striptags (413)</text>
-<rect x="344" y="532" width="11" height="11" rx="3" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
-<text x="361" y="542" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="start">nl2br (63)</text>
-<text x="44" y="566" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="start">T4 tag</text>
-<rect x="786" y="556" width="52" height="16" rx="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
-<text x="812" y="568" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="middle">copy</text>
-<rect x="44" y="572" width="794" height="24" rx="5" fill="#05070b" stroke="#05070b" stroke-width="1.5"/>
-<text x="56" y="588" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9.5" xml:space="preserve"><tspan fill="#f7768e">&lt;t4 </tspan><tspan fill="#e0af68">type</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"content"</tspan><tspan fill="#e0af68"> name</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"Job title"</tspan><tspan fill="#e0af68"> output</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"normal"</tspan><tspan fill="#f7768e"> /&gt;</tspan></text>
-<rect x="28" y="620" width="824" height="40" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
-<text x="44" y="642" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="start">TASKS</text>
-<text x="96" y="642" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#99a1b3" text-anchor="start">Nothing running.</text>
+<text x="44" y="536" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#9fb4ff" text-anchor="start">Outputs nothing when the element is empty. The surrounding markup goes in format, with $value where the value belongs.</text>
+<text x="44" y="556" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="start">Markup around the value</text>
+<rect x="44" y="562" width="382" height="20" rx="5" ry="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="52" y="576" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" xml:space="preserve"><tspan fill="#f7768e">&lt;p&gt;Phone: </tspan><tspan fill="#e0af68">$value</tspan><tspan fill="#f7768e">&lt;/p&gt;</tspan></text>
+<rect x="44" y="594" width="11" height="11" rx="3" ry="3" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="61" y="604" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" xml:space="preserve"><tspan fill="#e8eaf0">Encode special characters  </tspan><tspan fill="#99a1b3">htmlentities (489)</tspan></text>
+<rect x="334" y="594" width="11" height="11" rx="3" ry="3" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="351" y="604" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" xml:space="preserve"><tspan fill="#e8eaf0">Strip out all HTML tags  </tspan><tspan fill="#99a1b3">striptags (413)</tspan></text>
+<text x="44" y="626" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="8.5" font-weight="400" fill="#99a1b3" text-anchor="start">T4 tag</text>
+<rect x="786" y="616" width="52" height="16" rx="4" ry="4" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<text x="812" y="628" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#e8eaf0" text-anchor="middle">copy</text>
+<rect x="44" y="632" width="794" height="16" rx="5" ry="5" fill="#05070b" stroke="#05070b" stroke-width="1.5"/>
+<text x="54" y="644" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="9" xml:space="preserve"><tspan fill="#f7768e">&lt;t4 </tspan><tspan fill="#e0af68">type</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"content"</tspan><tspan fill="#e0af68"> name</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"Job title"</tspan><tspan fill="#e0af68"> output</tspan><tspan fill="#dbe1ee">=</tspan><tspan fill="#9ece6a">"selective-output"</tspan><tspan fill="#f7768e"> /&gt;</tspan></text>
+<rect x="28" y="664" width="824" height="40" rx="8" ry="8" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<text x="44" y="686" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="700" fill="#99a1b3" text-anchor="start">TASKS</text>
+<text x="96" y="686" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#99a1b3" text-anchor="start">Nothing running.</text>
+<text x="440" y="726" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="9" font-weight="400" fill="#99a1b3" text-anchor="middle">Built on GitHub with ♥  ·  github.com/bmx269/t4-sync</text>
 </svg>
