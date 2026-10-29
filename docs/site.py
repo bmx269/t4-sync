@@ -72,14 +72,24 @@ def slug(text):
 
 
 # A <picture> in the README offers a dark diagram first and the light one as
-# the <img> fallback, which is right for GitHub. This site is light only, so
-# the dark <source> is dropped and the fallback is what every reader gets.
+# the <img> fallback, which is right for GitHub, where the page follows the
+# reader's theme. This site is light only, so the <source> is dropped and the
+# fallback is what every reader gets.
 DARK_SOURCE = re.compile(
     r"\s*<source\b[^>]*prefers-color-scheme:\s*dark[^>]*>\s*", re.I)
 
+# Except for the pictures of the tool itself. These are screenshots, not
+# illustrations: they are meant to be recognised, and the panel and the
+# inspector are dark for most people who open them. A light page with a dark
+# screenshot on it is ordinary; a screenshot that does not look like the
+# thing it depicts is not.
+SCREENSHOTS = ("app", "changes", "tagbuilder", "inspector")
+LIGHT_SRC = re.compile(r'(src="[^"]*/(%s))-light(\.svg")'
+                       % "|".join(SCREENSHOTS))
+
 
 def light_only(block):
-    return DARK_SOURCE.sub("\n", block)
+    return LIGHT_SRC.sub(r"\1-dark\3", DARK_SOURCE.sub("\n", block))
 
 
 # The README is one document, so a link to another part of it is a bare

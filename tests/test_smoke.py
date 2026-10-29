@@ -3318,6 +3318,31 @@ class TestDocsAnchorsAreReachable(unittest.TestCase):
     def test_headings_keep_a_little_room_above_them(self):
         self.assertIn("scroll-margin-top", self.css)
 
+    def test_a_screenshot_looks_like_the_thing_it_shows(self):
+        # The site is light, so the light variant of each illustration is
+        # the one that gets served. Pictures of the tool itself are the
+        # exception: the panel and the inspector are dark, and a screenshot
+        # that does not look like what it depicts is not a screenshot.
+        picture = ('<picture>\n'
+                   '  <source media="(prefers-color-scheme: dark)" '
+                   'srcset="docs/img/app-dark.svg">\n'
+                   '  <img alt="" src="docs/img/app-light.svg">\n'
+                   '</picture>')
+        out = self.site.light_only(picture)
+        self.assertIn("app-dark.svg", out)
+        self.assertNotIn("app-light.svg", out)
+        self.assertNotIn("prefers-color-scheme", out)
+
+    def test_an_illustration_matches_the_page_it_sits_on(self):
+        picture = ('<picture>\n'
+                   '  <source media="(prefers-color-scheme: dark)" '
+                   'srcset="docs/img/overview-dark.svg">\n'
+                   '  <img alt="" src="docs/img/overview-light.svg">\n'
+                   '</picture>')
+        out = self.site.light_only(picture)
+        self.assertIn("overview-light.svg", out)
+        self.assertNotIn("overview-dark.svg", out)
+
     def test_every_sidebar_anchor_exists_on_its_page(self):
         out = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(out, ignore_errors=True))
