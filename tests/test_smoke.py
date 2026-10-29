@@ -3387,3 +3387,37 @@ class TestPanelDiagramBottom(unittest.TestCase):
                       "independent, unofficial tool",
                       "Built on GitHub with"):
             self.assertIn(probe, self.page, probe)
+
+
+class TestPanelDiagramShowsBothSyntaxes(unittest.TestCase):
+    """The tag builder returns both forms; the drawing showed one."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import xml.etree.ElementTree as ET
+        ns = "{http://www.w3.org/2000/svg}"
+        root = ET.parse(cls.ROOT / "docs" / "img" / "app-light.svg").getroot()
+        cls.labels = [" ".join("".join(node.itertext()).split())
+                      for node in root.iter(ns + "text")]
+
+    def test_the_t4_tag_is_drawn(self):
+        self.assertTrue(any(label.startswith("<t4 type=")
+                            for label in self.labels), self.labels[:5])
+
+    def test_the_handlebars_equivalent_is_drawn(self):
+        self.assertTrue(any(label.startswith("{{element")
+                            for label in self.labels))
+
+    def test_the_two_describe_the_same_element(self):
+        # A drawing showing a tag for one element and Handlebars for another
+        # would be worse than showing one.
+        tag = next(l for l in self.labels if l.startswith("<t4 type="))
+        handlebars = next(l for l in self.labels if l.startswith("{{element"))
+        name = re.search(r'name="([^"]+)"', tag).group(1)
+        self.assertIn('name="%s"' % name, handlebars)
+
+    def test_the_mixing_warning_is_drawn(self):
+        self.assertTrue(any("either Standard or Handlebars" in label
+                            for label in self.labels))

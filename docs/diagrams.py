@@ -249,8 +249,8 @@ def setup(p):
 
 def app_panel(p):
     """What the control panel shows, drawn from the running thing."""
-    c = Canvas(880, 866, p)
-    c.box(16, 16, 848, 772, fill=p["bg"], width=2)
+    c = Canvas(880, 928, p)
+    c.box(16, 16, 848, 834, fill=p["bg"], width=2)
 
     # Header
     c.box(16, 16, 848, 40, fill=p["card"])
@@ -340,7 +340,7 @@ def app_panel(p):
             hy += 20
 
     # Tag builder
-    c.box(28, 418, 824, 234)
+    c.box(28, 418, 824, 296)
     c.text(44, 440, "TAG BUILDER", size=10, weight="700", fill=p["dim"])
     c.pill(126, 431, "48 CONTENT TYPES, 1920 TAGS READ", size=8)
     c.text(44, 461, "Attributes come from the T4 tag reference; element names "
@@ -394,28 +394,39 @@ def app_panel(p):
                      (" />", "#f7768e")], size=9, mono=True)
 
     # Tasks, and the log the running one writes into.
-    c.box(28, 664, 824, 112)
-    c.text(44, 686, "TASKS", size=10, weight="700", fill=p["dim"])
-    c.text(44, 704, "Nothing running.", size=10, fill=p["dim"])
-    c.text(44, 728, "OUTPUT", size=10, weight="700", fill=p["dim"])
-    c.box(100, 719, 26, 12, fill=p["bg"], radius=999, width=1)
-    c.box(778, 718, 54, 16, fill=p["bg"], stroke=p["warn"], radius=5,
+    # The panel shows both syntaxes; the drawing showed only one.
+    c.text(44, 672, "Handlebars", size=8.5, fill=p["dim"])
+    c.box(786, 662, 52, 16, fill=p["card"], radius=4)
+    c.text(812, 674, "copy", size=9, anchor="middle")
+    c.box(44, 678, 794, 18, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.runs(54, 691, [('{{element name="Job title"}}', "#bb9af7")],
+           size=9, mono=True)
+    c.text(44, 712, "A layout is either Standard or Handlebars. T4 will not "
+                    "evaluate T4 tags inside a Handlebars layout.", size=8.5,
+           fill=p["dim"])
+
+    c.box(28, 726, 824, 112)
+    c.text(44, 748, "TASKS", size=10, weight="700", fill=p["dim"])
+    c.text(44, 766, "Nothing running.", size=10, fill=p["dim"])
+    c.text(44, 790, "OUTPUT", size=10, weight="700", fill=p["dim"])
+    c.box(100, 781, 26, 12, fill=p["bg"], radius=999, width=1)
+    c.box(778, 780, 54, 16, fill=p["bg"], stroke=p["warn"], radius=5,
           dash="3 3", width=1)
-    c.text(805, 730, "Stop", size=9, anchor="middle", fill=p["warn"])
-    c.box(44, 738, 788, 26, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
-    c.text(56, 755, "Pick an action to begin.", size=9.5, mono=True,
+    c.text(805, 792, "Stop", size=9, anchor="middle", fill=p["warn"])
+    c.box(44, 800, 788, 26, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.text(56, 817, "Pick an action to begin.", size=9.5, mono=True,
            fill=p["code_fg"])
 
     # The footer says where this runs, what it is not, and where it lives.
-    c.text(28, 800, "Every button runs the matching t4 command as a "
+    c.text(28, 862, "Every button runs the matching t4 command as a "
                     "subprocess in ~/Sites/MySite. Tasks run side by side; "
                     "only commands", size=8.5, fill=p["dim"])
-    c.text(28, 812, "writing the same files wait for each other.", size=8.5,
+    c.text(28, 874, "writing the same files wait for each other.", size=8.5,
            fill=p["dim"])
-    c.text(28, 830, "t4-sync is an independent, unofficial tool. Not "
+    c.text(28, 892, "t4-sync is an independent, unofficial tool. Not "
                     "produced, endorsed or supported by TERMINALFOUR "
                     "Solutions Ltd.", size=8.5, fill=p["dim"])
-    c.runs(28, 848, [("Built on GitHub with ", p["dim"]), ("\u2665", "#e0536b"),
+    c.runs(28, 910, [("Built on GitHub with ", p["dim"]), ("\u2665", "#e0536b"),
                      ("  \u00b7  github.com/bmx269/t4-sync", p["accent"])],
            size=8.5)
     return c
