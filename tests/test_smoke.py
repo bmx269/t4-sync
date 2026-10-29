@@ -23,6 +23,7 @@ from t4sync import (app, cli, fixtures, history, mirror,   # noqa: E402
                     opener, tags)
 import urllib.error   # noqa: E402
 from t4sync.config import Project      # noqa: E402
+from t4sync.commands import doctor     # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
                               InspectorContext, LayoutIndex,
                               annotate_components, annotate_content_items,
@@ -3651,3 +3652,116 @@ class TestSampleDataInTheWebUI(unittest.TestCase):
 
     def test_the_page_says_it_is_not_a_publish(self):
         self.assertIn("Not T4's renderer", app.PAGE)
+
+
+class TestDoctorProbesWhatThePullUses(unittest.TestCase):
+    """The id-bearing paths, which are most of what a pull spends itself on."""
+
+    COLLECTED = {
+        "contenttype": [{"id": 310}],
+        "sitestructure": {"id": 1, "children": [{"id": 42}]},
+        "_bodies": ['<t4 type="media" id="99" />'],
+    }
+    REPLIES = {
+        "layout/contenttype/310/en": [{"id": 7001}],
+        "layout/7001/en": {"id": 7001, "elements": {"Name": "x"}},
+        "hierarchy/1/en": {"id": 1, "channels": []},
+        "hierarchy/1/en/subsections": {"children": [{"id": 2}]},
+        "hierarchy/1/en/contents": {"children": []},
+        "media/99/en": {"id": 99, "text": "body"},
+    }
+
+    class Stub:
+        def __init__(self, replies):
+            self.replies = replies
+            self.asked = []
+
+        def get_json(self, path):
+            self.asked.append(path)
+            if path not in self.replies:
+                raise urllib.error.HTTPError(path, 500, "err", {}, None)
+            return self.replies[path]
+
+    def probe(self, collected=None, replies=None):
+        stub = self.Stub(self.REPLIES if replies is None else replies)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = doctor.probe_derived(
+                stub, self.COLLECTED if collected is None else collected, "en")
+        return result, out.getvalue(), stub
+
+    def test_every_path_the_pull_uses_is_reached(self):
+        (ok, bad, skipped), _text, stub = self.probe()
+        self.assertEqual((ok, bad, skipped), (6, 0, 0))
+        self.assertEqual(sorted(stub.asked), sorted(self.REPLIES))
+
+    def test_the_root_section_is_the_one_asked_about(self):
+        # It is the section certain to exist; a child may not be.
+        _r, _text, stub = self.probe()
+        self.assertIn("hierarchy/1/en", stub.asked)
+        self.assertNotIn("hierarchy/42/en", stub.asked)
+
+    def test_a_missing_field_is_called_out_rather_than_passing(self):
+        # A DTO change shows up as an empty pull, not an error, so the
+        # probe has to look inside the reply.
+        replies = dict(self.REPLIES)
+        replies["layout/7001/en"] = {"id": 7001}
+        (_ok, _bad, _s), text, _stub = self.probe(replies=replies)
+        self.assertIn("NO elements", text)
+
+    def test_a_failure_is_counted_not_swallowed(self):
+        replies = dict(self.REPLIES)
+        del replies["media/99/en"]
+        (ok, bad, _s), text, _stub = self.probe(replies=replies)
+        self.assertEqual((ok, bad), (5, 1))
+        self.assertIn("FAIL", text)
+
+    def test_nothing_to_ask_about_is_skipped_not_failed(self):
+        # An instance with no content types is not a broken endpoint.
+        (ok, bad, skipped), text, _stub = self.probe(
+            collected={"_bodies": []})
+        self.assertEqual((ok, bad), (0, 0))
+        self.assertEqual(skipped, 6)
+        self.assertIn("skipped", text)
+
+
+class TestApiCheckParsesTheReference(unittest.TestCase):
+    """The audit script, against the shape the real page actually has."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    PAGE = """<html><h1 id="terminalfour-rest-api">TERMINALFOUR REST API v8.3.16-FINAL</h1>
+    <h1 id="terminalfour-rest-api-about">about</h1>
+    <h2 id="getdatabaseinformation">getDatabaseInformation</h2>
+    <h1 id="terminalfour-rest-api-pagelayout">pageLayout</h1>
+    <h1 id="terminalfour-rest-api-hierarchy">hierarchy</h1>
+    <h1 id="terminalfour-rest-api-media">media</h1></html>"""
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_api", cls.ROOT / "docs" / "check_api.py")
+        cls.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.mod)
+
+    def test_groups_come_out_of_the_h1_anchors(self):
+        self.assertEqual(self.mod.groups(self.PAGE),
+                         {"about", "pageLayout", "hierarchy", "media"})
+
+    def test_an_operation_is_not_mistaken_for_a_group(self):
+        self.assertNotIn("getDatabaseInformation", self.mod.groups(self.PAGE))
+
+    def test_the_version_is_read_off_the_title(self):
+        self.assertEqual(self.mod.version(self.PAGE), "8.3.16-FINAL")
+
+    def test_the_used_list_covers_everything_the_pull_pulls(self):
+        # The list is written by hand; this is what stops it drifting from
+        # the table the tool actually pulls with.
+        from t4sync.endpoints import ENDPOINTS
+        self.assertEqual(set(ENDPOINTS) - set(self.mod.USED), set())
+
+    def test_the_paths_built_in_code_are_listed_too(self):
+        for group in ("layout", "hierarchy", "media"):
+            self.assertIn(group, self.mod.USED,
+                          "%s is requested but not declared" % group)

@@ -12,10 +12,35 @@ import urllib.error
 import urllib.request
 
 from ..api import Client, describe_http_error
-from ..endpoints import ENDPOINTS, SOURCE_FIELDS
+from ..endpoints import ENDPOINTS, ID_FIELDS, SOURCE_FIELDS
 from ..commands.token import decode_expiry
 
 VERSION_RE = re.compile(r"Version\s+(\d+\.\d+\.\d+(?:\.\d+)?)", re.I)
+MEDIA_TAG = re.compile(r'type=["\']media["\'][^>]*?\bid=["\'](\d+)["\']', re.I)
+
+
+def first_id(items):
+    """The first usable record id in a collection response."""
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        for field in ID_FIELDS:
+            value = item.get(field)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, str) and value.isdigit():
+                return value
+    return None
+
+
+def as_items(data):
+    """A collection response, however this endpoint happens to wrap one."""
+    if isinstance(data, dict):
+        for key in ("children", "data", "items"):
+            if isinstance(data.get(key), list):
+                return data[key]
+        return [data]
+    return data if isinstance(data, list) else []
 
 
 def detect_version(api_base, timeout=20):
@@ -40,6 +65,107 @@ def detect_version(api_base, timeout=20):
     return None
 
 
+def probe_derived(client, collected, language):
+    """The paths that need an id in them.
+
+    `pull` and `sections` spend almost all their requests here -- content
+    layouts, the section tree, media text -- and none of it was probed,
+    because none of it is a bare collection name. The ids come from the
+    collection responses already fetched above, so this costs a handful of
+    requests rather than a crawl.
+
+    A DTO change behind one of these shows up as an empty pull rather than
+    an error, which is the failure worth catching early. Returns
+    (working, failing, skipped).
+    """
+    working, failing, skipped = 0, 0, 0
+
+    def row(label, state, note):
+        print("  %-33s %-5s %s" % (label, state, note))
+
+    def probe(label, path, want=None):
+        """Fetch one path; `want` names a field that has to be in the reply."""
+        nonlocal working, failing
+        try:
+            data = client.get_json(path)
+        except urllib.error.HTTPError as exc:
+            row(label, "FAIL", describe_http_error(exc))
+            failing += 1
+            return None
+        except Exception as exc:                      # noqa: BLE001
+            row(label, "FAIL", "could not connect (%s)"
+                % getattr(exc, "reason", exc))
+            failing += 1
+            return None
+        items = as_items(data)
+        note = "%d item(s)" % len(items)
+        if want:
+            first = items[0] if items else {}
+            if isinstance(first, dict) and want in first:
+                note += ", has %s" % want
+            elif items:
+                note += ", NO %s (DTO may have changed)" % want
+        row(label, "ok", note)
+        working += 1
+        return data
+
+    def unavailable(label, why):
+        nonlocal skipped
+        row(label, "-", "skipped (%s)" % why)
+        skipped += 1
+
+    # Content layouts hang off a content type, two requests deep.
+    type_id = first_id(as_items(collected.get("contenttype")))
+    layout_id = None
+    if type_id is None:
+        unavailable("layout/contenttype/{id}/{lang}", "no content type to ask about")
+        unavailable("layout/{id}/{lang}", "no content type to ask about")
+    else:
+        stubs = probe("layout/contenttype/{id}/{lang}",
+                      "layout/contenttype/%s/%s" % (type_id, language))
+        layout_id = first_id(as_items(stubs))
+        if layout_id is None:
+            unavailable("layout/{id}/{lang}",
+                        "content type %s has no layouts" % type_id)
+        else:
+            probe("layout/{id}/{lang}",
+                  "layout/%s/%s" % (layout_id, language), want="elements")
+
+    # The section tree, which the inspector is built on. The root is asked
+    # about rather than a child: it is the one section certain to exist.
+    tree = collected.get("sitestructure")
+    section_id = first_id([tree]) if isinstance(tree, dict) else None
+    if section_id is None:
+        section_id = first_id(as_items(tree))
+    if section_id is None:
+        for label in ("hierarchy/{id}/{lang}",
+                      "hierarchy/{id}/{lang}/subsections",
+                      "hierarchy/{id}/{lang}/contents"):
+            unavailable(label, "no section to ask about")
+    else:
+        probe("hierarchy/{id}/{lang}",
+              "hierarchy/%s/%s" % (section_id, language), want="channels")
+        probe("hierarchy/{id}/{lang}/subsections",
+              "hierarchy/%s/%s/subsections" % (section_id, language))
+        probe("hierarchy/{id}/{lang}/contents",
+              "hierarchy/%s/%s/contents" % (section_id, language))
+
+    # Media has no collection endpoint: ids are found by reading media tags
+    # out of the layouts, so a layout has to have been fetched to have one.
+    media_id = None
+    for text in collected.get("_bodies", []):
+        found = MEDIA_TAG.findall(text or "")
+        if found:
+            media_id = found[0]
+            break
+    if media_id is None:
+        unavailable("media/{id}/{lang}", "no media tag in the layouts read")
+    else:
+        probe("media/{id}/{lang}", "media/%s/%s" % (media_id, language))
+
+    return working, failing, skipped
+
+
 def run(args, project):
     env_name = args.env or project.default_env()
     env = project.env(env_name)
@@ -60,9 +186,13 @@ def run(args, project):
     print()
 
     client = Client(env, token, timeout=args.timeout)
+    language = env.get("language", "en")
     working = 0
     http_failures = []
     unreachable = []
+    # Kept so the id-bearing paths below have something to ask about, rather
+    # than fetching the same collections a second time.
+    collected = {"_bodies": []}
 
     print("Endpoints")
     for endpoint in sorted(ENDPOINTS):
@@ -87,6 +217,7 @@ def run(args, project):
             continue
 
         items = data if isinstance(data, list) else [data]
+        collected[endpoint] = data
         note = "%d item(s)" % len(items)
 
         # Confirm the fields the tool extracts are actually present, since a
@@ -100,6 +231,7 @@ def run(args, project):
                     detail = client.get_json("%s/%s" % (path, item_id))
                     present = [f for f in SOURCE_FIELDS
                                if isinstance(detail.get(f), str) and detail[f].strip()]
+                    collected["_bodies"].extend(detail[f] for f in present)
                     known = sorted(set(detail) & set(SOURCE_FIELDS))
                     if present:
                         note += ", source in: %s" % ", ".join(present)
@@ -116,7 +248,17 @@ def run(args, project):
     # When the host is unreachable the probe stops early, so count every
     # endpoint as failing rather than only the one that was actually tried.
     failing = len(ENDPOINTS) - working if unreachable else len(http_failures)
-    print("\n%d endpoint(s) working, %d failing." % (working, failing))
+
+    skipped = 0
+    if not unreachable:
+        print("\nPaths that take an id")
+        more_ok, more_bad, skipped = probe_derived(client, collected, language)
+        working += more_ok
+        failing += more_bad
+
+    print("\n%d path(s) working, %d failing%s."
+          % (working, failing,
+             ", %d not checked" % skipped if skipped else ""))
 
     if unreachable:
         print("\nNothing could connect to %s." % env["base"])

@@ -851,13 +851,56 @@ t4 doctor                   # read-only probe of the configured environment
 t4 doctor --env prod
 ```
 
-Reports the T4 version, token expiry, and whether each endpoint responds —
+Reports the T4 version, token expiry, and whether each path responds —
 including whether the fields the tool extracts source from are still present,
 since a DTO change between releases would otherwise show up as a silently
 empty pull rather than an error.
 
+It probes in two passes, because the API has two shapes of path:
+
+- **Collections**, named outright: `pageLayout`, `navigation`, `contenttype`,
+  `channel`, `list`, `sitestructure`.
+- **Paths that take an id**: `layout/{id}/{lang}`,
+  `layout/contenttype/{id}/{lang}`, `hierarchy/{id}/{lang}` with its
+  `/subsections` and `/contents`, and `media/{id}/{lang}`. The ids come from
+  the collections just fetched, so this is a handful of requests rather than
+  a crawl.
+
+The second pass matters more than its size suggests: content layouts, the
+section tree and media text are most of what `t4 pull` and `t4 sections`
+spend their requests on, and none of it is reachable by name.
+
+Where there is nothing to ask about — an instance with no content types, or
+no media tag in the layouts read — the path is reported as *skipped* rather
+than failing. An empty instance is not a broken endpoint.
+
 Run this first against any instance you have not used before. T4's REST
 surface varies by version and deployment, so probing beats assuming.
+
+#### What the API offers, and what this uses
+
+```sh
+python3 docs/check_api.py           # needs the network; not a test
+python3 docs/check_api.py --all
+```
+
+Reads [the published reference](https://webapi.terminalfour.com/) and reports
+which of the roughly a hundred resource groups this tool uses — nine — and
+which of the rest a development tool might plausibly want: `version` for
+history older than the last pull, `lock` so a push need not hope nobody is
+editing, `preview` for the one thing that renders T4 tags properly,
+`workflow` for the approval a push bypasses today.
+
+The gap is mostly deliberate. Most of that surface is administration —
+`apikey`, `clusterconfig`, `ldapcontext`, `paymentgateway` — that something
+running on a laptop has no business calling. The script exists so the choice
+is visible rather than merely unmade, and so a group this tool depends on
+quietly disappearing from the reference gets noticed.
+
+It says what the documentation lists, not what a deployment routes. Those are
+different questions and the published reference currently lags the releases
+this tool is verified against, so the absence of a group there proves nothing.
+`t4 doctor` is the stronger signal.
 
 ### Local copy of the site
 
