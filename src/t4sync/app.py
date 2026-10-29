@@ -403,9 +403,12 @@ class AppHandler(BaseHTTPRequestHandler):
             spec = self._body()
             if not isinstance(spec, dict):
                 return self._json({"error": "expected an object"}, 400)
-            handlebars, note = tagdata.build_handlebars(spec)
-            return self._json({"tag": tagdata.build_tag(spec),
-                               "handlebars": handlebars, "note": note})
+            markup, problems = tagdata.build_tag(spec)
+            handlebars, hbs_note = tagdata.build_handlebars(spec)
+            return self._json({
+                "tag": markup, "problems": problems,
+                "note": tagdata.note_for(spec.get("type") or "content"),
+                "handlebars": handlebars, "handlebars_note": hbs_note})
         if path.startswith("/api/jobs/") and path.endswith("/stop"):
             job = self.jobs.get(path.split("/")[3])
             if not job:
@@ -490,6 +493,10 @@ class AppHandler(BaseHTTPRequestHandler):
             "lists": tagdata.named_objects(env_dir, "list"),
             "vocabulary": tagdata.vocabulary(env_dir),
             "takes_object": tagdata.TAKES_OBJECT,
+            "tag_types": {name: {"label": spec["label"],
+                                 "attrs": spec["attrs"]}
+                          for name, spec in tagdata.TAG_TYPES.items()},
+            "modifier_help": tagdata.MODIFIERS,
             "mixing_warning": tagdata.MIXING_WARNING,
         })
 
@@ -1013,9 +1020,15 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
   <section class="card area-build">
     <h2>Tag builder <span id="tagcount" class="pill"></span></h2>
     <p class="dim" style="margin:.1rem 0 .5rem;font-size:12px">
-      Builds a T4 tag from this project's own content types, so the element
-      name and the attributes are the ones that exist. Composes only &mdash;
-      T4 evaluates tags at publish time, nothing local can.
+      Attributes come from the
+      <a href="https://docs.terminalfour.com/documentation/page-management/generate-t4-tags/"
+         target="_blank" rel="noopener noreferrer">T4 tag reference</a>;
+      element names come from this project's own content types. Composes
+      only &mdash; T4 evaluates tags at publish time, nothing local can.
+      <br><b>The content type is not named in the tag.</b> A content tag
+      names an element, and the tag already sits inside that type's Content
+      Layout, so T4 knows which type it is rendering. The picker is there to
+      find the right element name.
     </p>
     <div class="build">
       <label>Tag<select id="tg-type"></select></label>
@@ -1024,7 +1037,7 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
       <label id="tg-objwrap" hidden>Object<select id="tg-obj"></select></label>
       <label id="tg-metawrap" hidden>Meta<select id="tg-meta"></select></label>
       <label id="tg-outwrap">Output<select id="tg-out"></select></label>
-      <label>Date format
+      <label id="tg-datewrap">Date format
         <input id="tg-date" type="text" placeholder="dd MMMM yyyy">
       </label>
     </div>
@@ -1762,11 +1775,18 @@ function tagSpec() {
 
 function showForKind() {
   var kind = el("tg-type").value;
-  var element = kind === "content" || kind === "media";
-  el("tg-ctwrap").hidden = !element;
-  el("tg-elwrap").hidden = !element;
-  el("tg-outwrap").hidden = !element;
-  el("tg-mods").hidden = !element;
+  // Driven by what the tag type accepts, from the T4 reference, rather than
+  // by a guess. A media tag takes an id and a formatter, not an element
+  // name -- offering one produced a tag that fails at publish time.
+  var attrs = ((tagData.tag_types || {})[kind] || {}).attrs || [];
+  var takes = function (name) { return attrs.indexOf(name) !== -1; };
+
+  var named = takes("name") && kind === "content";
+  el("tg-ctwrap").hidden = !named;
+  el("tg-elwrap").hidden = !named;
+  el("tg-outwrap").hidden = !takes("output");
+  el("tg-mods").hidden = !takes("modifiers");
+  el("tg-datewrap").hidden = !takes("date_format");
   el("tg-metawrap").hidden = kind !== "meta";
   // Only the kinds that actually refer to another object get a picker. A
   // title tag was being offered the list of Lists, which produced a tag
@@ -1846,8 +1866,20 @@ function renderTag() {
       } else {
         el("tg-hbs").textContent = "(no Handlebars equivalent)";
       }
-      el("tg-note").textContent = [d.note, tagData.mixing_warning]
-        .filter(Boolean).join("  ");
+      var note = el("tg-note");
+      note.textContent = "";
+      (d.problems || []).forEach(function (problem) {
+        var line = document.createElement("div");
+        line.className = "warn";
+        line.appendChild(text_("\u26a0  " + problem));
+        note.appendChild(line);
+      });
+      [d.note, d.handlebars_note, tagData.mixing_warning]
+        .filter(Boolean).forEach(function (message) {
+          var line = document.createElement("div");
+          line.appendChild(text_(message));
+          note.appendChild(line);
+        });
     })
     .catch(function (e) { el("tg-note").textContent = e.message; });
 }

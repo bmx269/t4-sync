@@ -2395,29 +2395,97 @@ class TestTagBuilder(unittest.TestCase):
         self.assertIn("fulltext", offered)          # documented, unused here
         self.assertIn("image", offered)             # used here
 
+    def test_a_value_t4_does_not_document_is_flagged(self):
+        # This site uses "tags" and "js-string" as modifiers; neither is in
+        # the reference. Worth saying rather than quietly endorsing.
+        (self.env / "contentLayout" / "b.html").write_text(
+            '<t4 type="content" name="X" modifiers="made-up" />',
+            encoding="utf-8")
+        vocab = tags.vocabulary(str(self.env))
+        found = {e["value"]: e["documented"] for e in vocab["modifiers"]}
+        self.assertFalse(found["made-up"])
+        self.assertTrue(found["htmlentities"])
+
     def test_a_project_with_no_layouts_still_offers_the_documented_set(self):
         bare = pathlib.Path(self.tmp.name) / "bare"
         bare.mkdir()
         vocab = tags.vocabulary(str(bare))
         self.assertEqual(vocab["tags_seen"], 0)
-        self.assertTrue({e["value"] for e in vocab["output"]})
+        self.assertIn("normal", {e["value"] for e in vocab["output"]})
+        self.assertIn("content", {e["value"] for e in vocab["type"]})
 
     def test_a_tag_is_built_in_the_order_t4_writes_them(self):
-        self.assertEqual(
-            tags.build_tag({"type": "content", "name": "First Name",
-                            "output": "normal", "modifiers": ["htmlentities"]}),
-            '<t4 type="content" name="First Name" output="normal" '
-            'modifiers="htmlentities" />')
+        markup, problems = tags.build_tag(
+            {"type": "content", "name": "First Name", "output": "normal",
+             "modifiers": ["htmlentities"]})
+        self.assertEqual(markup,
+                         '<t4 type="content" name="First Name" '
+                         'output="normal" modifiers="htmlentities" />')
+        self.assertEqual(problems, [])
 
     def test_quotes_in_an_element_name_cannot_break_the_attribute(self):
-        built = tags.build_tag({"type": "content", "name": 'say "hi" <b>'})
+        built, _problems = tags.build_tag({"type": "content",
+                                           "name": 'say "hi" <b>'})
         self.assertIn("&quot;hi&quot;", built)
         self.assertNotIn('"hi"', built)
         self.assertNotIn("<b>", built)
 
     def test_empty_attributes_are_left_out(self):
-        self.assertEqual(tags.build_tag({"type": "meta", "meta": "name"}),
-                         '<t4 type="meta" meta="name" />')
+        markup, _problems = tags.build_tag({"type": "meta", "meta": "name"})
+        self.assertEqual(markup, '<t4 type="meta" meta="name" />')
+
+    def test_a_media_tag_refuses_content_attributes(self):
+        # A media tag names an item by id and a layout by formatter. It
+        # takes no name, output or modifiers -- those are a content tag's.
+        _markup, problems = tags.build_tag(
+            {"type": "media", "name": "Logo", "output": "image"})
+        self.assertIn("a media tag does not take name", problems)
+        self.assertIn("a media tag does not take output", problems)
+        self.assertIn("a media tag needs id", problems)
+
+    def test_a_media_tag_built_properly_has_no_complaints(self):
+        markup, problems = tags.build_tag(
+            {"type": "media", "id": "10", "formatter": "image/*"})
+        self.assertEqual(markup, '<t4 type="media" id="10" formatter="image/*" />')
+        self.assertEqual(problems, [])
+
+    def test_a_navigation_tag_takes_a_name_as_well_as_an_id(self):
+        markup, problems = tags.build_tag(
+            {"type": "navigation", "id": "34", "name": "A-Z Site Map"})
+        self.assertEqual(markup,
+                         '<t4 type="navigation" name="A-Z Site Map" id="34" />')
+        self.assertEqual(problems, [])
+
+    def test_a_meta_tag_takes_either_an_id_or_a_meta_name(self):
+        for spec in ({"type": "meta", "id": "19"},
+                     {"type": "meta", "meta": "html_anchor"}):
+            _markup, problems = tags.build_tag(spec)
+            self.assertEqual(problems, [], spec)
+        _markup, problems = tags.build_tag({"type": "meta"})
+        self.assertTrue(any("one of" in p for p in problems))
+
+    def test_an_undocumented_output_is_refused(self):
+        _markup, problems = tags.build_tag(
+            {"type": "content", "name": "X", "output": "name"})
+        self.assertIn("name is not a documented output value", problems)
+
+    def test_the_documented_modifier_conflict_is_caught(self):
+        _markup, problems = tags.build_tag(
+            {"type": "content", "name": "X",
+             "modifiers": ["striptags", "rssentities"]})
+        self.assertTrue(any("rssentities" in p for p in problems))
+
+    def test_a_type_that_does_not_exist_builds_nothing(self):
+        markup, problems = tags.build_tag({"type": "web_object", "id": "5"})
+        self.assertEqual(markup, "")
+        self.assertTrue(problems)
+        # The real one is web-obj.
+        self.assertIn("web-obj", tags.TAG_TYPES)
+
+    def test_a_tag_with_no_attributes_is_still_valid(self):
+        markup, problems = tags.build_tag({"type": "title"})
+        self.assertEqual(markup, '<t4 type="title" />')
+        self.assertEqual(problems, [])
 
     def test_handlebars_equivalent_for_an_element(self):
         markup, note = tags.build_handlebars({"type": "content",
@@ -2953,9 +3021,11 @@ class TestObjectPicker(unittest.TestCase):
         self.assertNotIn("meta", tags.TAKES_OBJECT)
         self.assertNotIn("content", tags.TAKES_OBJECT)
 
-    def test_navigation_and_lists_do(self):
+    def test_the_kinds_that_refer_to_an_object_do(self):
+        # There is no type="list"; a Data Object refers to one.
         self.assertEqual(tags.TAKES_OBJECT["navigation"], "navigation")
-        self.assertEqual(tags.TAKES_OBJECT["list"], "list")
+        self.assertEqual(tags.TAKES_OBJECT["data-obj"], "list")
+        self.assertNotIn("list", tags.TAG_TYPES)
 
     def test_an_unnamed_record_says_so_rather_than_showing_a_filename(self):
         tmp = tempfile.TemporaryDirectory()

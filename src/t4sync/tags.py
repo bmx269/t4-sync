@@ -35,24 +35,116 @@ ATTR_RE = re.compile(r'([\w-]+)\s*=\s*"([^"]*)"')
 # The documented values, used as a floor under whatever the project's own
 # layouts turn out to use. Kept short on purpose: this is a fallback, and a
 # long invented list would drown the evidence.
-# Which tag kinds refer to another object by id. A title or meta tag takes
-# none, and offering a picker for one invites a tag that cannot work.
-TAKES_OBJECT = {"navigation": "navigation", "list": "list",
-                "web_object": "navigation", "data-obj": "list"}
+# Taken from the T4 tag appendix rather than from what this site happens to
+# use, because a builder that offers an attribute a tag does not accept
+# produces markup that fails at publish time -- which is a slow way to find
+# out, and exactly what a builder is for.
+#
+#   docs.terminalfour.com/documentation/page-management/generate-t4-tags/
+#
+# `needs` is what the tag cannot work without; `oneof` is where the tag takes
+# either of two, such as a meta tag naming a Metadata definition by id or a
+# content meta value by name.
 
-DOCUMENTED = {
-    "type": ["content", "navigation", "media", "meta", "title", "channel",
-             "web_object", "data-obj"],
-    "output": ["normal", "selective-output", "linkurl", "fulltext", "file",
-               "image", "name", "linktext"],
-    "modifiers": ["htmlentities", "striptags", "nl2br", "medialibrary",
-                  "tags", "js-string", "js-var", "encode_emails"],
-    "meta": ["name", "description", "keywords", "content_id", "html_anchor",
-             "last_modified", "version"],
+TAG_TYPES = {
+    "content": {
+        "label": "Content element",
+        "needs": ["name"],
+        "attrs": ["name", "output", "modifiers", "display_field", "date_format",
+                  "format", "process-format", "format-modifiers",
+                  "enable-dedit", "delimiter", "separator",
+                  "textual-name-separator"],
+    },
+    "navigation": {
+        "label": "Navigation object",
+        "needs": ["id"],
+        "attrs": ["name", "id"],
+        "object": "navigation",
+    },
+    "media": {
+        "label": "Media Library item",
+        "needs": ["id"],
+        "attrs": ["id", "formatter", "max-width", "max-height",
+                  "client-resize"],
+        "note": "A media tag names a Media Library item by id and a Media "
+                "Layout by formatter. It does not take name, output or "
+                "modifiers -- those belong to a content tag.",
+    },
+    "meta": {
+        "label": "Metadata",
+        "oneof": ["id", "meta"],
+        "attrs": ["id", "meta", "display_field"],
+        "note": "In a Page Layout a meta tag names a Metadata definition by "
+                "id and writes the whole <meta> element. The meta= form is "
+                "the Content Type one, which writes just the value.",
+    },
+    "title": {"label": "Section title", "attrs": [], "needs": []},
+    "title-on-index": {"label": "Title on index", "attrs": [], "needs": []},
+    "channel": {"label": "Channel", "attrs": ["output", "name"], "needs": []},
+    "parentnames": {
+        "label": "Ancestor or parent name",
+        "attrs": ["start-level", "number-of-levels", "separator",
+                  "first-child", "empty-section"],
+        "needs": [],
+    },
+    "edit-page": {"label": "Edit page link", "attrs": ["text"], "needs": []},
+    "warning": {"label": "Secondary publish", "attrs": ["text"], "needs": []},
+    "lang-var": {
+        "label": "Language variable",
+        "attrs": ["name", "default-language", "locale"],
+        "needs": ["name"],
+    },
+    "data-obj": {
+        "label": "Data object",
+        "attrs": ["id", "name", "formatter"],
+        "needs": ["id"],
+        "object": "list",
+    },
+    "web-obj": {
+        "label": "Web object",
+        "attrs": ["id", "name"],
+        "needs": ["id"],
+        "object": "navigation",
+    },
+    "sslink": {"label": "Section link", "attrs": ["id", "output"], "needs": ["id"]},
+    "fix-url": {"label": "Fix URL", "attrs": ["name"], "needs": []},
+    "social": {"label": "Social poster", "attrs": ["id", "name"], "needs": []},
+    "exceltohtml": {"label": "Excel to HTML", "attrs": ["name"], "needs": ["name"]},
+    "import-url": {"label": "Import URL", "attrs": ["name"], "needs": ["name"]},
 }
 
-# T4's element type codes. Only the ones that change what a tag should say
-# are listed; anything else is reported by number rather than guessed at.
+# Which kinds refer to another pulled object, and to which kind of object.
+TAKES_OBJECT = {name: spec["object"]
+                for name, spec in TAG_TYPES.items() if "object" in spec}
+
+# Every documented output value. `repeater` and `download` are on the content
+# page but not in the appendix, which predates them.
+OUTPUTS = ["normal", "selective-output", "repeater", "fulltext", "image",
+           "imageurl", "file", "download", "linktext", "linkurl", "id",
+           "description", "fav-icon", "site-root", "userinfo",
+           "lang_disclosure_style", "lang_disclosure_template"]
+
+# The eight documented modifiers, with what each is for.
+MODIFIERS = {
+    "htmlentities": "Encode special characters to their HTML equivalent",
+    "striptags": "Strip out all HTML tags",
+    "medialibrary": "Parse for Media Library t4 tags",
+    "nav_sections": "Parse for navigation t4 tags",
+    "nl2br": "Change new lines to HTML line breaks (plain text only)",
+    "rssentities": "Convert invalid RSS characters to their XML equivalent",
+    "js-var": "Escape quotes and newlines for use in JavaScript",
+    "encode_emails": "Encode email addresses to ASCII",
+}
+
+# Documented as incompatible: rssentities must not be combined with
+# striptags.
+MODIFIER_CONFLICTS = [({"rssentities", "striptags"},
+                       "rssentities must not be combined with striptags")]
+
+
+# T4's element type codes. Only those that change what a tag should say are
+# named; anything else is reported by number rather than guessed at, because
+# a wrong label here sends someone to the wrong output value.
 ELEMENT_TYPES = {
     1: "plain text",
     2: "HTML",
@@ -142,7 +234,10 @@ def vocabulary(env_dir, limit=14):
     it costs no request, and a value that appears four hundred times in this
     project is a better suggestion than one that appears in the manual.
     """
-    counts = {key: collections.Counter() for key in DOCUMENTED}
+    # The documented vocabulary, which the mined counts are ranked within.
+    documented = {"type": list(TAG_TYPES), "output": OUTPUTS,
+                  "modifiers": list(MODIFIERS), "meta": []}
+    counts = {key: collections.Counter() for key in documented}
     counts["attributes"] = collections.Counter()
     seen = 0
 
@@ -173,14 +268,17 @@ def vocabulary(env_dir, limit=14):
                         counts["modifiers"][modifier] += 1
 
     out = {"tags_seen": seen}
-    for key, documented in DOCUMENTED.items():
-        ranked = [{"value": value, "count": count}
-                  for value, count in counts[key].most_common(limit)]
-        known = {entry["value"] for entry in ranked}
-        # The documented values the site does not use yet, after the ones it
-        # does: still valid, just not this site's habit.
-        ranked += [{"value": value, "count": 0}
-                   for value in documented if value not in known]
+    for key, known_values in documented.items():
+        ranked = []
+        for value, count in counts[key].most_common(limit):
+            ranked.append({"value": value, "count": count,
+                           # A value this site uses that the documentation
+                           # does not list is worth flagging rather than
+                           # quietly endorsing.
+                           "documented": not known_values or value in known_values})
+        seen = {entry["value"] for entry in ranked}
+        ranked += [{"value": value, "count": 0, "documented": True}
+                   for value in known_values if value not in seen]
         out[key] = ranked
     out["attributes"] = [{"value": v, "count": c}
                          for v, c in counts["attributes"].most_common(limit)]
@@ -188,36 +286,74 @@ def vocabulary(env_dir, limit=14):
 
 
 def build_tag(spec):
-    """Render a tag from a description of one. Returns the markup.
+    """Render a tag from a description of one.
 
-    Attribute order follows what T4's own builder emits -- type, name, id,
-    output, modifiers, then the rest -- so a generated tag sits in a layout
-    looking like the ones already there.
+    Returns (markup, problems). Only attributes the tag type accepts are
+    emitted, and `problems` says what was dropped and what is missing --
+    silently producing a tag that fails at publish time is the one outcome
+    worth ruling out, because finding it means a publish cycle.
+
+    Attribute order follows T4's own builder: type, name, id, meta, output,
+    modifiers, then the rest, so a generated tag sits in a layout looking
+    like the ones already there.
     """
     kind = (spec.get("type") or "content").strip()
-    parts = ['type="%s"' % _attr(kind)]
+    rules = TAG_TYPES.get(kind)
+    problems = []
+    if rules is None:
+        return "", ["%r is not a T4 tag type" % kind]
 
-    for key in ("name", "id", "meta", "output"):
-        value = (spec.get(key) or "").strip()
-        if value:
-            parts.append('%s="%s"' % (key, _attr(value)))
+    allowed = set(rules["attrs"])
+    given = {}
+    for key, value in spec.items():
+        if key in ("type", "modifiers"):
+            continue
+        if isinstance(value, str):
+            value = value.strip()
+        if value in ("", None, False):
+            continue
+        if key not in allowed:
+            problems.append("a %s tag does not take %s" % (kind, key))
+            continue
+        given[key] = value
+
+    for required in rules.get("needs", []):
+        if required not in given:
+            problems.append("a %s tag needs %s" % (kind, required))
+    oneof = rules.get("oneof")
+    if oneof and not any(key in given for key in oneof):
+        problems.append("a %s tag needs one of %s" % (kind, " or ".join(oneof)))
 
     modifiers = [m.strip() for m in (spec.get("modifiers") or []) if m.strip()]
+    if modifiers and "modifiers" not in allowed:
+        problems.append("a %s tag does not take modifiers" % kind)
+        modifiers = []
+    for modifier in modifiers:
+        if modifier not in MODIFIERS:
+            problems.append("%s is not a documented modifier" % modifier)
+    for conflicting, why in MODIFIER_CONFLICTS:
+        if conflicting.issubset(set(modifiers)):
+            problems.append(why)
+
+    output = given.get("output")
+    if output and output not in OUTPUTS:
+        problems.append("%s is not a documented output value" % output)
+
+    parts = ['type="%s"' % _attr(kind)]
+    for key in ("name", "id", "meta", "output"):
+        if key in given:
+            parts.append('%s="%s"' % (key, _attr(given.pop(key))))
     if modifiers:
         parts.append('modifiers="%s"' % _attr(",".join(modifiers)))
+    for key in sorted(given):
+        parts.append('%s="%s"' % (key, _attr(given[key])))
 
-    for key in ("format", "date_format", "formatter", "display_field"):
-        value = (spec.get(key) or "").strip()
-        if value:
-            parts.append('%s="%s"' % (key, _attr(value)))
+    return "<t4 %s />" % " ".join(parts), problems
 
-    if spec.get("cdn"):
-        parts.append('cdn="true"')
-    pxl = (spec.get("pxl_filter_id") or "").strip()
-    if pxl:
-        parts.append('pxl-filter-id="%s"' % _attr(pxl))
 
-    return "<t4 %s />" % " ".join(parts)
+def note_for(kind):
+    """What is worth knowing about this tag type, or None."""
+    return (TAG_TYPES.get(kind) or {}).get("note")
 
 
 def build_handlebars(spec):
@@ -234,30 +370,30 @@ def build_handlebars(spec):
     if kind == "content":
         if not name:
             return "", "Pick an element first."
+        date_format = (spec.get("date_format") or "").strip()
+        if date_format:
+            return ('{{format-date element="%s" format="%s"}}'
+                    % (_attr(name), _attr(date_format))), None
         attrs = ['name="%s"' % _attr(name)]
         if output and output not in ("normal", "selective-output"):
             attrs.append('output="%s"' % _attr(output))
-        helper = "{{element %s}}" % " ".join(attrs)
         note = None
         if spec.get("modifiers"):
-            note = ("Handlebars has no modifiers attribute. "
-                    "`htmlentities` is the default; for `striptags` and the "
-                    "rest, do it in the layout or keep the T4 tag.")
-        date_format = (spec.get("date_format") or "").strip()
-        if date_format:
-            helper = '{{format-date element="%s" format="%s"}}' % (
-                _attr(name), _attr(date_format))
-            note = None
-        return helper, note
+            note = ("Handlebars has no modifiers attribute. htmlentities is "
+                    "the default; for striptags and the rest, do it in the "
+                    "layout or keep the T4 tag.")
+        return "{{element %s}}" % " ".join(attrs), note
 
     if kind == "media":
-        return ('{{media-url name="%s"}}' % _attr(name) if name else "",
-                None if name else "Pick an element first.")
+        media_id = (spec.get("id") or "").strip()
+        return ('{{media-url id="%s"}}' % _attr(media_id) if media_id else "",
+                None if media_id else "Choose a Media Library item first.")
 
     if kind == "meta":
         meta = (spec.get("meta") or "").strip()
         return ('{{t4-meta name="%s"}}' % _attr(meta) if meta else "",
-                None if meta else "Choose a meta value.")
+                "A meta tag by id writes a whole <meta> element, which "
+                "Handlebars has no helper for.")
 
     return "", ("No Handlebars equivalent for a %s tag -- use a T4 tag, in a "
                 "Standard layout." % kind)
