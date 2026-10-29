@@ -2319,9 +2319,13 @@ class TestActionIcons(unittest.TestCase):
             ET.fromstring(markup)          # raises if malformed
 
     def test_icons_are_hidden_from_screen_readers(self):
-        # The label beside them already says what the button does.
-        self.assertEqual(self.body.count('<svg class="ic"'),
-                         self.body.count('aria-hidden="true"'))
+        # The label beside them already says what the button does. Counted
+        # within the svg tags rather than across the page, so another
+        # decorative element elsewhere does not change the answer.
+        icons = re.findall(r"<svg class=\"ic\"[^>]*>", self.body)
+        self.assertEqual(len(icons), 10)
+        for icon in icons:
+            self.assertIn('aria-hidden="true"', icon)
 
     def test_they_follow_the_button_colour(self):
         self.assertIn('stroke="currentColor"', self.body)
@@ -2934,3 +2938,37 @@ class TestSyntaxHighlighting(unittest.TestCase):
         self.assertIn("function paint(", js)
         self.assertIn('span.className = "t-"', js)
         self.assertNotIn("tg-tag\").innerHTML", js)
+
+
+class TestObjectPicker(unittest.TestCase):
+    """Only tags that refer to another object get an object picker."""
+
+    def test_a_title_tag_refers_to_nothing(self):
+        # It was being offered the list of Lists, which produced a tag
+        # naming something it has no business naming.
+        self.assertNotIn("title", tags.TAKES_OBJECT)
+        self.assertNotIn("meta", tags.TAKES_OBJECT)
+        self.assertNotIn("content", tags.TAKES_OBJECT)
+
+    def test_navigation_and_lists_do(self):
+        self.assertEqual(tags.TAKES_OBJECT["navigation"], "navigation")
+        self.assertEqual(tags.TAKES_OBJECT["list"], "list")
+
+    def test_an_unnamed_record_says_so_rather_than_showing_a_filename(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        env = pathlib.Path(tmp.name)
+        (env / "list").mkdir()
+        (env / "list" / "1.json").write_text(json.dumps({"id": 1, "name": None}),
+                                             encoding="utf-8")
+        (env / "list" / "7.json").write_text(json.dumps({"id": 7, "name": "Faculties"}),
+                                             encoding="utf-8")
+        found = {o["id"]: o["name"] for o in tags.named_objects(str(env), "list")}
+        self.assertEqual(found[7], "Faculties")
+        self.assertEqual(found[1], "(unnamed list)")
+        self.assertNotIn("1.json", found.values())
+
+    def test_the_panel_asks_the_server_which_kinds_take_one(self):
+        page = app.PAGE % {"token": "x"}
+        js = page.split("<script>")[1].split("</scr" + "ipt>")[0]
+        self.assertIn("takes_object", js)

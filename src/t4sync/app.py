@@ -489,6 +489,7 @@ class AppHandler(BaseHTTPRequestHandler):
             "navigation": tagdata.named_objects(env_dir, "navigation"),
             "lists": tagdata.named_objects(env_dir, "list"),
             "vocabulary": tagdata.vocabulary(env_dir),
+            "takes_object": tagdata.TAKES_OBJECT,
             "mixing_warning": tagdata.MIXING_WARNING,
         })
 
@@ -894,6 +895,12 @@ pre{margin:0;padding:.6rem .7rem;background:#0b0d12;color:#dbe1ee;
 @keyframes pulse{0%%,100%%{opacity:1}50%%{opacity:.25}}
 footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
 .legal{margin-top:.35rem;opacity:.8}
+.made{margin-top:.4rem}
+.made a{color:var(--accent)}
+.heart{color:#e0536b}
+/* Visible to a screen reader, which cannot read a heart. */
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+ overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 </style>
 
 <header>
@@ -1044,7 +1051,16 @@ footer{padding:.5rem 1rem 1.5rem;color:var(--dim);font-size:11px}
   </section>
 </main>
 
-<footer><div id="foot"></div><div id="legal" class="legal"></div></footer>
+<footer>
+  <div id="foot"></div>
+  <div id="legal" class="legal"></div>
+  <div class="made">
+    Built on GitHub with <span class="heart" aria-hidden="true">&hearts;</span>
+    <span class="sr">love</span> &middot;
+    <a href="https://github.com/bmx269/t4-sync" target="_blank"
+       rel="noopener noreferrer">github.com/bmx269/t4-sync</a>
+  </div>
+</footer>
 
 <script>
 var TOKEN = "%(token)s";
@@ -1752,9 +1768,13 @@ function showForKind() {
   el("tg-outwrap").hidden = !element;
   el("tg-mods").hidden = !element;
   el("tg-metawrap").hidden = kind !== "meta";
-  el("tg-objwrap").hidden = element || kind === "meta";
-  if (!el("tg-objwrap").hidden) {
-    var source = kind === "navigation" ? tagData.navigation : tagData.lists;
+  // Only the kinds that actually refer to another object get a picker. A
+  // title tag was being offered the list of Lists, which produced a tag
+  // naming something it has no business naming.
+  var wants = (tagData.takes_object || {})[kind];
+  el("tg-objwrap").hidden = !wants;
+  if (wants) {
+    var source = wants === "navigation" ? tagData.navigation : tagData.lists;
     fillSelect("tg-obj", (source || []).map(function (o) {
       return {value: String(o.id), text: o.name + "  #" + o.id};
     }));

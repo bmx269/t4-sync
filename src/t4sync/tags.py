@@ -35,6 +35,11 @@ ATTR_RE = re.compile(r'([\w-]+)\s*=\s*"([^"]*)"')
 # The documented values, used as a floor under whatever the project's own
 # layouts turn out to use. Kept short on purpose: this is a fallback, and a
 # long invented list would drown the evidence.
+# Which tag kinds refer to another object by id. A title or meta tag takes
+# none, and offering a picker for one invites a tag that cannot work.
+TAKES_OBJECT = {"navigation": "navigation", "list": "list",
+                "web_object": "navigation", "data-obj": "list"}
+
 DOCUMENTED = {
     "type": ["content", "navigation", "media", "meta", "title", "channel",
              "web_object", "data-obj"],
@@ -120,8 +125,13 @@ def named_objects(env_dir, endpoint):
             record = record[0] if record else {}
         if record.get("id") is None:
             continue
+        # Half the Lists on a real instance come back with no name at all.
+        # Falling back to the filename showed "1.json" in a picker, which
+        # tells you nothing; say plainly that T4 did not name it.
+        name = (record.get("name") or record.get("title")
+                or record.get("description") or "").strip()
         found.append({"id": record["id"],
-                      "name": record.get("name") or filename})
+                      "name": name or "(unnamed %s)" % endpoint})
     return found
 
 

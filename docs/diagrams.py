@@ -66,6 +66,20 @@ class Canvas:
             attrs.append('opacity="%g"' % opacity)
         self.parts.append("<text %s>%s</text>" % (" ".join(attrs), _esc(value)))
 
+    def runs(self, x, y, pieces, size=13, mono=False):
+        """One line of text whose parts are coloured differently.
+
+        tspans rather than separate <text> elements positioned by guessing
+        character widths: the browser does the advancing, so the pieces
+        cannot drift apart or overlap at a different font.
+        """
+        spans = "".join('<tspan fill="%s">%s</tspan>' % (colour, _esc(text))
+                        for text, colour in pieces)
+        self.parts.append(
+            '<text x="%g" y="%g" font-family="%s" font-size="%g" '
+            'xml:space="preserve">%s</text>'
+            % (x, y, MONO if mono else SANS, size, spans))
+
     def line(self, x1, y1, x2, y2, stroke=None, width=1.5, dash=None):
         attrs = ['x1="%g" y1="%g" x2="%g" y2="%g"' % (x1, y1, x2, y2),
                  'stroke="%s"' % (stroke or self.p["edge"]),
@@ -214,77 +228,142 @@ def setup(p):
 
 
 def app_panel(p):
-    """What the control panel shows."""
-    c = Canvas(880, 470, p)
-    c.box(20, 20, 840, 430, fill=p["bg"], width=2)
+    """What the control panel shows, drawn from the running thing."""
+    c = Canvas(880, 690, p)
+    c.box(16, 16, 848, 658, fill=p["bg"], width=2)
 
-    c.box(20, 20, 840, 44, fill=p["card"], radius=8)
-    c.text(40, 48, "t4-sync", size=13, weight="700")
-    c.box(110, 30, 110, 24, fill=p["bg"], radius=6)
-    c.text(122, 47, "TEST", size=11.5, mono=True)
-    c.text(236, 48, "writable", size=11, fill=p["warn"])
-    c.box(770, 30, 72, 24, fill=p["bg"], radius=6)
-    c.text(806, 47, "Refresh", size=11, anchor="middle")
+    # Header
+    c.box(16, 16, 848, 40, fill=p["card"])
+    c.text(34, 42, "t4-sync", size=13, weight="700")
+    c.text(96, 42, "Environment", size=11, fill=p["dim"])
+    c.box(170, 25, 190, 22, fill=p["bg"], radius=5)
+    c.text(180, 41, "TEST (cms.example.edu)", size=10.5, mono=True)
+    c.text(352, 41, "\u25be", size=9, fill=p["dim"])
+    c.box(372, 26, 62, 20, fill=p["bg"], radius=999)
+    c.text(403, 40, "writable", size=9.5, anchor="middle", fill=p["warn"])
+    c.box(782, 25, 66, 22, fill=p["btn"] if "btn" in p else p["card"], radius=5)
+    c.text(815, 40, "Refresh", size=10.5, anchor="middle")
 
-    c.box(36, 78, 808, 136)
-    c.text(54, 102, "Project", size=12, weight="700")
-    c.text(112, 102, "753 files  .  394 pages mirrored  .  main, clean",
-           size=11.5, fill=p["dim"], mono=True)
-    columns = [("GET THE FILES", ["Pull source", "Mirror site", "Map sections"]),
-               ("WORK ON IT", ["Start local site", "View site", "Status"]),
-               ("SHIP IT", ["Commit to git", "Push to T4"])]
-    cx = 54
+    # Project and the three stages
+    c.box(28, 68, 824, 148)
+    c.text(44, 92, "\u25b8", size=9, fill=p["dim"])
+    c.text(58, 92, "Project", size=12, weight="700")
+    c.text(110, 92, "753 files  \u00b7  768 pages mirrored  \u00b7  main at "
+                    "a1b2c3d, clean", size=10.5, fill=p["dim"], mono=True)
+
+    columns = [
+        ("1 \u00b7 GET THE FILES",
+         ["Pull source", "Mirror site", "Map sections", "Sync"]),
+        ("2 \u00b7 WORK ON IT",
+         ["Start local site", "View site", "Status", "What differs"]),
+        ("3 \u00b7 SHIP IT", ["Commit to git", "Push to T4"]),
+    ]
+    cx = 44
     for title, buttons in columns:
-        c.text(cx, 128, title, size=9.5, weight="700", fill=p["dim"])
-        by = 138
+        c.text(cx, 116, title, size=9, weight="700", fill=p["dim"])
+        by = 126
         for label in buttons:
             primary = label == "Push to T4"
-            c.box(cx, by, 196, 22,
+            disabled = label == "View site"
+            c.box(cx, by, 196, 20,
                   fill=p["accent"] if primary else p["card"],
-                  stroke=p["accent"] if primary else p["edge"], radius=5)
-            c.text(cx + 10, by + 15, label, size=11,
-                   fill=p["bg"] if primary else p["fg"])
-            c.box(cx + 202, by, 22, 22, fill=p["card"], radius=5)
-            c.text(cx + 213, by + 15, "?", size=11, anchor="middle",
-                   fill=p["dim"])
-            by += 26
-        cx += 262
+                  stroke=p["accent"] if primary else p["edge"], radius=5,
+                  dash="3 3" if disabled else None)
+            c.text(cx + 10, by + 14, label, size=10.5,
+                   fill=p["bg"] if primary else
+                   (p["dim"] if disabled else p["fg"]))
+            c.box(cx + 202, by, 20, 20, fill=p["card"], radius=5)
+            c.text(cx + 212, by + 14, "?", size=10, anchor="middle",
+                   fill=p["dim"], weight="700")
+            by += 24
+        cx += 270
 
-    c.box(36, 226, 540, 150)
-    c.text(54, 250, "Changes", size=12, weight="700")
-    c.text(124, 250, "5 changed", size=11, fill=p["dim"])
+    # Changes, and what happened, side by side
+    c.box(28, 228, 548, 178)
+    c.text(44, 250, "CHANGES", size=10, weight="700", fill=p["dim"])
+    c.box(104, 240, 76, 16, fill=p["accent_soft"], radius=999)
+    c.text(142, 252, "3 CHANGED", size=8.5, anchor="middle", fill=p["accent"],
+           weight="700")
+    c.box(498, 240, 62, 18, fill=p["card"], radius=5)
+    c.text(529, 253, "Rescan", size=9.5, anchor="middle")
+    c.text(44, 272, "Files you have edited since the last pull. diff opens "
+                    "what would change;", size=9.5, fill=p["dim"])
+    c.text(44, 286, "push deploys that one file.", size=9.5, fill=p["dim"])
+
     rows = [("media/site.css", "media #4120"),
-            ("pageLayout/standard.footer.html", "pageLayout #1180")]
-    ry = 272
+            ("pageLayout/standard.footer.html", "pageLayout #1180"),
+            ("contentLayout/image-card--texthtml.html", "layout #4210")]
+    ry = 300
     for path, record in rows:
-        c.box(54, ry, 13, 13, fill=p["accent"], stroke=p["accent"], radius=3)
-        c.text(76, ry + 11, path, size=11, mono=True)
-        c.text(560, ry + 11, record, size=10, fill=p["dim"], anchor="end")
-        ry += 24
-    c.box(76, 320, 480, 44, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
-    c.text(90, 338, "@@ -14,7 +14,7 @@", size=10.5, mono=True, fill=p["dim"])
-    c.text(90, 354, "- padding: 40px 0 20px;   + padding: 24px 0 16px;",
-           size=10.5, mono=True, fill=p["code_fg"])
+        c.box(44, ry + 3, 12, 12, fill=p["accent"], stroke=p["accent"], radius=3)
+        c.text(64, ry + 13, path, size=10, mono=True)
+        c.text(408, ry + 13, record, size=9, fill=p["dim"], anchor="end")
+        c.box(418, ry + 2, 48, 16, fill=p["card"], radius=4)
+        c.text(442, ry + 14, "\u203a diff", size=9, anchor="middle")
+        c.box(472, ry + 2, 44, 16, fill=p["card"], radius=4)
+        c.text(494, ry + 14, "push", size=9, anchor="middle", fill=p["accent"])
+        ry += 26
 
-    c.box(588, 226, 256, 150)
-    c.text(606, 250, "History", size=12, weight="700")
+    c.box(588, 228, 264, 178)
+    c.text(604, 250, "HISTORY", size=10, weight="700", fill=p["dim"])
     hy = 274
-    for label, when in [("Pulled", "2 hours ago"), ("Pushed", "yesterday"),
-                        ("Committed", "yesterday"), ("Edited", "10 min ago")]:
-        c.text(606, hy, label, size=11, fill=p["dim"])
-        c.text(826, hy, when, size=11, anchor="end")
-        hy += 22
+    for label, when, detail in [
+            ("Pulled", "2 hours ago", None),
+            ("Pushed", "yesterday", "4 files"),
+            ("Committed", "7 hours ago", "a1b2c3d - 4 files"),
+            ("Edited", "20 minutes ago", "media/site.css"),
+            ("Mapped", "34 minutes ago", "2801 sections")]:
+        c.text(604, hy, label, size=10, fill=p["dim"])
+        c.text(836, hy, when, size=10, anchor="end")
+        if detail:
+            c.text(836, hy + 12, detail, size=8.5, anchor="end", fill=p["dim"],
+                   mono=True)
+            hy += 26
+        else:
+            hy += 20
 
-    c.box(36, 388, 808, 48)
-    c.text(54, 410, "Tasks", size=12, weight="700")
-    c.parts.append('<circle cx="112" cy="406" r="4" fill="%s"/>' % p["accent"])
-    c.text(124, 410, "t4 pull test", size=11, mono=True)
-    c.text(214, 410, "running", size=10.5, fill=p["dim"])
-    c.parts.append('<circle cx="300" cy="406" r="4" fill="%s"/>' % p["ok"])
-    c.text(312, 410, "t4 save test", size=11, mono=True)
-    c.text(404, 410, "done", size=10.5, fill=p["dim"])
-    c.text(54, 428, "tasks run side by side - a pull does not stop you "
-                    "committing", size=10.5, fill=p["dim"])
+    # Tag builder
+    c.box(28, 418, 824, 190)
+    c.text(44, 440, "TAG BUILDER", size=10, weight="700", fill=p["dim"])
+    c.box(126, 430, 186, 16, fill=p["accent_soft"], radius=999)
+    c.text(219, 442, "48 CONTENT TYPES, 1920 TAGS READ", size=8,
+           anchor="middle", fill=p["accent"], weight="700")
+    c.text(44, 462, "Builds a T4 tag from this project's own content types. "
+                    "Composes only \u2014 T4 evaluates", size=9.5, fill=p["dim"])
+    c.text(44, 475, "tags at publish time, nothing local can.", size=9.5,
+           fill=p["dim"])
+
+    fields = [("Tag", "content"), ("Content type", "Staff profile"),
+              ("Element", "Job title \u00b7 plain text"), ("Output", "normal (1426)")]
+    fx = 44
+    for label, value in fields:
+        c.text(fx, 494, label, size=8.5, fill=p["dim"])
+        c.box(fx, 500, 186, 20, fill=p["bg"], radius=5)
+        c.text(fx + 8, 514, value, size=9.5)
+        c.text(fx + 174, 514, "\u25be", size=8, fill=p["dim"])
+        fx += 196
+
+    mx = 44
+    for label in ("htmlentities (489)", "striptags (413)", "nl2br (63)"):
+        c.box(mx, 532, 11, 11, fill=p["bg"], radius=3)
+        c.text(mx + 17, 542, label, size=9, fill=p["dim"])
+        mx += 150
+
+    c.text(44, 566, "T4 tag", size=8.5, fill=p["dim"])
+    c.box(786, 556, 52, 16, fill=p["card"], radius=4)
+    c.text(812, 568, "copy", size=9, anchor="middle")
+    c.box(44, 572, 794, 24, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    # Coloured the way the panel colours it, as one line of tspans.
+    c.runs(56, 588, [("<t4 ", "#f7768e"), ("type", "#e0af68"),
+                     ("=", p["code_fg"]), ('"content"', "#9ece6a"),
+                     (" name", "#e0af68"), ("=", p["code_fg"]),
+                     ('"Job title"', "#9ece6a"), (" output", "#e0af68"),
+                     ("=", p["code_fg"]), ('"normal"', "#9ece6a"),
+                     (" />", "#f7768e")], size=9.5, mono=True)
+
+    c.box(28, 620, 824, 40)
+    c.text(44, 642, "TASKS", size=10, weight="700", fill=p["dim"])
+    c.text(96, 642, "Nothing running.", size=10, fill=p["dim"])
     return c
 
 
