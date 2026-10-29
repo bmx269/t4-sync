@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="350" viewBox="0 0 880 350" role="img">
+<rect width="880" height="350" fill="#0d1017"/>
+<rect x="30" y="56" width="390" height="262" rx="8" fill="#0d1017" stroke="#3b4455" stroke-width="2"/>
+<text x="46" y="44" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="700" fill="#99a1b3" text-anchor="start">THE PAGE YOU ARE LOOKING AT</text>
+<rect x="52" y="80" width="346" height="30" rx="5" fill="#191c24" stroke="#3b4455" stroke-width="1.5"/>
+<text x="68" y="100" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#99a1b3" text-anchor="start">Home   About   Programs   Contact</text>
+<rect x="52" y="124" width="346" height="120" rx="8" fill="#191c24" stroke="#9fb4ff" stroke-width="2.5" stroke-dasharray="5 4"/>
+<text x="68" y="146" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="700" fill="#9fb4ff" text-anchor="start">Contact . Elaine Newman</text>
+<rect x="68" y="156" width="60" height="60" rx="4" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="98" y="191" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#99a1b3" text-anchor="middle">photo</text>
+<text x="144" y="178" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="12.5" font-weight="600" fill="#e8eaf0" text-anchor="start">Elaine Newman</text>
+<text x="144" y="196" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#99a1b3" text-anchor="start">Academic Advisor</text>
+<text x="52" y="272" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="600" fill="#9fb4ff" text-anchor="start">click any element</text>
+<line x1="400" y1="190" x2="456" y2="190" stroke="#9fb4ff" stroke-width="2" stroke-linecap="round"/>
+<path d="M458 190 l-8 -6 l0 12 z" fill="#9fb4ff"/>
+<rect x="466" y="56" width="384" height="262" rx="8" fill="#191c24" stroke="#3b4455" stroke-width="2"/>
+<text x="482" y="44" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="700" fill="#99a1b3" text-anchor="start">THE T4 PANEL</text>
+<rect x="486" y="76" width="220" height="22" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="496" y="91" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#e8eaf0" text-anchor="start">Highlight: content items</text>
+<rect x="486" y="104" width="220" height="22" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="496" y="119" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#e8eaf0" text-anchor="start">Select on click  (links off)</text>
+<text x="486" y="150" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="700" fill="#99a1b3" text-anchor="start">Selected</text>
+<circle cx="492" cy="172" r="5" fill="#9fb4ff"/>
+<text x="506" y="176" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="600" fill="#e8eaf0" text-anchor="start">Contact . Elaine Newman</text>
+<text x="506" y="194" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#99a1b3" text-anchor="start">contentLayout/contact--texthtml.html</text>
+<rect x="506" y="202" width="54" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="533" y="216" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="middle">edit</text>
+<rect x="568" y="202" width="54" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="595" y="216" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="middle">folder</text>
+<rect x="630" y="202" width="54" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="657" y="216" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="middle">copy</text>
+<circle cx="492" cy="246" r="5" fill="#99a1b3"/>
+<text x="506" y="250" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="600" fill="#e8eaf0" text-anchor="start">page layout u_webpage</text>
+<text x="506" y="268" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10.5" font-weight="400" fill="#99a1b3" text-anchor="start">pageLayout/u-webpage.production.header.html</text>
+<rect x="506" y="276" width="54" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="533" y="290" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="middle">edit</text>
+<rect x="568" y="276" width="54" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="595" y="290" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="middle">folder</text>
+<rect x="630" y="276" width="54" height="20" rx="5" fill="#0d1017" stroke="#3b4455" stroke-width="1.5"/>
+<text x="657" y="290" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#e8eaf0" text-anchor="middle">copy</text>
+</svg>

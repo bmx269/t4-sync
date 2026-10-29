@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="430" viewBox="0 0 880 430" role="img">
+<rect width="880" height="430" fill="#ffffff"/>
+<rect x="40" y="30" width="330" height="92" rx="8" fill="#e6ebfa" stroke="#2b4bbf" stroke-width="1.5"/>
+<text x="56" y="56" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="700" fill="#2b4bbf" text-anchor="start">TERMINAL FOUR</text>
+<text x="56" y="78" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#1a1d25" text-anchor="start">the CMS - where your templates live</text>
+<text x="56" y="98" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="start">myweb-test.example.edu</text>
+<rect x="510" y="30" width="330" height="92" rx="8" fill="#e6f7ec" stroke="#17603a" stroke-width="1.5"/>
+<text x="526" y="56" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="700" fill="#17603a" text-anchor="start">PUBLISHED SITE</text>
+<text x="526" y="78" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="12.5" font-weight="400" fill="#1a1d25" text-anchor="start">the finished pages visitors see</text>
+<text x="526" y="98" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="start">webtest.example.edu</text>
+<line x1="150" y1="128" x2="150" y2="196" stroke="#2b4bbf" stroke-width="2" stroke-linecap="round"/>
+<path d="M150 200 l-5 -9 l10 0 z" fill="#2b4bbf" transform="rotate(180 150 196)"/>
+<text x="158" y="162" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#2b4bbf" text-anchor="start">t4 pull</text>
+<text x="158" y="178" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#5a6376" text-anchor="start">bring templates down</text>
+<line x1="262" y1="196" x2="262" y2="128" stroke="#2b4bbf" stroke-width="2" stroke-linecap="round"/>
+<path d="M262 132 l-5 -9 l10 0 z" fill="#2b4bbf" transform="rotate(0 262 128)"/>
+<text x="254" y="162" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#2b4bbf" text-anchor="end">t4 push</text>
+<text x="254" y="178" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#5a6376" text-anchor="end">send changes back</text>
+<line x1="675" y1="128" x2="675" y2="196" stroke="#17603a" stroke-width="2" stroke-linecap="round"/>
+<path d="M675 200 l-5 -9 l10 0 z" fill="#17603a" transform="rotate(180 675 196)"/>
+<text x="683" y="162" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#17603a" text-anchor="start">t4 mirror</text>
+<text x="683" y="178" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10.5" font-weight="400" fill="#5a6376" text-anchor="start">copy the pages (one way)</text>
+<rect x="40" y="204" width="800" height="196" rx="8" fill="#f4f6fa" stroke="#c3cbdb" stroke-width="2"/>
+<text x="62" y="234" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="700" fill="#5a6376" text-anchor="start">YOUR COMPUTER</text>
+<rect x="62" y="250" width="360" height="60" rx="8" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="78" y="274" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="600" fill="#1a1d25" text-anchor="start">t4-source/</text>
+<text x="78" y="294" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="start">the templates - these are what you edit</text>
+<rect x="458" y="250" width="360" height="60" rx="8" fill="#ffffff" stroke="#c3cbdb" stroke-width="1.5"/>
+<text x="474" y="274" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="600" fill="#1a1d25" text-anchor="start">site-mirror/</text>
+<text x="474" y="294" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="start">a copy of the finished pages</text>
+<rect x="62" y="326" width="756" height="56" rx="8" fill="#e6ebfa" stroke="#2b4bbf" stroke-width="1.5"/>
+<text x="78" y="350" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12.5" font-weight="700" fill="#2b4bbf" text-anchor="start">t4 serve</text>
+<text x="148" y="350" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" fill="#1a1d25" text-anchor="start">http://127.0.0.1:8321</text>
+<text x="78" y="370" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11.5" font-weight="400" fill="#5a6376" text-anchor="start">the two combined: real pages, with your edits applied as you save</text>
+</svg>

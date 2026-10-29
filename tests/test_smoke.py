@@ -2468,3 +2468,64 @@ class TestTagBuilderPanel(unittest.TestCase):
 
     def test_the_mixing_warning_reaches_the_page(self):
         self.assertIn("mixing_warning", self.js)
+
+
+class TestDiagrams(unittest.TestCase):
+    """README diagrams are generated, so they can be checked like code."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    def test_every_diagram_has_both_themes(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "diagrams", self.ROOT / "docs" / "diagrams.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for name in module.DIAGRAMS:
+            for theme in ("light", "dark"):
+                path = self.ROOT / "docs" / "img" / ("%s-%s.svg" % (name, theme))
+                self.assertTrue(path.is_file(), path)
+
+    def test_the_committed_svg_matches_the_generator(self):
+        # Edited by hand, a diagram drifts from what the generator produces
+        # and the next regeneration silently discards the edit.
+        import importlib.util
+        import xml.etree.ElementTree as ET
+        spec = importlib.util.spec_from_file_location(
+            "diagrams", self.ROOT / "docs" / "diagrams.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for name, build in module.DIAGRAMS.items():
+            for theme, palette in module.PALETTES.items():
+                expected = build(palette).render()
+                ET.fromstring(expected)
+                path = self.ROOT / "docs" / "img" / ("%s-%s.svg" % (name, theme))
+                self.assertEqual(path.read_text(encoding="utf-8"), expected,
+                                 "%s is stale: run python3 docs/diagrams.py" % path.name)
+
+    def test_nothing_in_them_needs_the_network(self):
+        # The SVG namespace is a URI, not a fetch, so it is allowed; an
+        # actual remote reference would make the README depend on a third
+        # party staying up, and GitHub would strip it anyway.
+        for path in (self.ROOT / "docs" / "img").glob("*.svg"):
+            text = path.read_text(encoding="utf-8")
+            for probe in ("<script", "xlink:href", "<image", "<foreignObject",
+                          "@import", "url("):
+                self.assertNotIn(probe, text, "%s contains %s" % (path.name, probe))
+            # Attributes only: the overview diagram prints
+            # "http://127.0.0.1:8321" as a label, which is text, not a fetch.
+            remote = re.findall(r'\b(?:href|src|srcset)\s*=\s*"[^"]*//', text)
+            self.assertEqual(remote, [], "%s fetches something" % path.name)
+
+    def test_the_readme_shows_each_one_in_both_themes(self):
+        readme = (self.ROOT / "README.md").read_text(encoding="utf-8")
+        for path in (self.ROOT / "docs" / "img").glob("*-light.svg"):
+            self.assertIn(path.name, readme, path.name)
+            self.assertIn(path.name.replace("-light", "-dark"), readme)
+
+    def test_every_image_carries_a_real_description(self):
+        readme = (self.ROOT / "README.md").read_text(encoding="utf-8")
+        alts = re.findall(r'<img alt="([^"]*)"', readme)
+        self.assertEqual(len(alts), readme.count("<picture>"))
+        for alt in alts:
+            self.assertGreater(len(alt), 60, "alt text is too thin: %r" % alt)
