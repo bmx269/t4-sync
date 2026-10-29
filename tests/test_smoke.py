@@ -3563,3 +3563,51 @@ class TestFixtureRendering(unittest.TestCase):
         page = fixtures.page("Staff profile", html, report)
         self.assertIn("Sample content", page)
         self.assertIn("Terminal Four is the only thing", page)
+
+
+class TestLorem(unittest.TestCase):
+    """--lorem, for when the wording would distract from the layout."""
+
+    TYPE = {"name": "Staff profile",
+            "elements": [{"name": "Full name", "type": "plain text"},
+                         {"name": "Biography", "type": "HTML"},
+                         {"name": "Started", "type": "date"},
+                         {"name": "Category", "type": "list"},
+                         {"name": "Portrait", "type": "image"}]}
+
+    def test_english_is_still_what_you_get_by_default(self):
+        values = fixtures.values_for(self.TYPE)
+        self.assertNotIn("lorem", values["Full name"].lower())
+
+    def test_text_becomes_latin_when_asked(self):
+        values = fixtures.values_for(self.TYPE, latin=True)
+        self.assertIn("lorem", values["Full name"].lower())
+        self.assertIn("<p>", values["Biography"])
+        self.assertNotIn("sample content", values["Biography"].lower())
+
+    def test_only_text_changes(self):
+        # Latin would not make a date or an image any more obviously
+        # placeholder than they already are.
+        plain = fixtures.values_for(self.TYPE)
+        latin = fixtures.values_for(self.TYPE, latin=True)
+        self.assertEqual(plain["Started"], latin["Started"])
+        self.assertEqual(plain["Portrait"], latin["Portrait"])
+
+    def test_a_list_option_is_a_label_not_a_sentence(self):
+        value = fixtures.values_for(self.TYPE, latin=True)["Category"]
+        self.assertFalse(value.endswith("."), value)
+        self.assertEqual(value, value.lower())
+
+    def test_the_same_run_twice_gives_the_same_text(self):
+        # So one rendering can be compared against the one before it.
+        self.assertEqual(fixtures.values_for(self.TYPE, latin=True),
+                         fixtures.values_for(self.TYPE, latin=True))
+
+    def test_elements_do_not_all_say_the_same_thing(self):
+        values = fixtures.values_for(self.TYPE, latin=True)
+        self.assertNotEqual(values["Full name"], values["Biography"])
+
+    def test_a_supplied_value_still_wins(self):
+        values = fixtures.values_for(self.TYPE, {"Full name": "A. Example"},
+                                     latin=True)
+        self.assertEqual(values["Full name"], "A. Example")

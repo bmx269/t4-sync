@@ -790,6 +790,21 @@ the test is about. A name that is not an element of that type is an error
 rather than a silent omission, because a dropped value looks exactly like a
 layout losing it.
 
+The invented values are English rather than lorem ipsum, because English
+makes a broken layout obvious at a glance where Latin hides it. When that is
+the wrong trade — a screenshot for a client, or a layout being judged on
+its typography rather than its wording — `--lorem` swaps it:
+
+```sh
+t4 fixtures "Staff profile" --lorem
+```
+
+Only text changes. A date is still a date and an image still an image,
+because Latin would not make those any more obviously placeholder than they
+already are. The text is the same on every run, so one rendering can be
+compared against the one before it, and anything named in `--values` still
+wins.
+
 Add `--css` for the site's own stylesheets — repeatable, and without it you
 are looking at unstyled markup. `--out` chooses where the HTML goes; the
 default is `.t4/fixtures/`, which is not committed.

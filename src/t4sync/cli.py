@@ -181,6 +181,9 @@ def build_parser():
     sp.add_argument("--values", metavar="FILE",
                     help="JSON of {element name: value}, to decide what goes "
                          "in rather than taking what was invented")
+    sp.add_argument("--lorem", action="store_true",
+                    help="fill text with lorem ipsum instead of English, for "
+                         "when the wording would distract")
     sp.add_argument("--css", action="append", metavar="URL",
                     help="a stylesheet to load; repeatable")
     sp.add_argument("--out", help="where to write the HTML")

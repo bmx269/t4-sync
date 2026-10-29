@@ -46,14 +46,48 @@ SENTENCES = (
     "that renders the real values.",
 )
 
+# The other way round, for when what is wanted is text of about the right
+# length that nobody could read as a message: a screenshot for a client, or
+# a layout being judged on its typography rather than its wording.
+LOREM = ("lorem ipsum dolor sit amet consectetur adipiscing elit sed do "
+         "eiusmod tempor incididunt ut labore et dolore magna aliqua enim "
+         "ad minim veniam quis nostrud exercitation ullamco laboris nisi "
+         "aliquip ex ea commodo consequat duis aute irure in reprehenderit "
+         "voluptate velit esse cillum eu fugiat nulla pariatur excepteur "
+         "sint occaecat cupidatat non proident sunt culpa qui officia "
+         "deserunt mollit anim id est laborum").split()
 
-def sample_value(element, index=0):
-    """A plausible value for one element, from its verified type."""
+
+def lorem(words, start=0, sentence=True):
+    """`words` words of Latin, starting at `start`.
+
+    `sentence` capitalises and adds a full stop. A list option is a label
+    rather than a sentence, so it asks for neither.
+
+    Deterministic: the same element gets the same text on every run, so a
+    rendering can be compared with the one before it.
+    """
+    taken = [LOREM[(start + n) % len(LOREM)] for n in range(max(1, words))]
+    if not sentence:
+        return " ".join(taken)
+    return taken[0].capitalize() + " ".join([""] + taken[1:]) + "."
+
+
+def sample_value(element, index=0, latin=False):
+    """A plausible value for one element, from its verified type.
+
+    `latin` swaps the English for lorem ipsum. Only text is affected: a date
+    is still a date and an image still an image, because Latin would not
+    make those any more obviously placeholder than they already are.
+    """
     kind = element.get("type") or ""
     name = element.get("name") or "Element"
     word = WORDS[index % len(WORDS)]
 
     if kind == "HTML":
+        if latin:
+            return ("<p>%s</p>\n<p>%s</p>"
+                    % (lorem(28, index * 11), lorem(22, index * 11 + 28)))
         return ("<p>%s</p>\n<p>%s</p>"
                 % (SENTENCES[index % len(SENTENCES)],
                    SENTENCES[(index + 1) % len(SENTENCES)]))
@@ -77,11 +111,14 @@ def sample_value(element, index=0):
     if kind == "section or content link":
         return "/example/a-section/"
     if kind == "list":
-        return "%s option" % word
+        return (lorem(2, index * 3, sentence=False) if latin
+                else "%s option" % word)
+    if latin:
+        return lorem(4, index * 7)
     return "%s %s" % (word, name.lower())
 
 
-def values_for(content_type, overrides=None):
+def values_for(content_type, overrides=None, latin=False):
     """{element name: sample value} for a whole content type.
 
     `overrides` replaces the invented value for an element by name, which is
@@ -91,7 +128,7 @@ def values_for(content_type, overrides=None):
     the type does not have is kept out and reported by `unknown_values`,
     because silently ignoring it would look like the layout dropped it.
     """
-    values = {element["name"]: sample_value(element, index)
+    values = {element["name"]: sample_value(element, index, latin)
               for index, element in enumerate(content_type.get("elements") or [])}
     for name, value in (overrides or {}).items():
         if name in values:

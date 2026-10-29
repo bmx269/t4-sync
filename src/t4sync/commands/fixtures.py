@@ -48,7 +48,7 @@ def run(args, project):
                          ", ".join(repr(name) for name in stray),
                          ", ".join(element["name"]
                                    for element in content_type["elements"])))
-    values = fixturelib.values_for(content_type, overrides)
+    values = fixturelib.values_for(content_type, overrides, args.lorem)
 
     # Tags being written, rather than a layout already pulled. The point of
     # these is to be seen before they go anywhere near the CMS, so there is
