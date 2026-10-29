@@ -362,96 +362,6 @@ t4 serve                                 # mirrors, then serves
 The source is already there from the clone, so there is nothing to pull before
 they can look at it — a pull only becomes necessary when T4 has moved on.
 
-### The control panel
-
-```sh
-t4 app                      # opens http://127.0.0.1:8320/ in your browser
-```
-
-Everything above, without the terminal. One command opens it, and it runs the
-same `t4` commands behind the buttons.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/app-dark.svg">
-  <img alt="The t4-sync control panel. A header with an environment picker; a Project row with action buttons in three columns for getting files, working and shipping; a Changes list with tick boxes and an inline diff; a History sidebar showing when things were last pulled, pushed, committed and edited; and a Tasks strip showing commands running side by side." src="docs/img/app-light.svg" width="880">
-</picture>
-
-**Ticking files and pressing Push** sends only those. **diff** shows what you
-changed since your last commit, with a toggle to compare against what Terminal
-Four holds instead. **push** on a row sends that one file. Tasks run side by
-side, so a pull does not stop you committing, and the site can stay running
-throughout.
-
-It shows the project's state — which environment, whether it is writable, what
-is pulled, whether the repository is clean — and runs pull, mirror, serve, save
-and push as buttons, streaming each command's output into the log pane.
-
-On macOS and Windows there are double-clickable launchers in `launchers/`.
-Copy the one for your platform into your project directory (the one holding
-`.t4/`) and double-click it.
-
-**Every button runs the real command as a subprocess.** Nothing in the panel
-reimplements a command, so nothing in it can quietly disagree with one: the
-per-environment `push_allowed` flag, the uncommitted-source gate and the
-pre-push backups all still apply, because the code enforcing them is the code
-being run. The panel shows a pull-only environment with its push button
-disabled, but the refusal underneath is the same one the CLI gives.
-
-Two things it deliberately will not do: `t4 env` and `t4 token`. Setting an
-environment's URL or storing a credential is a deliberate act that belongs in
-a terminal, not somewhere a mis-click can reach.
-
-**The URL carries a one-time token**, minted when the command starts. Binding
-to loopback is not on its own a boundary — any page in any browser tab can
-POST to `127.0.0.1` — so without the token every request is refused. Open the
-URL the command prints rather than typing the address by hand.
-
-#### Choosing what to deploy
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/changes-dark.svg">
-  <img alt="The Changes list in the control panel. Each row has a tick box, the file path, the T4 record it maps to, and diff and push buttons. One row is open, showing it is comparing local changes against the last commit with a button to compare with T4 instead, a unified diff with added and removed lines coloured, and the commits that touched the file." src="docs/img/changes-light.svg" width="880">
-</picture>
-
-Changes lists what you have edited since the last pull, or have not committed
-yet — either counts, and the row says which. **diff** opens what changed since
-your last commit, with a toggle to compare against what T4 holds instead; the
-first is instant and the second costs one request, which is why the local one
-is the default. Under it, every commit that touched the file, and clicking one
-shows what it did. **push** deploys that single file; tick several and use
-Push to T4 to send them together.
-
-#### Building a tag
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/tagbuilder-dark.svg">
-  <img alt="The tag builder. Pickers for the tag type, content type, element, output and date format; a line explaining what the chosen output does; modifier checkboxes labelled with what each one does and marked where undocumented; and the resulting T4 tag and Handlebars equivalent, each with a copy button." src="docs/img/tagbuilder-light.svg" width="880">
-</picture>
-
-Writing a T4 tag by hand means remembering an element's exact name, which
-`output` value that element type takes, and which modifiers to apply. Getting
-any of them wrong fails at publish time, which is a slow way to find a typo.
-
-Attributes come from the [T4 tag
-reference](https://docs.terminalfour.com/documentation/page-management/generate-t4-tags/)
-— eighteen tag types, each with the attributes it actually accepts — and
-element names come from this project's own Content Types. The builder emits
-only what the chosen type takes, and says what it dropped and what is missing
-rather than producing markup that looks right.
-
-Each output explains itself in the documentation's wording and brings the
-fields it needs: `format` for selective output, `layout` for a repeater, `info`
-for a content owner. Modifiers read as what they do, with the identifier and
-this project's usage count beside them, and anything the reference does not
-list is marked. Both syntaxes come back together, with a note wherever
-Handlebars has no equivalent.
-
-**The content type is not named in the tag.** A content tag names an element,
-and the tag already sits inside that type's Content Layout, so T4 knows which
-type it is rendering. The picker is there to find the element name.
-
-It composes only. T4 evaluates tags at publish time and nothing local can.
-
 ### The editing loop
 
 ```sh
@@ -918,6 +828,157 @@ Files in `overrides/` shadow the mirror for anything the pull does not cover.
 CSS and JS do not belong here — they are Media Library items served straight
 from `t4-source/`, so you edit those directly and they deploy. Responses are
 sent `Cache-Control: no-store`, so a plain reload picks up edits.
+
+## The web UI
+
+```sh
+t4 app                      # opens http://127.0.0.1:8320/ in your browser
+```
+
+Everything in [Commands](#commands), without the terminal. One command opens
+it, and it runs the same `t4` commands behind the buttons.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/app-dark.svg">
+  <img alt="The t4-sync web UI. A header with an environment picker; a Project row with action buttons in three columns for getting files, working and shipping; a Changes list with tick boxes and an inline diff; a History sidebar showing when things were last pulled, pushed, committed and edited; and a Tasks strip showing commands running side by side." src="docs/img/app-light.svg" width="880">
+</picture>
+
+**Every button runs the real command as a subprocess.** Nothing here
+reimplements a command, so nothing here can quietly disagree with one: the
+per-environment `push_allowed` flag, the uncommitted-source gate and the
+pre-push backups all still apply, because the code enforcing them is the code
+being run. A pull-only environment shows its push button disabled, but the
+refusal underneath is the same one the CLI gives.
+
+### Opening it
+
+`t4 app` prints a URL and opens it. The environment picker in the header
+chooses which one everything below acts on, and the pill beside it says
+whether that environment is writable. **Refresh** re-reads the project without
+running anything.
+
+On macOS and Windows there are double-clickable launchers in `launchers/`.
+Copy the one for your platform into your project directory — the one holding
+`.t4/` — and double-click it. It does what `t4 app` does.
+
+### The three stages
+
+The Project card groups the actions in the order a session runs in. Each one
+has a **?** beside it that says what it does and what it needs, so the panel
+can be read without this page open.
+
+**1 · Get the files**
+
+| Button | What it does |
+| --- | --- |
+| Pull source | Downloads the templates — page layouts, content layouts, content types, and the Media Library CSS and JS. Needs the CMS reachable, so the VPN if you use one. It will not overwrite a file you have edited since the last pull. |
+| Mirror site | Crawls the *published* site and saves the finished pages, so there is something real to look at. A different server from the pull. |
+| Map sections | Walks the site tree recording which layout each section uses and which content sits in it. Slow — a few thousand requests — but it resumes where it left off and is only needed occasionally. |
+| Sync | Pulls, then reports what changed on each side. Never writes to the CMS. The usual way to start a session. |
+
+**2 · Work on it**
+
+| Button | What it does |
+| --- | --- |
+| Start local site | Runs the site on your machine from the mirrored pages, with your edits applied and the inspector switched on. It keeps running until you stop it. |
+| View site | Opens the local site in a new tab, once the server has reported its address. |
+| Status | What is pending, grouped by kind, with the repository state. Read only. |
+| What differs | Compares every file against what the CMS holds right now. Read only, and slow over a VPN: one request per record. For a single file, use **diff** in the Changes list instead. |
+
+**3 · Ship it**
+
+| Button | What it does |
+| --- | --- |
+| Commit to git | Records your edits in the repository, with a message naming the CMS record behind each file. Whether a push requires this first is set per environment in `.t4/config.json`. |
+| Push to T4 | Sends the ticked files, backing up each record first. Only writable environments accept it. |
+
+### Choosing what to deploy
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/changes-dark.svg">
+  <img alt="The Changes list in the web UI. Each row has a tick box, the file path, the T4 record it maps to, and diff and push buttons. One row is open, showing it is comparing local changes against the last commit with a button to compare with T4 instead, a unified diff with added and removed lines coloured, and the commits that touched the file." src="docs/img/changes-light.svg" width="880">
+</picture>
+
+Changes lists what you have edited since the last pull, or have not committed
+yet — either counts, and the row says which. Each row names the file and the
+T4 record it maps to.
+
+**diff** opens what changed since your last commit, with a toggle to compare
+against what T4 holds instead; the first is instant and the second costs one
+request, which is why the local one is the default. Under it, every commit
+that touched the file, and clicking one shows what it did.
+
+**push** deploys that single file. Tick several and use **Push to T4** to send
+them together. Nothing is sent that you did not tick.
+
+**Rescan** re-reads the working tree. It is only needed when something changed
+the files from outside — a `git checkout`, say — because an edit made in your
+editor is noticed on its own.
+
+### History
+
+The History panel says when each kind of thing last happened: pulled, pushed,
+committed, edited, mapped. Beneath it, **Recent activity** is the running log
+in order, so "did that push go through?" is answerable without reading the
+output pane.
+
+It comes from `.t4/history.jsonl`, which this machine appends to and nothing
+else reads. It is not committed.
+
+### Building a tag
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/tagbuilder-dark.svg">
+  <img alt="The tag builder. Pickers for the tag type, content type, element, output and date format; a line explaining what the chosen output does; modifier checkboxes labelled with what each one does and marked where undocumented; and the resulting T4 tag and Handlebars equivalent, each with a copy button." src="docs/img/tagbuilder-light.svg" width="880">
+</picture>
+
+Writing a T4 tag by hand means remembering an element's exact name, which
+`output` value that element type takes, and which modifiers to apply. Getting
+any of them wrong fails at publish time, which is a slow way to find a typo.
+
+Attributes come from the [T4 tag
+reference](https://docs.terminalfour.com/documentation/page-management/generate-t4-tags/)
+— each tag type with the attributes it actually accepts — and element names
+come from this project's own Content Types. The builder emits only what the
+chosen type takes, and says what it dropped and what is missing rather than
+producing markup that looks right.
+
+Each output explains itself in the documentation's wording and brings the
+fields it needs: `format` for selective output, `layout` for a repeater, `info`
+for a content owner. Modifiers read as what they do, with the identifier and
+this project's usage count beside them, and anything the reference does not
+list is marked. Both syntaxes come back together, with a note wherever
+Handlebars has no equivalent.
+
+**The content type is not named in the tag.** A content tag names an element,
+and the tag already sits inside that type's Content Layout, so T4 knows which
+type it is rendering. The picker is there to find the element name.
+
+It composes only. T4 evaluates tags at publish time and nothing local can.
+
+### Tasks and output
+
+Tasks run side by side, so a pull does not stop you committing, and the local
+site can stay up throughout. What cannot overlap is two commands touching the
+same thing: a second pull waits for the first, because both write the same
+files. The Tasks strip shows what is running and what it is waiting on.
+
+Output streams into the pane below it as each command writes it — the same
+text the CLI would print, not a summary of it. **Stop** ends a running
+command.
+
+### What it will not do
+
+Two commands are deliberately absent: `t4 env` and `t4 token`. Setting an
+environment's URL or storing a credential is a deliberate act that belongs in
+a terminal, not somewhere a mis-click can reach. `t4 init` is absent for the
+same reason.
+
+**The URL carries a one-time token**, minted when the command starts. Binding
+to loopback is not on its own a boundary — any page in any browser tab can
+POST to `127.0.0.1` — so without the token every request is refused. Open the
+URL the command prints rather than typing the address by hand, and treat the
+URL as the credential it is.
 
 ## What this does not do
 

@@ -248,7 +248,7 @@ def setup(p):
 
 
 def app_panel(p):
-    """What the control panel shows, drawn from the running thing."""
+    """What the web UI shows, drawn from the running thing."""
     c = Canvas(880, 964, p)
     c.box(16, 16, 848, 870, fill=p["bg"], width=2)
 

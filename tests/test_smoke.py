@@ -1273,7 +1273,7 @@ class TestPickMode(unittest.TestCase):
 
 
 class TestApp(unittest.TestCase):
-    """The control panel: a token gate, and commands it will not run."""
+    """The web UI: a token gate, and commands it will not run."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -3213,7 +3213,7 @@ class TestSiteNavSubsections(unittest.TestCase):
         side = self._sidebar("commands.html")
         # These are the things a reader looks for and cannot guess live
         # inside a page called "Commands".
-        for heading in ("Version control", "The control panel",
+        for heading in ("Version control", "The web UI",
                         "The inspector", "The editing loop"):
             self.assertIn(heading, side, heading)
 

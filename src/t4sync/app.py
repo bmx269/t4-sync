@@ -658,7 +658,7 @@ def run_app(project, port=DEFAULT_PORT, host="127.0.0.1", open_browser=True):
     url = "http://%s:%d/?t=%s" % (host, port, AppHandler.token)
     with ThreadingHTTPServer((host, port), AppHandler) as httpd:
         httpd.daemon_threads = True
-        print("t4-sync control panel")
+        print("t4-sync web UI")
         print("Project   %s" % project.root)
         print("URL       %s" % url)
         print("\nThe token in that URL is what authorizes the page; it is new")

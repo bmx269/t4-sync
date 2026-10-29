@@ -1,4 +1,4 @@
-"""t4 app -- open the control panel in a browser."""
+"""t4 app -- open the web UI in a browser."""
 from ..app import DEFAULT_PORT, run_app
 
 

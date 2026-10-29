@@ -180,7 +180,7 @@ def build_parser():
     sp.add_argument("--out", help="where to write the HTML")
     sp.add_argument("--no-open", action="store_true")
 
-    sp = add("app", "Open a control panel in your browser.")
+    sp = add("app", "Open a web UI in your browser.")
     sp.add_argument("--port", "-p", type=int, default=8320)
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--no-open", action="store_true",

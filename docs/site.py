@@ -27,7 +27,7 @@ ROOT = HERE.parent
 # so the walkthrough is not buried in them.
 GROUPS = [
     ("Start here", ["What it does", "Getting started"]),
-    ("Using it", ["How it is organized", "Commands"]),
+    ("Using it", ["How it is organized", "Commands", "The web UI"]),
     ("Knowing the limits", ["What this does not do", "Things that will bite you"]),
     ("The project", ["Development", "Licence"]),
 ]
@@ -45,25 +45,76 @@ INLINE = [
 
 
 def inline(text):
-    """Inline markup, code spans first so their contents are left alone."""
-    out, last = [], 0
-    for match in re.finditer(r"`[^`]+`", text):
-        out.append(_inline_rest(text[last:match.start()]))
-        out.append("<code>%s</code>" % html.escape(match.group(0)[1:-1]))
-        last = match.end()
-    out.append(_inline_rest(text[last:]))
-    return "".join(out)
+    """Inline markup, code spans first so their contents are left alone.
 
+    Each code span becomes a placeholder before the other patterns run, and
+    is put back afterwards. Cutting the line into pieces at the code spans
+    instead would hide every construct that spans one -- a link whose text
+    is code, `[`t4 save`](#anchor)`, never matched its own brackets.
+    """
+    spans = []
 
-def _inline_rest(text):
+    def stash(match):
+        spans.append("<code>%s</code>"
+                     % html.escape(match.group(0)[1:-1]))
+        return "\x00%d\x00" % (len(spans) - 1)
+
+    text = re.sub(r"`[^`]+`", stash, text)
     text = html.escape(text, quote=False)
     for pattern, repl in INLINE[1:]:
         text = pattern.sub(repl, text)
-    return text
+    return re.sub(r"\x00(\d+)\x00",
+                  lambda m: spans[int(m.group(1))], text)
 
 
 def slug(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+# A <picture> in the README offers a dark diagram first and the light one as
+# the <img> fallback, which is right for GitHub. This site is light only, so
+# the dark <source> is dropped and the fallback is what every reader gets.
+DARK_SOURCE = re.compile(
+    r"\s*<source\b[^>]*prefers-color-scheme:\s*dark[^>]*>\s*", re.I)
+
+
+def light_only(block):
+    return DARK_SOURCE.sub("\n", block)
+
+
+# The README is one document, so a link to another part of it is a bare
+# `#anchor`. Here each `##` is its own page, and a bare anchor would look for
+# a heading that is not on this one. These two put the page back in front of
+# it, so the same link works in both places.
+HREF = re.compile(r'href="#([a-z0-9-]+)"')
+
+
+def anchor_owners(sections):
+    """{anchor: page name} for every heading in the README."""
+    owners = {}
+    for title, body in sections:
+        name = "index" if title == "Overview" else slug(title)
+        # The section's own title, which `split_sections` takes off the body.
+        owners.setdefault(slug(title), name)
+        for line in body.split("\n"):
+            heading = re.match(r"^#{1,6}\s+(.*)$", line)
+            if heading:
+                owners.setdefault(
+                    slug(re.sub(r"[`*]", "", heading.group(1))), name)
+    return owners
+
+
+def resolve_links(html_body, name, owners):
+    def repl(match):
+        owner = owners.get(match.group(1))
+        if owner is None or owner == name:
+            return match.group(0)
+        # A link to a section's own title is a link to that page: the title
+        # is the page, and no heading on it carries that id.
+        if match.group(1) == owner:
+            return 'href="%s.html"' % owner
+        return 'href="%s.html#%s"' % (owner, match.group(1))
+    return HREF.sub(repl, html_body)
 
 
 def render(markdown):
@@ -108,7 +159,7 @@ def render(markdown):
                 if index < len(lines):
                     block.append(lines[index])
                     index += 1
-            out.append("\n".join(block))
+            out.append(light_only("\n".join(block)))
             continue
 
         heading = re.match(r"^(#{1,6})\s+(.*)$", line)
@@ -118,7 +169,12 @@ def render(markdown):
             anchor = slug(re.sub(r"[`*]", "", text))
             if level == 3:
                 headings.append((text, anchor))
-            out.append('<h%d id="%s">%s</h%d>' % (level, anchor, inline(text), level))
+            # Every heading is a link to itself, so a section can be pointed
+            # at from a ticket or a chat message without hunting for the
+            # anchor in the page source.
+            out.append('<h%d id="%s">%s<a class="anchor" href="#%s" '
+                       'aria-label="Link to this section">#</a></h%d>'
+                       % (level, anchor, inline(text), anchor, level))
             index += 1
             continue
 
@@ -263,9 +319,9 @@ def nav(sections, current):
     """The sidebar, grouped so the walkthrough is not lost in the reference.
 
     Each page's own subheadings sit under it, so the sidebar shows what a
-    page contains rather than only that it exists -- "Version control" and
-    "The control panel" are inside Commands, and a reader looking for them
-    has no way to know that from a page title.
+    page contains rather than only that it exists -- "Version control" is
+    inside Commands, and a reader looking for it has no way to know that
+    from a page title.
     """
     by_title = {title: body for title, body in sections}
     titles = [title for title, _body in sections]
@@ -344,10 +400,13 @@ def build(out_dir):
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     sections = split_sections(readme)
 
+    owners = anchor_owners(sections)
+
     written = []
     for title, body in sections:
         html_body, headings = render(body)
         name = "index" if title == "Overview" else slug(title)
+        html_body = resolve_links(html_body, name, owners)
         if title == "Overview":
             html_body = HERO + html_body
         (out / ("%s.html" % name)).write_text(
@@ -377,12 +436,13 @@ HERO = '''
 '''
 
 STYLE = """
-:root{color-scheme:light dark;--bg:#fff;--fg:#1a1d25;--dim:#5a6376;
+/* The site is light in every browser, whatever the reader's system theme.
+   The README keeps both diagram variants because GitHub renders it in the
+   reader's theme; here the dark <source> elements are stripped out, so the
+   page and the pictures in it stay the one way. */
+:root{color-scheme:light;--bg:#fff;--fg:#1a1d25;--dim:#5a6376;
  --line:#e2e5ec;--card:#f7f8fa;--accent:#2b4bbf;--code-bg:#0b0d12;
  --code-fg:#dbe1ee;--btn:#e9edf6;--btn-edge:#6f7c9c}
-@media (prefers-color-scheme:dark){:root{--bg:#12141a;--fg:#e8eaf0;
- --dim:#99a1b3;--line:#262b36;--card:#191c24;--accent:#9fb4ff;
- --code-bg:#05070b;--btn:#252b38;--btn-edge:#687490}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
  font:15px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -415,6 +475,13 @@ main{min-width:0}
 /* A little room above an anchored heading so it does not sit flush
    against the top of the viewport. */
 h1,h2,h3,h4{scroll-margin-top:1rem}
+/* The self-link stays out of the way until the heading is hovered or the
+   link is focused by keyboard, where it has to be visible to be usable. */
+.anchor{margin-left:.4rem;color:var(--dim);text-decoration:none;
+ font-weight:400;opacity:0;transition:opacity .12s}
+h1:hover .anchor,h2:hover .anchor,h3:hover .anchor,h4:hover .anchor,
+.anchor:focus{opacity:1}
+.anchor:focus{outline:2px solid var(--accent);outline-offset:2px}
 h1{font-size:1.9rem;line-height:1.2;margin:.2rem 0 1rem}
 h2{font-size:1.35rem;margin:2rem 0 .6rem;padding-top:.4rem}
 h3{font-size:1.1rem;margin:1.6rem 0 .5rem}
