@@ -171,10 +171,16 @@ def build_parser():
     sp.add_argument("--force", action="store_true", help="reset from the mirror")
     sp.add_argument("--host-dir", help="which mirror, if several")
 
-    sp = add("fixtures", "Render a Content Layout with made-up content.")
+    sp = add("fixtures", "Render T4 tags with made-up content.")
     sp.add_argument("type", nargs="?", help="content type name, or omit to list")
     sp.add_argument("--env", "-e")
     sp.add_argument("--format", help="which layout, when a type has several")
+    sp.add_argument("--tags", metavar="FILE",
+                    help="render this markup instead of a pulled layout, for "
+                         "tags you are writing; '-' reads stdin")
+    sp.add_argument("--values", metavar="FILE",
+                    help="JSON of {element name: value}, to decide what goes "
+                         "in rather than taking what was invented")
     sp.add_argument("--css", action="append", metavar="URL",
                     help="a stylesheet to load; repeatable")
     sp.add_argument("--out", help="where to write the HTML")

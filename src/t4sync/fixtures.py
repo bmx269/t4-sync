@@ -23,7 +23,15 @@ import re
 from .tags import TAG_TYPES
 
 TAG_RE = re.compile(r"<t4\b([^>]*?)/?>", re.I)
-ATTR_RE = re.compile(r'([\w-]+)\s*=\s*"([^"]*)"')
+# Single quotes as well as double: a tag that sits inside an HTML attribute
+# has to use the other kind, and `src="<t4 type='content' .../>"` is one of
+# the commonest things anyone writes.
+ATTR_RE = re.compile(r"""([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+
+
+def _attrs(inside):
+    return {name.lower(): double if double else single
+            for name, double, single in ATTR_RE.findall(inside)}
 
 # Enough to read as real content without anyone mistaking it for real
 # content. Deliberately not lorem ipsum: English makes a broken layout
@@ -73,31 +81,61 @@ def sample_value(element, index=0):
     return "%s %s" % (word, name.lower())
 
 
-def values_for(content_type):
-    """{element name: sample value} for a whole content type."""
-    return {element["name"]: sample_value(element, index)
-            for index, element in enumerate(content_type.get("elements") or [])}
+def values_for(content_type, overrides=None):
+    """{element name: sample value} for a whole content type.
+
+    `overrides` replaces the invented value for an element by name, which is
+    what makes a rendering a test rather than a look: a title long enough to
+    wrap, an element left empty to see what the layout does without it, the
+    exact string a bug was reported against. An override naming an element
+    the type does not have is kept out and reported by `unknown_values`,
+    because silently ignoring it would look like the layout dropped it.
+    """
+    values = {element["name"]: sample_value(element, index)
+              for index, element in enumerate(content_type.get("elements") or [])}
+    for name, value in (overrides or {}).items():
+        if name in values:
+            values[name] = "" if value is None else str(value)
+    return values
+
+
+def unknown_values(content_type, overrides):
+    """Override names that are not elements of this type, in order."""
+    elements = {element["name"]
+                for element in content_type.get("elements") or []}
+    return [name for name in (overrides or {}) if name not in elements]
 
 
 def unfillable(kind):
     """Why a tag cannot be given a value here, or None if it can."""
     if kind == "content":
         return None
-    label = (TAG_TYPES.get(kind) or {}).get("label", kind)
-    return "%s needs the CMS" % label
+    if not kind:
+        return "no type= on this tag"
+    if kind not in TAG_TYPES:
+        return "%r is not a T4 tag type" % kind
+    return "%s needs the CMS" % TAG_TYPES[kind].get("label", kind)
 
 
-def render(layout, content_type, mark=True):
-    """Substitute sample values into a Content Layout.
+def render(layout, content_type, mark=True, values=None):
+    """Substitute sample values into markup containing T4 tags.
+
+    `layout` is a pulled Content Layout or any fragment you are writing --
+    the substitution is per tag, so a handful of tags you are about to paste
+    into a page renders the same way a whole layout does.
+
+    `values` is {element name: value}, already merged by `values_for`. Pass
+    it to decide what goes in rather than taking what was invented.
 
     Returns (html, report). `report` lists what was filled and what was left,
     so the output can be read for what it is rather than taken for a publish.
     """
-    values = values_for(content_type)
+    if values is None:
+        values = values_for(content_type)
     filled, skipped, unknown = [], [], []
 
     def replace(match):
-        attrs = dict(ATTR_RE.findall(match.group(1)))
+        attrs = _attrs(match.group(1))
         kind = (attrs.get("type") or "").lower()
         reason = unfillable(kind)
         if reason:

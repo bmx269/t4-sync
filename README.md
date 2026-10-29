@@ -740,6 +740,74 @@ publish is worse than no preview.
 
 `--no-preview` serves the mirror exactly as published.
 
+### Testing a tag
+
+```sh
+t4 fixtures                                   # content types you can render
+t4 fixtures "Staff profile"                   # its layout, filled in
+t4 fixtures "Staff profile" --tags new.html   # tags you are writing
+```
+
+The preview in [Previewing a layout edit](#previewing-a-layout-edit) reuses
+output T4 has already published, so it can only show a layout that has
+rendered something. That rules out the case you most want help with: tags you
+are adding now, for a content type nobody has filled in yet.
+
+The element types make a way around it. A Content Type says what each of its
+elements is — plain text, HTML, date, list, link, image — so a plausible
+value can be invented for each one and substituted into every `<t4>` tag that
+names it. What comes back is your markup with content in it: enough to see it
+nest correctly and the CSS apply, which is the question being asked.
+
+`--tags` renders a fragment rather than a pulled layout, so a handful of tags
+can be tried before they go anywhere near the CMS. `-` reads standard input:
+
+```sh
+echo '<h1><t4 type="content" name="Full name" /></h1>' \
+  | t4 fixtures "Staff profile" --tags -
+```
+
+#### Deciding what goes in
+
+Invented values are fine for seeing a shape, but a test needs particular
+values — a title long enough to wrap, an element left empty to see what
+happens without it, the exact string a bug was reported against. `--values`
+takes a JSON file of `{element name: value}`, and `null` empties an element:
+
+```json
+{
+  "Full name": "A name long enough to wrap onto a second line",
+  "Biography": null
+}
+```
+
+```sh
+t4 fixtures "Staff profile" --tags card.html --values wrapping.json
+```
+
+Anything not named keeps its invented value, so a file only has to say what
+the test is about. A name that is not an element of that type is an error
+rather than a silent omission, because a dropped value looks exactly like a
+layout losing it.
+
+Add `--css` for the site's own stylesheets — repeatable, and without it you
+are looking at unstyled markup. `--out` chooses where the HTML goes; the
+default is `.t4/fixtures/`, which is not committed.
+
+#### What it is not
+
+**It is not T4's renderer and does not pretend to be.** Modifiers are not
+applied, `navigation`, `media` and `meta` tags cannot be filled without the
+CMS, and a Programmable Layout will not run. Every page says so across the
+top, and anything that could not be filled is left visibly marked with the
+original tag inside it, rather than blanked — so the output never looks more
+finished than it is.
+
+The run reports the same thing in the terminal, including two mistakes worth
+catching early: a tag with no `type=`, and a tag naming an element the
+content type does not have, which usually means a layout assigned to the
+wrong type.
+
 ### Checking the local copy is faithful
 
 ```sh

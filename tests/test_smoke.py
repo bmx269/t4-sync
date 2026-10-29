@@ -19,7 +19,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from t4sync import extract            # noqa: E402
 from t4sync.extract import local_path   # noqa: E402
 from t4sync.cli import build_parser    # noqa: E402
-from t4sync import app, cli, history, mirror, opener, tags   # noqa: E402
+from t4sync import (app, cli, fixtures, history, mirror,   # noqa: E402
+                    opener, tags)
 import urllib.error   # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
@@ -3475,3 +3476,90 @@ class TestPanelDiagramShowsBothSyntaxes(unittest.TestCase):
     def test_the_mixing_warning_is_drawn(self):
         self.assertTrue(any("either Standard or Handlebars" in label
                             for label in self.labels))
+
+
+class TestFixtureValues(unittest.TestCase):
+    """Tags rendered with content invented for them, or supplied."""
+
+    TYPE = {"name": "Staff profile",
+            "elements": [{"name": "Full name", "type": "plain text"},
+                         {"name": "Biography", "type": "HTML"},
+                         {"name": "Started", "type": "date"},
+                         {"name": "Portrait", "type": "image"}]}
+
+    def test_every_element_gets_a_value_of_its_own_kind(self):
+        values = fixtures.values_for(self.TYPE)
+        self.assertEqual(set(values), {"Full name", "Biography", "Started",
+                                       "Portrait"})
+        self.assertIn("<p>", values["Biography"])
+        self.assertTrue(values["Portrait"].startswith("data:image/svg+xml"),
+                        "an image should not be fetched from anywhere")
+
+    def test_a_supplied_value_replaces_the_invented_one(self):
+        values = fixtures.values_for(self.TYPE, {"Full name": "A. Example"})
+        self.assertEqual(values["Full name"], "A. Example")
+        self.assertNotEqual(values["Biography"], "")
+
+    def test_an_element_can_be_emptied_to_see_the_layout_without_it(self):
+        values = fixtures.values_for(self.TYPE, {"Biography": None})
+        self.assertEqual(values["Biography"], "")
+
+    def test_a_value_for_an_element_that_does_not_exist_is_reported(self):
+        # Silently dropping it would read as the layout losing the value.
+        self.assertEqual(
+            fixtures.unknown_values(self.TYPE, {"Nickname": "x"}),
+            ["Nickname"])
+        self.assertEqual(fixtures.unknown_values(self.TYPE, {"Started": "x"}),
+                         [])
+
+
+class TestFixtureRendering(unittest.TestCase):
+    """A fragment of tags renders the same way a whole layout does."""
+
+    TYPE = TestFixtureValues.TYPE
+
+    def test_a_tag_is_replaced_by_its_elements_value(self):
+        html, report = fixtures.render(
+            '<h1><t4 type="content" name="Full name" /></h1>', self.TYPE,
+            values=fixtures.values_for(self.TYPE, {"Full name": "A. Example"}))
+        self.assertEqual(html, "<h1>A. Example</h1>")
+        self.assertEqual(report["filled"], ["Full name"])
+
+    def test_single_quoted_attributes_are_read(self):
+        # A tag inside an HTML attribute has to use the other kind of quote,
+        # and src="<t4 type='content' .../>" is among the commonest things
+        # anyone writes. Reading only double quotes left these unfilled.
+        html, report = fixtures.render(
+            "<img alt=\"<t4 type='content' name='Full name' />\">", self.TYPE,
+            values=fixtures.values_for(self.TYPE, {"Full name": "A. Example"}))
+        self.assertIn("A. Example", html)
+        self.assertEqual(report["skipped"], [])
+
+    def test_a_tag_the_cms_has_to_render_says_so(self):
+        _html, report = fixtures.render(
+            '<t4 type="navigation" name="Main" />', self.TYPE)
+        self.assertEqual(len(report["skipped"]), 1)
+        self.assertIn("needs the CMS", report["skipped"][0][1])
+
+    def test_a_tag_with_no_type_is_named_as_such(self):
+        # It reported a blank reason, which read as a bug in the tool
+        # rather than a tag missing its type.
+        _html, report = fixtures.render('<t4 name="Full name" />', self.TYPE)
+        self.assertEqual(report["skipped"][0][1], "no type= on this tag")
+
+    def test_a_tag_naming_a_missing_element_is_reported(self):
+        _html, report = fixtures.render(
+            '<t4 type="content" name="Nickname" />', self.TYPE)
+        self.assertEqual(report["unknown"], ["Nickname"])
+
+    def test_what_could_not_be_filled_stays_visible(self):
+        html, _report = fixtures.render(
+            '<t4 type="navigation" name="Main" />', self.TYPE)
+        self.assertIn("needs the CMS", html)
+        self.assertNotIn("<t4", html.replace("&lt;t4", ""))
+
+    def test_the_page_says_it_is_not_a_publish(self):
+        html, report = fixtures.render('<t4 type="media" id="1" />', self.TYPE)
+        page = fixtures.page("Staff profile", html, report)
+        self.assertIn("Sample content", page)
+        self.assertIn("Terminal Four is the only thing", page)

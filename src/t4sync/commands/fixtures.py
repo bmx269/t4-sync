@@ -1,5 +1,7 @@
-"""t4 fixtures -- render a Content Layout with made-up content."""
+"""t4 fixtures -- render T4 tags with made-up content."""
+import json
 import pathlib
+import sys
 import webbrowser
 
 from .. import fixtures as fixturelib
@@ -38,13 +40,32 @@ def run(args, project):
     content_type = next((c for c in matches if c["name"].lower() == wanted),
                         matches[0])
 
+    overrides = _read_values(args.values)
+    stray = fixturelib.unknown_values(content_type, overrides)
+    if stray:
+        raise T4Error("%s has no element named %s.\n  Its elements: %s"
+                      % (content_type["name"],
+                         ", ".join(repr(name) for name in stray),
+                         ", ".join(element["name"]
+                                   for element in content_type["elements"])))
+    values = fixturelib.values_for(content_type, overrides)
+
+    # Tags being written, rather than a layout already pulled. The point of
+    # these is to be seen before they go anywhere near the CMS, so there is
+    # no manifest entry to look for.
+    if args.tags:
+        return _write(args, project, env_name, content_type,
+                      _read_tags(args.tags), "tags", values)
+
     manifest = load_manifest(project, env_name)
     layouts = [(rel, meta) for rel, meta in sorted(manifest.items())
                if meta.get("endpoint") == "layout"
                and (meta.get("contentType") or "").lower()
                == content_type["name"].lower()]
     if not layouts:
-        raise T4Error("No pulled Content Layout for %r." % content_type["name"])
+        raise T4Error("No pulled Content Layout for %r.\n"
+                      "  To render tags you are writing, use --tags."
+                      % content_type["name"])
 
     chosen = layouts[0]
     if args.format:
@@ -63,11 +84,43 @@ def run(args, project):
 
     rel, meta = chosen
     source = read_text(project.env_dir(env_name) / rel)
-    html, report = fixturelib.render(source, content_type)
+    return _write(args, project, env_name, content_type, source,
+                  meta.get("name") or "layout", values)
+
+
+def _read_tags(where):
+    """The markup to render: a file, or stdin for '-'."""
+    if where == "-":
+        return sys.stdin.read()
+    path = pathlib.Path(where)
+    if not path.is_file():
+        raise T4Error("No such file: %s" % where)
+    return path.read_text(encoding="utf-8", newline="")
+
+
+def _read_values(where):
+    """{element name: value} from a JSON file, or {} if none was given."""
+    if not where:
+        return {}
+    path = pathlib.Path(where)
+    if not path.is_file():
+        raise T4Error("No such file: %s" % where)
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise T4Error("%s is not valid JSON: %s" % (where, exc))
+    if not isinstance(loaded, dict):
+        raise T4Error("%s should hold an object of {element name: value}, "
+                      "not %s." % (where, type(loaded).__name__))
+    return loaded
+
+
+def _write(args, project, env_name, content_type, source, what, values):
+    """Render, save and report, however the markup was arrived at."""
+    html, report = fixturelib.render(source, content_type, values=values)
 
     stylesheets = [s for s in (args.css or [])]
-    out = fixturelib.page("%s (%s)" % (content_type["name"],
-                                       meta.get("name") or "layout"),
+    out = fixturelib.page("%s (%s)" % (content_type["name"], what),
                           html, report, stylesheets)
 
     target = pathlib.Path(args.out) if args.out else (
@@ -75,7 +128,7 @@ def run(args, project):
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(out, encoding="utf-8")
 
-    print("%s  (%s)" % (content_type["name"], meta.get("name") or "layout"))
+    print("%s  (%s)" % (content_type["name"], what))
     print("  %d element(s) filled with sample values" % len(set(report["filled"])))
     if report["skipped"]:
         print("  %d tag(s) left as placeholders:" % len(report["skipped"]))
