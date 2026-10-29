@@ -3351,3 +3351,39 @@ class TestDiagramMatchesTheApp(unittest.TestCase):
         self.assertIn("writable", drawn)
         self.assertTrue(any("CHANGED" in label for label in drawn))
         self.assertTrue(any("CONTENT TYPES" in label for label in drawn))
+
+
+class TestPanelDiagramBottom(unittest.TestCase):
+    """The diagram's lower half had drifted from the panel's."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import xml.etree.ElementTree as ET
+        ns = "{http://www.w3.org/2000/svg}"
+        root = ET.parse(cls.ROOT / "docs" / "img" / "app-light.svg").getroot()
+        cls.labels = {"".join(node.itertext())
+                      for node in root.iter(ns + "text")}
+        cls.page = app.PAGE % {"token": "x"}
+
+    def test_the_output_pane_is_drawn(self):
+        # Tasks was there; the log it writes into, and the stop control, had
+        # been left off entirely.
+        self.assertIn("TASKS", self.labels)
+        self.assertIn("OUTPUT", self.labels)
+        self.assertTrue(any("Pick an action" in label for label in self.labels))
+        self.assertIn("Stop", self.labels)
+
+    def test_all_three_footer_lines_are_drawn(self):
+        for probe in ("Every button runs the matching t4 command",
+                      "independent, unofficial tool",
+                      "Built on GitHub with"):
+            self.assertTrue(any(probe in label for label in self.labels), probe)
+
+    def test_the_footer_says_what_the_panel_says(self):
+        # Both are written by hand in different files, so they drift.
+        for probe in ("Every button runs the matching t4 command",
+                      "independent, unofficial tool",
+                      "Built on GitHub with"):
+            self.assertIn(probe, self.page, probe)

@@ -249,8 +249,8 @@ def setup(p):
 
 def app_panel(p):
     """What the control panel shows, drawn from the running thing."""
-    c = Canvas(880, 744, p)
-    c.box(16, 16, 848, 702, fill=p["bg"], width=2)
+    c = Canvas(880, 866, p)
+    c.box(16, 16, 848, 772, fill=p["bg"], width=2)
 
     # Header
     c.box(16, 16, 848, 40, fill=p["card"])
@@ -393,13 +393,31 @@ def app_panel(p):
                      ("=", p["code_fg"]), ('"normal"', "#9ece6a"),
                      (" />", "#f7768e")], size=9, mono=True)
 
-    c.box(28, 664, 824, 40)
+    # Tasks, and the log the running one writes into.
+    c.box(28, 664, 824, 112)
     c.text(44, 686, "TASKS", size=10, weight="700", fill=p["dim"])
-    c.text(96, 686, "Nothing running.", size=10, fill=p["dim"])
+    c.text(44, 704, "Nothing running.", size=10, fill=p["dim"])
+    c.text(44, 728, "OUTPUT", size=10, weight="700", fill=p["dim"])
+    c.box(100, 719, 26, 12, fill=p["bg"], radius=999, width=1)
+    c.box(778, 718, 54, 16, fill=p["bg"], stroke=p["warn"], radius=5,
+          dash="3 3", width=1)
+    c.text(805, 730, "Stop", size=9, anchor="middle", fill=p["warn"])
+    c.box(44, 738, 788, 26, fill=p["code_bg"], stroke=p["code_bg"], radius=5)
+    c.text(56, 755, "Pick an action to begin.", size=9.5, mono=True,
+           fill=p["code_fg"])
 
-    c.text(440, 726, "Built on GitHub with \u2665  \u00b7  "
-                     "github.com/bmx269/t4-sync", size=9, anchor="middle",
+    # The footer says where this runs, what it is not, and where it lives.
+    c.text(28, 800, "Every button runs the matching t4 command as a "
+                    "subprocess in ~/Sites/MySite. Tasks run side by side; "
+                    "only commands", size=8.5, fill=p["dim"])
+    c.text(28, 812, "writing the same files wait for each other.", size=8.5,
            fill=p["dim"])
+    c.text(28, 830, "t4-sync is an independent, unofficial tool. Not "
+                    "produced, endorsed or supported by TERMINALFOUR "
+                    "Solutions Ltd.", size=8.5, fill=p["dim"])
+    c.runs(28, 848, [("Built on GitHub with ", p["dim"]), ("\u2665", "#e0536b"),
+                     ("  \u00b7  github.com/bmx269/t4-sync", p["accent"])],
+           size=8.5)
     return c
 
 
