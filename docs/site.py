@@ -387,9 +387,10 @@ STYLE = """
 body{margin:0;background:var(--bg);color:var(--fg);
  font:15px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
 a{color:var(--accent)}
-header{position:sticky;top:0;z-index:5;background:var(--bg);
- border-bottom:1px solid var(--line);padding:.6rem 1.2rem;display:flex;
- gap:1rem;align-items:baseline}
+/* Not sticky: it covered the heading an anchor had just scrolled to, so
+   every link into a page landed a header's height too far down. */
+header{background:var(--bg);border-bottom:1px solid var(--line);
+ padding:.6rem 1.2rem;display:flex;gap:1rem;align-items:baseline}
 header b{font-size:14px;letter-spacing:.02em}
 header .sub{color:var(--dim);font-size:12.5px}
 .wrap{display:grid;grid-template-columns:15rem minmax(0,1fr) 13rem;gap:2rem;
@@ -398,7 +399,7 @@ header .sub{color:var(--dim);font-size:12.5px}
  .toc{display:none}}
 @media (max-width:760px){.wrap{grid-template-columns:minmax(0,1fr)}
  nav.side{position:static}}
-nav.side,.toc{position:sticky;top:3.6rem;font-size:13.5px}
+nav.side,.toc{position:sticky;top:1rem;font-size:13.5px}
 .navgroup{color:var(--dim);font-size:10.5px;font-weight:700;
  text-transform:uppercase;letter-spacing:.07em;margin:1rem 0 .3rem}
 .navgroup:first-child{margin-top:0}
@@ -411,6 +412,9 @@ nav.side,.toc{position:sticky;top:3.6rem;font-size:13.5px}
 .navsub:hover{color:var(--accent);border-left-color:var(--accent)}
 .toc a{color:var(--dim);font-size:12.5px}
 main{min-width:0}
+/* A little room above an anchored heading so it does not sit flush
+   against the top of the viewport. */
+h1,h2,h3,h4{scroll-margin-top:1rem}
 h1{font-size:1.9rem;line-height:1.2;margin:.2rem 0 1rem}
 h2{font-size:1.35rem;margin:2rem 0 .6rem;padding-top:.4rem}
 h3{font-size:1.1rem;margin:1.6rem 0 .5rem}

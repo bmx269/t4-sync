@@ -3263,3 +3263,40 @@ class TestDiagramCorners(unittest.TestCase):
         for path in (self.ROOT / "docs" / "img").glob("*.svg"):
             text = path.read_text(encoding="utf-8")
             self.assertEqual(text.count("rx="), text.count("ry="), path.name)
+
+
+class TestDocsAnchorsAreReachable(unittest.TestCase):
+    """A link into a page must land on the heading, not behind something."""
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "site_builder", cls.ROOT / "docs" / "site.py")
+        cls.site = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.site)
+        cls.css = cls.site.STYLE
+
+    def test_the_header_does_not_sit_over_the_content(self):
+        # It covered the heading an anchor had just scrolled to, so every
+        # link into a page landed a header's height too far down.
+        header = re.search(r"header\{[^}]*\}", self.css).group(0)
+        self.assertNotIn("position:sticky", header)
+        self.assertNotIn("position:fixed", header)
+
+    def test_headings_keep_a_little_room_above_them(self):
+        self.assertIn("scroll-margin-top", self.css)
+
+    def test_every_sidebar_anchor_exists_on_its_page(self):
+        out = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(out, ignore_errors=True))
+        self.site.build(str(out))
+        for page in out.glob("*.html"):
+            text = page.read_text(encoding="utf-8")
+            for target, anchor in re.findall(r'href="([\w-]+)\.html#([\w-]+)"',
+                                             text):
+                landing = (out / ("%s.html" % target)).read_text(encoding="utf-8")
+                self.assertIn('id="%s"' % anchor, landing,
+                              "%s links to %s#%s" % (page.name, target, anchor))
