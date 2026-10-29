@@ -3759,9 +3759,29 @@ class TestApiCheckParsesTheReference(unittest.TestCase):
         # The list is written by hand; this is what stops it drifting from
         # the table the tool actually pulls with.
         from t4sync.endpoints import ENDPOINTS
-        self.assertEqual(set(ENDPOINTS) - set(self.mod.USED), set())
+        declared = {v[1].strip("/").split("/")[0] for v in self.mod.USED}
+        self.assertEqual(set(ENDPOINTS) - declared, set())
 
     def test_the_paths_built_in_code_are_listed_too(self):
+        declared = {v[1].strip("/").split("/")[0] for v in self.mod.USED}
         for group in ("layout", "hierarchy", "media"):
-            self.assertIn(group, self.mod.USED,
+            self.assertIn(group, declared,
                           "%s is requested but not declared" % group)
+
+    def test_every_entry_names_a_method_and_a_reason(self):
+        for method, path, why in self.mod.USED:
+            self.assertIn(method, ("GET", "PUT", "POST", "DELETE"))
+            self.assertTrue(path.startswith("/"), path)
+            self.assertTrue(why.strip(), path)
+
+    def test_a_path_is_matched_however_the_older_page_spells_it(self):
+        # That page flattens a path's punctuation away, so
+        # /hierarchy/{id}/{language}/contents is listed as one word.
+        self.assertEqual(self.mod.flat("/hierarchy/{id}/{language}/contents"),
+                         "hierarchyidlanguagecontents")
+
+    def test_methods_come_off_the_specification(self):
+        spec = {"paths": {"/pageLayout/{id}": {"get": {}, "put": {},
+                                               "parameters": []}}}
+        self.assertEqual(self.mod.spec_paths(spec),
+                         {"/pageLayout/{id}": ["GET", "PUT"]})

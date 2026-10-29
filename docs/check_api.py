@@ -44,19 +44,33 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 # than scraped out of the source: a regex over the code would miss the ones
 # built by string formatting, which is most of them, and quietly report a
 # dependency as absent.
-USED = {
-    "pageLayout": "endpoints.py -- page layout source",
-    "navigation": "endpoints.py -- navigation objects",
-    "contenttype": "endpoints.py -- content types",
-    "channel": "endpoints.py -- channels",
-    "list": "endpoints.py -- lists (as list/1; /list alone answers 500)",
-    "sitestructure": "endpoints.py -- the section tree in one response",
-    "layout": "contentlayout.py -- layout/{id}/{lang}, "
-              "layout/contenttype/{id}/{lang}",
-    "hierarchy": "sections.py -- hierarchy/{id}/{lang}, /subsections, "
-                 "/contents",
-    "media": "pull.py -- media/{id}/{lang}, and binary via a signed URL",
-}
+# Every path this tool asks for, with the method and the reason. Written out
+# by hand: a regex over the source would miss the ones built by string
+# formatting, which is most of them, and quietly report a dependency as
+# absent. `--{lang}` is spelled `{language}` to match the specification.
+USED = [
+    ("GET", "/pageLayout", "page layout metadata"),
+    ("GET", "/pageLayout/{id}", "page layout source"),
+    ("GET", "/navigation", "navigation objects"),
+    ("GET", "/navigation/{id}", "one navigation object"),
+    ("GET", "/contenttype", "content types and their elements"),
+    ("GET", "/channel", "channels"),
+    ("GET", "/channel/{id}", "one channel"),
+    ("GET", "/list/{id}", "lists; /list alone answers 500, so list/1 is used"),
+    ("GET", "/sitestructure", "the whole section tree in one response"),
+    ("GET", "/layout/contenttype/{id}/{language}",
+     "a content type's layouts"),
+    ("GET", "/layout/{id}/{language}", "one content layout"),
+    ("GET", "/hierarchy/{id}/{language}", "one section"),
+    ("GET", "/hierarchy/{id}/{language}/subsections", "its children"),
+    ("GET", "/hierarchy/{id}/{language}/contents", "content placed in it"),
+    ("GET", "/media/{id}/{language}", "media, including text media source"),
+    ("GET", "/media/{id}/{language}/{version}/{element}",
+     "binary media, via the signed URL it answers with"),
+    ("PUT", "/pageLayout/{id}", "push a page layout"),
+    ("PUT", "/layout/{id}/{language}", "push a content layout"),
+    ("PUT", "/media/{id}/{language}", "push text media"),
+]
 
 # Groups a local development tool might plausibly grow into, as opposed to
 # the administration surface. Listing them is not a proposal to use them;
@@ -84,37 +98,74 @@ NOTABLE = {
     "group": "groups",
 }
 
-# The reference is one generated page: every resource group is an <h1>
-# anchored under the document's own id, and every operation inside it an
-# <h2>. The title carries the version the page was generated from.
+# Two sources, because neither is complete on its own.
+#
+# The OpenAPI document under /new/ is the better evidence: exact paths and
+# methods rather than headings scraped out of HTML. But it is a curated
+# *collection* -- fifteen groups -- and leaves out several paths this tool
+# depends on.
+#
+# The older page is the full surface, a hundred-odd groups, but it is
+# generated HTML with no methods and it names a path by flattening it
+# (/hierarchy{id}{language}contents), so it can only be matched loosely.
+SPEC = "https://webapi.terminalfour.com/new/openapi.json"
+REFERENCE = "https://webapi.terminalfour.com/"
+
 GROUP_RE = re.compile(
     r'<h1\s+id="terminalfour-rest-api-[^"]*">\s*([^<]+?)\s*</h1>', re.I)
 VERSION_RE = re.compile(r"TERMINALFOUR REST API\s+v?([\w.-]+)", re.I)
 
 
-def fetch(url):
-    """The reference, or as much of it as arrives.
+def read(url, ranged=False):
+    """Fetch a URL, working around a connection that is cut short.
 
-    It is four megabytes of generated HTML and the connection is routinely
-    cut short of the declared length. A truncated read still names most of
-    the groups, so the partial body is used and the shortfall reported,
-    rather than throwing away a mostly-complete answer.
+    Both documents are large and the connection routinely closes before the
+    declared length. For the HTML page a partial body is still useful. For
+    the JSON it is not -- a truncated document will not parse -- so the
+    remainder is asked for with a Range header until it does.
     """
-    request = urllib.request.Request(url, headers={"User-Agent": UA})
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            return response.read().decode("utf-8", errors="replace"), False
-    except http.client.IncompleteRead as exc:
-        return exc.partial.decode("utf-8", errors="replace"), True
-    except urllib.error.HTTPError as exc:
-        print("  ! %s %s" % (exc.code, url))
-    except Exception as exc:                          # noqa: BLE001
-        print("  ! %s %s" % (type(exc).__name__, url))
-    return "", False
+    def once(start=None):
+        headers = {"User-Agent": UA}
+        if start:
+            headers["Range"] = "bytes=%d-" % start
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                return response.read(), False
+        except http.client.IncompleteRead as exc:
+            return exc.partial, True
+        except urllib.error.HTTPError as exc:
+            print("  ! %s %s" % (exc.code, url))
+        except Exception as exc:                      # noqa: BLE001
+            print("  ! %s %s" % (type(exc).__name__, url))
+        return b"", False
+
+    body, short = once()
+    if not ranged:
+        return body.decode("utf-8", errors="replace"), short
+    for _ in range(25):
+        try:
+            return json.loads(body), False
+        except ValueError:
+            more, _short = once(len(body))
+            if not more:
+                return None, True
+            body += more
+    return None, True
+
+
+def spec_paths(spec):
+    """{path: [METHOD]} from an OpenAPI document."""
+    found = {}
+    for path, operations in (spec.get("paths") or {}).items():
+        found[path] = sorted(
+            method.upper() for method in operations
+            if method.lower() in ("get", "post", "put", "patch", "delete"))
+    return found
 
 
 def groups(page):
-    """Every top-level resource group named in the reference."""
+    """Every top-level resource group named in the older reference."""
     return {html.unescape(name).strip()
             for name in GROUP_RE.findall(page)
             if name.strip() and len(name.strip()) > 1}
@@ -125,6 +176,16 @@ def version(page):
     return found.group(1) if found else None
 
 
+def flat(path):
+    """A path as the older page spells it: segments run together.
+
+    That page lists /hierarchy/{id}/{language}/contents as
+    `hierarchy{id}{language}contents`, so a path can only be looked for
+    there with its punctuation removed.
+    """
+    return re.sub(r"[^a-z0-9]", "", path.lower())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--all", action="store_true",
@@ -133,76 +194,98 @@ def main():
                         help="machine-readable output")
     args = parser.parse_args()
 
-    # USED is written out by hand, so it can drift from the table the tool
-    # actually pulls with. Catch that here rather than reporting on a list
-    # that no longer describes the code.
-    adrift = sorted(set(ENDPOINTS) - set(USED))
-    if adrift:
-        print("USED is out of date: endpoints.py pulls %s, not listed here."
-              % ", ".join(adrift))
+    spec, spec_short = read(SPEC, ranged=True)
+    page, page_short = read(REFERENCE)
+    if spec is None and not page:
+        print("Could not read either document; nothing checked.")
         return 1
 
-    page, truncated = fetch(BASE)
-    if not page:
-        print("Could not read the reference; nothing checked.")
-        return 1
-    documented = groups(page)
-    if len(documented) < 20:
-        print("Only %d group(s) found -- the reference's markup has probably\n"
-              "changed and the patterns in this script need revisiting."
-              % len(documented))
-        return 1
+    paths = spec_paths(spec) if spec else {}
+    documented = groups(page) if page else set()
+    listed = {flat(name) for name in documented}
+    # The older page names a group, not its paths, so a path counts as
+    # present there if the page spells out that exact path or its group.
+    flat_page = flat(page) if page else ""
 
-    missing = sorted(name for name in USED if name not in documented)
-    notable = sorted(name for name in NOTABLE
-                     if name in documented and name not in USED)
-    unused = sorted(documented - set(USED))
+    verdicts = []
+    for method, path, why in USED:
+        in_spec = path in paths
+        allowed = method in paths.get(path, [])
+        if in_spec and allowed:
+            state, where = "ok", "specification"
+        elif in_spec:
+            state, where = "METHOD", "specification lists %s only"\
+                % ",".join(paths[path])
+        elif flat(path) in flat_page:
+            state, where = "ok", "older reference"
+        elif flat(path.strip("/").split("/")[0]) in listed:
+            state, where = "group", "older reference lists the group only"
+        else:
+            state, where = "MISSING", "neither document"
+        verdicts.append({"method": method, "path": path, "why": why,
+                         "state": state, "where": where})
+
+    missing = [v for v in verdicts if v["state"] == "MISSING"]
+    wrong = [v for v in verdicts if v["state"] == "METHOD"]
+    notable = sorted(name for name in NOTABLE if name in documented
+                     and not any(v["path"].startswith("/" + name)
+                                 for v in verdicts))
 
     if args.json:
-        json.dump({"documented": sorted(documented), "used": sorted(USED),
-                   "used_but_undocumented": missing, "notable": notable,
-                   "unused": unused}, sys.stdout, indent=2)
+        json.dump({"spec_paths": len(paths), "groups": sorted(documented),
+                   "used": verdicts, "notable": notable},
+                  sys.stdout, indent=2)
         print()
-        return 1 if missing else 0
+        return 1 if missing or wrong else 0
 
-    said = version(page)
-    print("Reference  %s%s" % (said or "version not stated",
-                               "  (read short -- some groups may be missing)"
-                               if truncated else ""))
-    print("Lists %d group(s). This tool uses %d.\n"
-          % (len(documented), len(USED)))
+    said = version(page) if page else None
+    print("Specification  %s  (%d paths)"
+          % (SPEC, len(paths)) if paths else
+          "Specification  could not be read")
+    print("Reference      %s  (%s, %d groups)%s"
+          % (REFERENCE, said or "version not stated", len(documented),
+             "  [read short]" if page_short else ""))
+    print()
 
-    print("USED")
-    for name in sorted(USED):
-        state = "ok" if name in documented else "NOT IN THE REFERENCE"
-        print("  %-16s %-21s %s" % (name, state, USED[name]))
+    print("WHAT THIS TOOL CALLS")
+    for v in verdicts:
+        print("  %-4s %-44s %-8s %s"
+              % (v["method"], v["path"], v["state"], v["where"]))
 
+    if wrong:
+        print("\n%d path(s) are documented but not for the method used."
+              % len(wrong))
     if missing:
-        print("\n%d group(s) this tool depends on are no longer documented."
-              % len(missing))
-        print("That may be a rename, a removal, or this script reading the\n"
-              "page wrongly. Check by hand before believing it; `t4 doctor`\n"
-              "against a real instance is the stronger signal.")
+        print("\n%d path(s) appear in neither document." % len(missing))
+        print("That may be a rename, a removal, or these scripts reading a\n"
+              "page wrongly. `t4 doctor` against a real instance is the\n"
+              "stronger signal; check by hand before believing this.")
+    if not missing and not wrong:
+        print("\nEvery path this tool calls is documented.")
 
     print("\nNOT USED, AND WORTH KNOWING ABOUT")
     for name in notable:
         print("  %-18s %s" % (name, NOTABLE[name]))
 
+    rest = sorted(name for name in documented
+                  if name not in NOTABLE
+                  and not any(v["path"].startswith("/" + name)
+                              for v in verdicts))
     if args.all:
-        print("\nEVERY OTHER GROUP (%d)" % len(unused))
-        for index in range(0, len(unused), 4):
-            print("  " + "".join("%-24s" % n for n in unused[index:index + 4]))
+        print("\nEVERY OTHER GROUP (%d)" % len(rest))
+        for index in range(0, len(rest), 4):
+            print("  " + "".join("%-24s" % n for n in rest[index:index + 4]))
     else:
-        print("\n%d further group(s) unused -- mostly administration."
-              " Use --all to list them." % (len(unused) - len(notable)))
+        print("\n%d further group(s) unused — mostly administration."
+              " Use --all to list them." % len(rest))
 
-    print("\nThis says what the documentation lists, not what a deployment\n"
-          "routes. Run `t4 doctor` for that.")
+    print("\nNeither document says what a deployment routes, and they do not\n"
+          "agree with each other: the specification is a curated collection\n"
+          "and the older reference is the full surface without methods.")
     if said and not said.startswith("8.4"):
-        print("\nThe published reference is %s. This tool is verified against\n"
-              "8.4.x, so a deployment may route groups this page does not\n"
-              "list, and the absence of one here proves nothing." % said)
-    return 1 if missing else 0
+        print("Neither is labelled 8.4.x, which is what this tool is verified\n"
+              "against, so an absence here proves nothing. Run `t4 doctor`.")
+    return 1 if missing or wrong else 0
 
 
 if __name__ == "__main__":

@@ -884,23 +884,40 @@ python3 docs/check_api.py           # needs the network; not a test
 python3 docs/check_api.py --all
 ```
 
-Reads [the published reference](https://webapi.terminalfour.com/) and reports
-which of the roughly a hundred resource groups this tool uses — nine — and
+Checks every path this tool calls against what T4 publishes, and reports
 which of the rest a development tool might plausibly want: `version` for
 history older than the last pull, `lock` so a push need not hope nobody is
 editing, `preview` for the one thing that renders T4 tags properly,
 `workflow` for the approval a push bypasses today.
 
-The gap is mostly deliberate. Most of that surface is administration —
-`apikey`, `clusterconfig`, `ldapcontext`, `paymentgateway` — that something
-running on a laptop has no business calling. The script exists so the choice
-is visible rather than merely unmade, and so a group this tool depends on
-quietly disappearing from the reference gets noticed.
+**T4 publishes two documents and neither is complete on its own.**
 
-It says what the documentation lists, not what a deployment routes. Those are
-different questions and the published reference currently lags the releases
-this tool is verified against, so the absence of a group there proves nothing.
-`t4 doctor` is the stronger signal.
+| | What it is | Caveat |
+|---|---|---|
+| [`/new/openapi.json`](https://webapi.terminalfour.com/new/) | A Swagger collection — exact paths and methods | Curated: 15 groups, 118 paths. No T4 version stated |
+| [the older reference](https://webapi.terminalfour.com/) | The full surface — about 100 groups | Generated from 8.3.16, no methods, and it flattens a path's punctuation away |
+
+So the script reads both. Of the nineteen paths this tool calls, thirteen are
+in the specification and four more only in the older reference — `channel`
+and `sitestructure` are absent from the specification entirely, as are
+`hierarchy/{id}/{language}/subsections` and `/contents`.
+
+Two are documented but not for the method used: `GET /list/{id}`, which the
+specification lists as `DELETE` only although the GET is what returns the
+lists, and `PUT /media/{id}/{language}`, listed as `GET` only. Both work.
+Treat them as gaps in the documentation rather than in the tool — but as a
+reason to be careful, since an undocumented behaviour can be withdrawn
+without a release note.
+
+The rest of the surface is unused, mostly deliberately: `apikey`,
+`clusterconfig`, `ldapcontext`, `paymentgateway` are administration that
+something running on a laptop has no business calling. The script exists so
+the choice is visible rather than merely unmade, and so a path this tool
+depends on quietly disappearing gets noticed.
+
+**Neither document says what a deployment routes**, and neither is labelled
+8.4.x, which is what this tool is verified against. An absence here proves
+nothing. `t4 doctor` is the stronger signal, because it asks a server.
 
 ### Local copy of the site
 
