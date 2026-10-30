@@ -24,6 +24,7 @@ from t4sync import (app, cli, fixtures, history, mirror,   # noqa: E402
 import urllib.error   # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.commands import doctor     # noqa: E402
+from t4sync.endpoints import ENDPOINTS  # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
                               InspectorContext, LayoutIndex,
                               annotate_components, annotate_content_items,
@@ -3785,3 +3786,66 @@ class TestApiCheckParsesTheReference(unittest.TestCase):
                                                "parameters": []}}}
         self.assertEqual(self.mod.spec_paths(spec),
                          {"/pageLayout/{id}": ["GET", "PUT"]})
+
+
+class TestDoctorDoesNotCryWolf(unittest.TestCase):
+    """A healthy instance should report nothing alarming.
+
+    Against a real 8.4.5 instance, doctor warned "NO known source field
+    (DTO may have changed)" for navigation and channel on every run. Those
+    records are configuration -- properties, not code -- and never had a
+    source field to lose. Two false alarms out of six is how a check
+    teaches people to ignore it.
+    """
+
+    def test_only_endpoints_holding_source_are_checked_for_it(self):
+        self.assertTrue(ENDPOINTS["pageLayout"].get("source"))
+        for name in ("navigation", "channel", "contenttype", "list",
+                     "sitestructure"):
+            self.assertFalse(ENDPOINTS[name].get("source"),
+                             "%s does not carry editable source" % name)
+
+    def test_what_is_pulled_as_source_is_what_claims_to_hold_source(self):
+        # The pull tracks layout, media and pageLayout as source. Of the
+        # named endpoints, only pageLayout is one of those.
+        claiming = {n for n, spec in ENDPOINTS.items() if spec.get("source")}
+        self.assertEqual(claiming, {"pageLayout"})
+
+
+class TestDoctorFindsAMediaId(unittest.TestCase):
+    """Media has no collection endpoint, so an id has to come from somewhere."""
+
+    def test_a_pulled_manifest_supplies_one(self):
+        root = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root,
+                                                            ignore_errors=True))
+        (root / ".t4").mkdir(parents=True)
+        env_dir = root / "t4-source" / "test"
+        env_dir.mkdir(parents=True)
+        extract.write_text(env_dir / "_manifest.json", json.dumps({
+            "media/x.html": {"endpoint": "media", "id": 4242},
+            "pageLayout/y.html": {"endpoint": "pageLayout", "id": 7},
+        }))
+        extract.write_text(root / ".t4" / "config.json", json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"base": "https://example.invalid/rs"}},
+        }))
+        project = Project(root)
+        self.assertEqual(
+            doctor.media_id_from_manifest(project, "test"), 4242)
+
+    def test_no_pull_yet_is_not_an_error(self):
+        # A fresh project has no manifest; doctor should skip, not crash.
+        root = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root,
+                                                            ignore_errors=True))
+        (root / ".t4").mkdir(parents=True)
+        extract.write_text(root / ".t4" / "config.json", json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"base": "https://example.invalid/rs"}},
+        }))
+        self.assertIsNone(
+            doctor.media_id_from_manifest(Project(root), "test"))
+
+    def test_no_project_at_all_is_not_an_error(self):
+        self.assertIsNone(doctor.media_id_from_manifest(None, None))

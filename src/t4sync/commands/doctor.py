@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 
 from ..api import Client, describe_http_error
+from ..compare import load_manifest
 from ..endpoints import ENDPOINTS, ID_FIELDS, SOURCE_FIELDS
 from ..commands.token import decode_expiry
 
@@ -65,7 +66,42 @@ def detect_version(api_base, timeout=20):
     return None
 
 
-def probe_derived(client, collected, language):
+def _more_layout_ids(stubs, skip, limit):
+    """A few other content layout ids, for finding a media tag."""
+    found = []
+    for item in as_items(stubs):
+        if not isinstance(item, dict):
+            continue
+        value = item.get("id")
+        if value is not None and value != skip:
+            found.append(value)
+        if len(found) >= limit:
+            break
+    return found
+
+
+def media_id_from_manifest(project, env_name):
+    """A media id this project has already pulled, if it has pulled any.
+
+    Media is the one thing with no collection endpoint: ids are found by
+    reading media tags out of layouts, and whether any given layout has one
+    is luck. Reading enough layouts to be sure would be a crawl, which is
+    what this probe is meant not to be. A previous pull already recorded
+    exactly the ids the tool fetches, so when there is one, use it.
+    """
+    if project is None or env_name is None:
+        return None
+    try:
+        manifest = load_manifest(project, env_name)
+    except Exception:                                 # noqa: BLE001
+        return None
+    for meta in manifest.values():
+        if meta.get("endpoint") == "media" and meta.get("id") is not None:
+            return meta["id"]
+    return None
+
+
+def probe_derived(client, collected, language, project=None, env_name=None):
     """The paths that need an id in them.
 
     `pull` and `sections` spend almost all their requests here -- content
@@ -79,6 +115,9 @@ def probe_derived(client, collected, language):
     (working, failing, skipped).
     """
     working, failing, skipped = 0, 0, 0
+    # Anything fetched that might carry a media tag, since media has no
+    # collection endpoint to take an id from.
+    bodies = list(collected.get("_bodies") or [])
 
     def row(label, state, note):
         print("  %-33s %-5s %s" % (label, state, note))
@@ -116,7 +155,7 @@ def probe_derived(client, collected, language):
 
     # Content layouts hang off a content type, two requests deep.
     type_id = first_id(as_items(collected.get("contenttype")))
-    layout_id = None
+    layout_id, stubs = None, None
     if type_id is None:
         unavailable("layout/contenttype/{id}/{lang}", "no content type to ask about")
         unavailable("layout/{id}/{lang}", "no content type to ask about")
@@ -128,8 +167,16 @@ def probe_derived(client, collected, language):
             unavailable("layout/{id}/{lang}",
                         "content type %s has no layouts" % type_id)
         else:
-            probe("layout/{id}/{lang}",
-                  "layout/%s/%s" % (layout_id, language), want="elements")
+            layout = probe("layout/{id}/{lang}",
+                           "layout/%s/%s" % (layout_id, language),
+                           want="elements")
+            # Content layouts are where media tags usually live, so this is
+            # the likeliest place to find an id for the media probe below.
+            for item in as_items(layout):
+                for value in (item.get("elements") or {}).values() \
+                        if isinstance(item, dict) else []:
+                    if isinstance(value, str):
+                        bodies.append(value)
 
     # The section tree, which the inspector is built on. The root is asked
     # about rather than a child: it is the one section certain to exist.
@@ -152,14 +199,34 @@ def probe_derived(client, collected, language):
 
     # Media has no collection endpoint: ids are found by reading media tags
     # out of the layouts, so a layout has to have been fetched to have one.
-    media_id = None
-    for text in collected.get("_bodies", []):
+    # Still nothing to go on: look through a few more content layouts
+    # rather than give up on the first. These are quiet -- they are a search
+    # for an id, not a probe, and a failure here says nothing about the
+    # endpoint being probed.
+    if layout_id is not None and not any(MEDIA_TAG.search(b or "")
+                                         for b in bodies):
+        for other in _more_layout_ids(stubs, layout_id, limit=4):
+            try:
+                extra = client.get_json("layout/%s/%s" % (other, language))
+            except Exception:                         # noqa: BLE001
+                break
+            for item in as_items(extra):
+                if isinstance(item, dict):
+                    bodies.extend(v for v in (item.get("elements") or {}).values()
+                                  if isinstance(v, str))
+            if any(MEDIA_TAG.search(b or "") for b in bodies):
+                break
+
+    media_id = media_id_from_manifest(project, env_name)
+    for text in [] if media_id else bodies:
         found = MEDIA_TAG.findall(text or "")
         if found:
             media_id = found[0]
             break
     if media_id is None:
-        unavailable("media/{id}/{lang}", "no media tag in the layouts read")
+        unavailable("media/{id}/{lang}",
+                    "no media tag found, and nothing pulled yet to take an "
+                    "id from")
     else:
         probe("media/{id}/{lang}", "media/%s/%s" % (media_id, language))
 
@@ -223,7 +290,7 @@ def run(args, project):
         # Confirm the fields the tool extracts are actually present, since a
         # DTO change between releases would show up here rather than as an
         # error -- a silent empty pull is the failure mode worth catching.
-        if ENDPOINTS[endpoint].get("detail") and items:
+        if ENDPOINTS[endpoint].get("source") and items:
             first = items[0]
             item_id = first.get("id") if isinstance(first, dict) else None
             if item_id is not None:
@@ -231,7 +298,6 @@ def run(args, project):
                     detail = client.get_json("%s/%s" % (path, item_id))
                     present = [f for f in SOURCE_FIELDS
                                if isinstance(detail.get(f), str) and detail[f].strip()]
-                    collected["_bodies"].extend(detail[f] for f in present)
                     known = sorted(set(detail) & set(SOURCE_FIELDS))
                     if present:
                         note += ", source in: %s" % ", ".join(present)
@@ -239,6 +305,7 @@ def run(args, project):
                         note += ", source fields present but empty: %s" % ", ".join(known)
                     else:
                         note += ", NO known source field (DTO may have changed)"
+                    collected["_bodies"].extend(detail[f] for f in present)
                 except Exception:
                     note += ", detail fetch failed"
 
@@ -252,7 +319,8 @@ def run(args, project):
     skipped = 0
     if not unreachable:
         print("\nPaths that take an id")
-        more_ok, more_bad, skipped = probe_derived(client, collected, language)
+        more_ok, more_bad, skipped = probe_derived(
+            client, collected, language, project, env_name)
         working += more_ok
         failing += more_bad
 

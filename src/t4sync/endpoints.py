@@ -9,7 +9,11 @@ is indistinguishable from "this endpoint does not exist". Do not tidy them.
 ENDPOINTS = {
     # detail=True: the collection response carries metadata only, so each item
     # must be fetched by id to get its source.
-    "pageLayout":  {"detail": True},
+    # source=True: the record carries editable source in one of
+    # SOURCE_FIELDS, so a release that moved it would break the pull
+    # silently. Navigation objects and channels are configuration --
+    # properties, not code -- and never had a source field to lose.
+    "pageLayout":  {"detail": True, "source": True},
     "navigation":  {"detail": True},
     "contenttype": {"detail": False},
     "channel":     {"detail": True},

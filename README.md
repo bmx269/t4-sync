@@ -902,12 +902,19 @@ in the specification and four more only in the older reference — `channel`
 and `sitestructure` are absent from the specification entirely, as are
 `hierarchy/{id}/{language}/subsections` and `/contents`.
 
-Two are documented but not for the method used: `GET /list/{id}`, which the
-specification lists as `DELETE` only although the GET is what returns the
-lists, and `PUT /media/{id}/{language}`, listed as `GET` only. Both work.
-Treat them as gaps in the documentation rather than in the tool — but as a
-reason to be careful, since an undocumented behaviour can be withdrawn
-without a release note.
+Two are documented but not for the method used, and they are not equally
+well understood:
+
+- **`GET /list/{id}`** — the specification lists `DELETE` only. The GET is
+  what returns the lists, and `t4 doctor` exercises it on every run against
+  a real instance, so this is a gap in the documentation.
+- **`PUT /media/{id}/{language}`** — listed as `GET` only, and **this one is
+  untested**. It is the path a media push would use, and no media push has
+  been run. It may work; nothing here shows that it does.
+
+An undocumented behaviour can be withdrawn without a release note, so treat
+both as worth re-checking after a T4 upgrade — and the second as unproven
+until a media file has actually been pushed.
 
 The rest of the surface is unused, mostly deliberately: `apikey`,
 `clusterconfig`, `ldapcontext`, `paymentgateway` are administration that
