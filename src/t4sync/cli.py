@@ -175,6 +175,9 @@ def build_parser():
     sp.add_argument("type", nargs="?", help="content type name, or omit to list")
     sp.add_argument("--env", "-e")
     sp.add_argument("--format", help="which layout, when a type has several")
+    sp.add_argument("--path", metavar="REL",
+                    help="render this exact pulled layout, e.g. "
+                         "contentLayout/staff-profile--texthtml.html")
     sp.add_argument("--tags", metavar="FILE",
                     help="render this markup instead of a pulled layout, for "
                          "tags you are writing; '-' reads stdin")

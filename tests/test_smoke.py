@@ -22,8 +22,12 @@ from t4sync.cli import build_parser    # noqa: E402
 from t4sync import (app, cli, fixtures, history, mirror,   # noqa: E402
                     opener, tags)
 import urllib.error   # noqa: E402
+import urllib.parse   # noqa: E402
+import urllib.request  # noqa: E402
 from t4sync.config import Project      # noqa: E402
 from t4sync.commands import doctor     # noqa: E402
+from t4sync.commands import fixtures as fixtures_cmd  # noqa: E402
+from t4sync.errors import T4Error     # noqa: E402
 from t4sync.endpoints import ENDPOINTS  # noqa: E402
 from t4sync.inspector import (ContentLayoutIndex, ContentTypeIndex,  # noqa: E402
                               InspectorContext, LayoutIndex,
@@ -3849,3 +3853,363 @@ class TestDoctorFindsAMediaId(unittest.TestCase):
 
     def test_no_project_at_all_is_not_an_error(self):
         self.assertIsNone(doctor.media_id_from_manifest(None, None))
+
+
+class TestDoctorDoesNotSearchWhenItNeedNot(unittest.TestCase):
+    """A media id from the manifest should stop the search, not follow it.
+
+    Two fixes stacked badly: the extra-layout search ran before the
+    manifest was consulted, so every run on a pulled project spent up to
+    four requests finding something it then threw away.
+    """
+
+    class CountingStub(TestDoctorProbesWhatThePullUses.Stub):
+        pass
+
+    def probe(self, project, env_name):
+        stub = self.CountingStub(dict(
+            TestDoctorProbesWhatThePullUses.REPLIES,
+            # Several layouts, so there is something to search through.
+            **{"layout/contenttype/310/en": [{"id": 7001}, {"id": 7002},
+                                             {"id": 7003}],
+               "layout/7002/en": {"id": 7002, "elements": {}},
+               "layout/7003/en": {"id": 7003, "elements": {}},
+               "media/4242/en": {"id": 4242}}))
+        collected = {
+            "contenttype": [{"id": 310}],
+            "sitestructure": {"id": 1},
+            "_bodies": [],          # nothing to find a media tag in
+        }
+        with contextlib.redirect_stdout(io.StringIO()):
+            doctor.probe_derived(stub, collected, "en", project, env_name)
+        return stub
+
+    def _project(self, media_id):
+        root = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root,
+                                                            ignore_errors=True))
+        (root / ".t4").mkdir(parents=True)
+        extract.write_text(root / ".t4" / "config.json", json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"base": "https://example.invalid/rs"}}}))
+        env_dir = root / "t4-source" / "test"
+        env_dir.mkdir(parents=True)
+        extract.write_text(env_dir / "_manifest.json", json.dumps(
+            {"media/x": {"endpoint": "media", "id": media_id}}))
+        return Project(root)
+
+    def test_the_manifest_short_circuits_the_search(self):
+        stub = self.probe(self._project(4242), "test")
+        extra = [p for p in stub.asked
+                 if p.startswith("layout/7") and p != "layout/7001/en"]
+        self.assertEqual(extra, [], "searched despite having an id already")
+        self.assertIn("media/4242/en", stub.asked)
+
+    def test_without_a_manifest_it_does_look(self):
+        stub = self.probe(None, None)
+        extra = [p for p in stub.asked
+                 if p.startswith("layout/7") and p != "layout/7001/en"]
+        self.assertTrue(extra, "gave up without looking")
+
+
+class TestFixtureRouteOverHttp(unittest.TestCase):
+    """The rendering viewer, exercised as a real HTTP endpoint.
+
+    It takes a filename from the page and reads a file with it, which is
+    the shape of every directory traversal ever written. Tested through a
+    running server rather than by calling the method, so the token gate,
+    the status codes and the headers are all covered.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import http.server
+        import threading
+
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = pathlib.Path(cls.tmp.name)
+        (cls.root / ".t4").mkdir()
+        extract.write_text(cls.root / ".t4" / "config.json", json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"url": "https://cms.example.invalid"}}}))
+        cls.fixtures = cls.root / ".t4" / "fixtures"
+        cls.fixtures.mkdir()
+        extract.write_text(cls.fixtures / "good.html", "<p>a rendering</p>")
+        # A file next to the directory, the obvious target to escape to.
+        extract.write_text(cls.root / ".t4" / "config-secret.html", "SECRET")
+
+        app.AppHandler.project = Project(cls.root)
+        app.AppHandler.jobs = app.Jobs(str(cls.root))
+        app.AppHandler.token = "test-token"
+        cls.server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), app.AppHandler)
+        cls.server.daemon_threads = True
+        cls.port = cls.server.server_address[1]
+        cls.thread = threading.Thread(target=cls.server.serve_forever,
+                                      daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.tmp.cleanup()
+
+    def get(self, query):
+        url = "http://127.0.0.1:%d/fixture?%s" % (self.port, query)
+        try:
+            with urllib.request.urlopen(url, timeout=10) as response:
+                return response.status, response.read().decode("utf-8"), \
+                    dict(response.headers)
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read().decode("utf-8"), dict(exc.headers)
+
+    def test_a_rendering_is_served(self):
+        status, body, headers = self.get("file=good.html&t=test-token")
+        self.assertEqual(status, 200)
+        self.assertIn("a rendering", body)
+        self.assertTrue(headers["Content-Type"].startswith("text/html"))
+
+    def test_it_is_never_cached_or_framed(self):
+        _s, _b, headers = self.get("file=good.html&t=test-token")
+        self.assertEqual(headers.get("Cache-Control"), "no-store")
+        self.assertEqual(headers.get("X-Frame-Options"), "DENY")
+
+    def test_without_the_token_nothing_is_served(self):
+        status, _b, _h = self.get("file=good.html")
+        self.assertEqual(status, 403)
+
+    def test_a_wrong_token_is_refused(self):
+        status, _b, _h = self.get("file=good.html&t=guess")
+        self.assertEqual(status, 403)
+
+    def test_hostile_names_are_all_refused_the_same_way(self):
+        hostile = [
+            "../config-secret.html",            # the obvious one
+            "..%2Fconfig-secret.html",          # encoded
+            "....//config-secret.html",         # a stripped ../ rebuilt
+            "/etc/passwd",
+            "..\\\\config-secret.html",         # windows separator
+            "sub/good.html",
+            ".hidden.html",                     # a dotfile
+            "good.html%00.png",                 # a null byte
+            "good%00.html",                     # one that still ends .html
+            "a" * 300 + ".html",                # over any sane length
+            "",
+            "good.htm",                         # not .html
+            "good.html.bak",
+        ]
+        for name in hostile:
+            status, body, _h = self.get(
+                "file=%s&t=test-token" % urllib.parse.quote(name, safe="%"))
+            self.assertEqual(status, 404, "%r was not refused" % name)
+            self.assertNotIn("SECRET", body, "%r leaked a file" % name)
+
+    def test_a_symlink_out_of_the_directory_is_refused(self):
+        link = self.fixtures / "escape.html"
+        try:
+            link.symlink_to(self.root / ".t4" / "config-secret.html")
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not available here")
+        self.addCleanup(link.unlink)
+        status, body, _h = self.get("file=escape.html&t=test-token")
+        self.assertEqual(status, 404)
+        self.assertNotIn("SECRET", body)
+
+    def test_a_missing_rendering_is_a_404_not_a_crash(self):
+        status, _b, _h = self.get("file=never-made.html&t=test-token")
+        self.assertEqual(status, 404)
+
+    def test_an_unreadable_file_is_a_404_not_a_crash(self):
+        # A rendering that is not valid UTF-8 should not take the server
+        # down with a UnicodeDecodeError.
+        bad = self.fixtures / "binary.html"
+        bad.write_bytes(b"\xff\xfe\x00bad")
+        self.addCleanup(bad.unlink)
+        status, _b, _h = self.get("file=binary.html&t=test-token")
+        self.assertEqual(status, 404)
+
+
+class TestFixturesByPath(unittest.TestCase):
+    """Rendering a layout named outright, which is what the web UI sends.
+
+    Naming a content type and a format has to be matched back to a file,
+    and lands on the wrong one when two layouts share a name or a layout
+    has none -- quietly, with a plausible-looking rendering of a different
+    file. A row already knows its path, so it sends that.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / ".t4").mkdir()
+        extract.write_text(self.root / ".t4" / "config.json", json.dumps({
+            "source_dir": "t4-source",
+            "environments": {"test": {"url": "https://cms.example.invalid"}}}))
+        env = self.root / "t4-source" / "test"
+        (env / "contentLayout").mkdir(parents=True)
+        (env / "contenttype").mkdir(parents=True)
+        extract.write_text(env / "contentLayout" / "a.html",
+                           '<h1><t4 type="content" name="Title" /></h1>')
+        extract.write_text(env / "contentLayout" / "b.html",
+                           '<h2><t4 type="content" name="Title" /></h2>')
+        # The shape a pull writes: contentTypeElements, with a numeric
+        # element type that element_type() maps to a name.
+        extract.write_text(env / "contenttype" / "promo.json", json.dumps({
+            "id": 5, "name": "Promo",
+            "contentTypeElements": [{"name": "Title", "type": 1}]}))
+        # Two layouts of one type sharing a name: --format cannot tell them
+        # apart, which is the case this exists for.
+        extract.write_text(env / "_manifest.json", json.dumps({
+            "contentLayout/a.html": {"endpoint": "layout", "id": 1,
+                                     "name": "text/html",
+                                     "contentType": "Promo"},
+            "contentLayout/b.html": {"endpoint": "layout", "id": 2,
+                                     "name": "text/html",
+                                     "contentType": "Promo"},
+            "media/m.txt": {"endpoint": "media", "id": 9},
+        }))
+        self.project = Project(self.root)
+        self.out = self.root / "out.html"
+
+    def args(self, **kw):
+        base = dict(type=None, env="test", format=None, path=None, tags=None,
+                    values=None, lorem=False, css=None,
+                    out=str(self.out), no_open=True)
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    def run_it(self, **kw):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = fixtures_cmd.run(self.args(**kw), self.project)
+        return code, out.getvalue()
+
+    def test_the_named_file_is_the_one_rendered(self):
+        self.run_it(path="contentLayout/b.html")
+        self.assertIn("<h2>", self.out.read_text(encoding="utf-8"))
+
+    def test_the_other_file_of_the_same_name_is_not(self):
+        self.run_it(path="contentLayout/a.html")
+        body = self.out.read_text(encoding="utf-8")
+        self.assertIn("<h1>", body)
+        self.assertNotIn("<h2>", body)
+
+    def test_a_backslash_path_is_understood(self):
+        self.run_it(path="contentLayout\\b.html")
+        self.assertIn("<h2>", self.out.read_text(encoding="utf-8"))
+
+    def test_a_path_outside_the_pull_is_refused(self):
+        with self.assertRaises(T4Error) as caught:
+            self.run_it(path="../../etc/passwd")
+        self.assertIn("not a pulled file", str(caught.exception))
+
+    def test_a_file_that_is_not_a_layout_is_refused(self):
+        with self.assertRaises(T4Error) as caught:
+            self.run_it(path="media/m.txt")
+        self.assertIn("not a Content Layout", str(caught.exception))
+
+    def test_an_unpulled_content_type_is_explained(self):
+        extract.write_text(self.root / "t4-source" / "test" / "_manifest.json",
+                           json.dumps({"contentLayout/a.html": {
+                               "endpoint": "layout", "id": 1,
+                               "name": "text/html",
+                               "contentType": "Nowhere"}}))
+        with self.assertRaises(T4Error) as caught:
+            self.run_it(path="contentLayout/a.html")
+        self.assertIn("not pulled", str(caught.exception))
+
+    def test_supplied_values_still_apply(self):
+        values = self.root / "v.json"
+        extract.write_text(values, json.dumps({"Title": "CHOSEN"}))
+        self.run_it(path="contentLayout/a.html", values=str(values))
+        self.assertIn("CHOSEN", self.out.read_text(encoding="utf-8"))
+
+    def test_lorem_still_applies(self):
+        self.run_it(path="contentLayout/a.html", lorem=True)
+        self.assertIn("orem", self.out.read_text(encoding="utf-8"))
+
+
+class TestCheckApiRangeHandling(unittest.TestCase):
+    """A server that ignores Range must not send the reader into a spiral.
+
+    Appending a full re-send to a partial body splices two copies of the
+    document together, which can never parse, so it would re-download
+    until the attempt limit -- megabytes, slowly, to report failure.
+    """
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_api", cls.ROOT / "docs" / "check_api.py")
+        cls.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.mod)
+
+    def serve(self, behaviour):
+        """A server answering with `behaviour(range_start) -> (body, status)`."""
+        import http.server
+        import threading
+        calls = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                start = 0
+                header = self.headers.get("Range")
+                if header:
+                    start = int(header.split("=")[1].split("-")[0])
+                calls.append(start)
+                body, status = behaviour(start)
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return "http://127.0.0.1:%d/" % server.server_address[1], calls
+
+    def test_a_server_honouring_range_is_followed_to_the_end(self):
+        whole = json.dumps({"paths": {"/a": {"get": {}}}}).encode()
+        half = len(whole) // 2
+        url, calls = self.serve(
+            lambda start: (whole[start:], 206) if start else (whole[:half], 200))
+        spec, _short = self.mod.read(url, ranged=True)
+        self.assertEqual(spec, json.loads(whole))
+        self.assertEqual(calls, [0, half])
+
+    def test_a_server_ignoring_range_is_not_asked_forever(self):
+        whole = json.dumps({"paths": {"/a": {"get": {}}}}).encode()
+        half = len(whole) // 2
+        state = {"first": True}
+
+        def behaviour(_start):
+            if state["first"]:
+                state["first"] = False
+                return whole[:half], 200
+            return whole, 200          # Range ignored: the whole thing again
+
+        url, calls = self.serve(behaviour)
+        spec, _short = self.mod.read(url, ranged=True)
+        self.assertEqual(spec, json.loads(whole),
+                         "a full re-send should replace, not be appended")
+        self.assertLessEqual(len(calls), 3, "asked too many times")
+
+    def test_a_server_making_no_progress_gives_up(self):
+        truncated = b'{"paths": {"/a"'
+        url, calls = self.serve(lambda _s: (truncated, 200))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            spec, short = self.mod.read(url, ranged=True)
+        self.assertIsNone(spec)
+        self.assertTrue(short)
+        self.assertLessEqual(len(calls), 3, "retried without gaining ground")
+        self.assertIn("could not read a complete document", out.getvalue())

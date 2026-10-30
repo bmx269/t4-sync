@@ -20,6 +20,13 @@ def run(args, project):
         raise T4Error("No content types pulled for %r.\n  t4 pull -e %s"
                       % (env_name, env_name))
 
+    # A layout named outright. The web UI sends this, because a row knows
+    # exactly which file it is about -- where naming the content type and
+    # the format has to be matched back to a file and can land on a
+    # different one when two layouts share a name, or a layout has none.
+    if getattr(args, "path", None):
+        return _render_one(args, project, env_name, types, args.path)
+
     wanted = (args.type or "").strip().lower()
     if not wanted:
         print("Content types with a pulled layout:\n")
@@ -83,6 +90,39 @@ def run(args, project):
                  chosen[1].get("name") or chosen[0]))
 
     rel, meta = chosen
+    source = read_text(project.env_dir(env_name) / rel)
+    return _write(args, project, env_name, content_type, source,
+                  meta.get("name") or "layout", values)
+
+
+def _render_one(args, project, env_name, types, rel):
+    """Render one pulled layout, addressed by its path."""
+    rel = rel.replace("\\", "/").strip("/")
+    manifest = load_manifest(project, env_name)
+    meta = manifest.get(rel)
+    if meta is None:
+        raise T4Error("%s is not a pulled file for %r." % (rel, env_name))
+    if meta.get("endpoint") != "layout":
+        raise T4Error("%s is a %s, not a Content Layout. Only layouts render."
+                      % (rel, meta.get("endpoint") or "file"))
+
+    wanted = (meta.get("contentType") or "").lower()
+    content_type = next((c for c in types
+                         if (c["name"] or "").lower() == wanted), None)
+    if content_type is None:
+        raise T4Error("%s belongs to content type %r, which is not pulled.\n"
+                      "  t4 pull -e %s"
+                      % (rel, meta.get("contentType"), env_name))
+
+    overrides = _read_values(args.values)
+    stray = fixturelib.unknown_values(content_type, overrides)
+    if stray:
+        raise T4Error("%s has no element named %s.\n  Its elements: %s"
+                      % (content_type["name"],
+                         ", ".join(repr(name) for name in stray),
+                         ", ".join(element["name"]
+                                   for element in content_type["elements"])))
+    values = fixturelib.values_for(content_type, overrides, args.lorem)
     source = read_text(project.env_dir(env_name) / rel)
     return _write(args, project, env_name, content_type, source,
                   meta.get("name") or "layout", values)

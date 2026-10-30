@@ -426,22 +426,32 @@ class AppHandler(BaseHTTPRequestHandler):
     def _fixture(self):
         """Serve one rendering back, so it can be opened in a tab.
 
-        Only out of `.t4/fixtures/`, and only a bare filename: the name
-        arrives from the page, and a page is not a thing to take a path
-        from. A rendering is invented content with nothing secret in it,
-        but the directory it sits in is inside the project.
+        The name arrives from the page, and a page is not a thing to take a
+        path from, so it is treated as hostile: a bare filename ending
+        .html, resolving to a direct child of `.t4/fixtures/` and nothing
+        else. A rendering holds invented content, but the directory it sits
+        in is inside the project.
+
+        Every rejection answers the same 404. Distinguishing "not there"
+        from "not allowed" would report on paths outside the directory,
+        which is the thing being refused.
         """
         name = (self._query().get("file", [""])[0] or "").strip()
         folder = (self.project.root / ".t4" / "fixtures").resolve()
+        if (not name or len(name) > 255 or not name.endswith(".html")
+                or name.startswith(".")
+                or "/" in name or "\\" in name or "\x00" in name):
+            return self._json({"error": "no such rendering"}, 404)
         try:
             target = (folder / name).resolve()
-        except OSError:
+            # resolve() follows symlinks, so this refuses a link planted in
+            # the folder and pointing out of it, not just a ../ in the name.
+            if target.parent != folder or not target.is_file():
+                raise ValueError(name)
+            body = target.read_text(encoding="utf-8")
+        except (OSError, ValueError, UnicodeDecodeError):
             return self._json({"error": "no such rendering"}, 404)
-        if ("/" in name or "\\" in name or not name.endswith(".html")
-                or target.parent != folder or not target.is_file()):
-            return self._json({"error": "no such rendering"}, 404)
-        return self._send(200, target.read_text(encoding="utf-8"),
-                          "text/html; charset=utf-8")
+        return self._send(200, body, "text/html; charset=utf-8")
 
     def _changes(self):
         """Which files differ from T4, so they can be chosen one by one.
@@ -1801,8 +1811,7 @@ function renderSample() {
 
     var go = document.createElement("button");
     go.className = "tog one";
-    go.dataset.sample = c.contentType;
-    go.dataset.format = c.name || "";
+    go.dataset.sample = c.path;
     go.dataset.file = c.sample;
     go.appendChild(text_("add sample data"));
 
@@ -1812,10 +1821,15 @@ function renderSample() {
 }
 
 function addSampleData(button) {
-  var extra = ["--format", button.dataset.format, "--no-open"];
+  // The row names the exact file and where the rendering goes, so neither
+  // is worked out twice. Matching a content type and format back to a file
+  // can land on a different one when two layouts share a name.
+  var extra = ["--path", button.dataset.sample,
+               "--out", ".t4/fixtures/" + button.dataset.file,
+               "--no-open"];
   if (el("sample-lorem").checked) extra.push("--lorem");
   button.disabled = true;
-  run(["fixtures", button.dataset.sample], {
+  run(["fixtures"], {
     extra: extra,
     onEnd: function (summary) {
       button.disabled = false;

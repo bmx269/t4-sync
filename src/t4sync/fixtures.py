@@ -182,7 +182,11 @@ def render(layout, content_type, mark=True, values=None):
         name = attrs.get("name")
         if name in values:
             filled.append(name)
-            return values[name]
+            # Coerced here as well as in `values_for`, because `values` is
+            # the seam a test passes its own mapping through and a number
+            # from a JSON file would otherwise fail inside re.sub.
+            value = values[name]
+            return "" if value is None else str(value)
 
         # A content tag naming an element this type does not have. Usually a
         # layout assigned to the wrong type, which is worth seeing.

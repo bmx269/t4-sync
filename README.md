@@ -759,6 +759,16 @@ value can be invented for each one and substituted into every `<t4>` tag that
 names it. What comes back is your markup with content in it: enough to see it
 nest correctly and the CSS apply, which is the question being asked.
 
+`--path` renders one pulled layout, named outright:
+
+```sh
+t4 fixtures --path contentLayout/staff-profile--texthtml.html
+```
+
+Prefer it to naming a content type and a `--format`, which has to be matched
+back to a file and lands on the wrong one when two layouts of a type share a
+name, or a layout has none. The web UI always sends `--path` for that reason.
+
 `--tags` renders a fragment rather than a pulled layout, so a handful of tags
 can be tried before they go anywhere near the CMS. `-` reads standard input:
 

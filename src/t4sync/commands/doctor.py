@@ -66,6 +66,15 @@ def detect_version(api_base, timeout=20):
     return None
 
 
+def _media_tag_in(bodies):
+    """The first media id mentioned by any of these, or None."""
+    for text in bodies:
+        found = MEDIA_TAG.findall(text or "")
+        if found:
+            return found[0]
+    return None
+
+
 def _more_layout_ids(stubs, skip, limit):
     """A few other content layout ids, for finding a media tag."""
     found = []
@@ -199,12 +208,17 @@ def probe_derived(client, collected, language, project=None, env_name=None):
 
     # Media has no collection endpoint: ids are found by reading media tags
     # out of the layouts, so a layout has to have been fetched to have one.
-    # Still nothing to go on: look through a few more content layouts
-    # rather than give up on the first. These are quiet -- they are a search
-    # for an id, not a probe, and a failure here says nothing about the
-    # endpoint being probed.
-    if layout_id is not None and not any(MEDIA_TAG.search(b or "")
-                                         for b in bodies):
+    # Media is the one resource with no collection endpoint. Three places
+    # to look, cheapest first: a previous pull already recorded exactly the
+    # ids the tool fetches; failing that, the bodies already fetched above;
+    # failing that, a few more content layouts, which costs requests and is
+    # only worth it for a project that has never pulled.
+    media_id = media_id_from_manifest(project, env_name)
+
+    if media_id is None:
+        media_id = _media_tag_in(bodies)
+
+    if media_id is None and layout_id is not None:
         for other in _more_layout_ids(stubs, layout_id, limit=4):
             try:
                 extra = client.get_json("layout/%s/%s" % (other, language))
@@ -214,15 +228,10 @@ def probe_derived(client, collected, language, project=None, env_name=None):
                 if isinstance(item, dict):
                     bodies.extend(v for v in (item.get("elements") or {}).values()
                                   if isinstance(v, str))
-            if any(MEDIA_TAG.search(b or "") for b in bodies):
+            media_id = _media_tag_in(bodies)
+            if media_id is not None:
                 break
 
-    media_id = media_id_from_manifest(project, env_name)
-    for text in [] if media_id else bodies:
-        found = MEDIA_TAG.findall(text or "")
-        if found:
-            media_id = found[0]
-            break
     if media_id is None:
         unavailable("media/{id}/{lang}",
                     "no media tag found, and nothing pulled yet to take an "

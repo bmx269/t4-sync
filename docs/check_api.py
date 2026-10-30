@@ -123,6 +123,10 @@ def read(url, ranged=False):
     declared length. For the HTML page a partial body is still useful. For
     the JSON it is not -- a truncated document will not parse -- so the
     remainder is asked for with a Range header until it does.
+
+    A server that ignores Range answers 200 with the whole document again.
+    Appending that would splice two copies together, which can never parse,
+    so the status is checked and a full answer replaces rather than extends.
     """
     def once(start=None):
         headers = {"User-Agent": UA}
@@ -131,26 +135,34 @@ def read(url, ranged=False):
         request = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=120) as response:
-                return response.read(), False
+                return response.read(), response.status
         except http.client.IncompleteRead as exc:
-            return exc.partial, True
+            return exc.partial, None          # status unknown, body partial
         except urllib.error.HTTPError as exc:
             print("  ! %s %s" % (exc.code, url))
         except Exception as exc:                      # noqa: BLE001
             print("  ! %s %s" % (type(exc).__name__, url))
-        return b"", False
+        return b"", 0
 
-    body, short = once()
+    body, status = once()
     if not ranged:
-        return body.decode("utf-8", errors="replace"), short
+        return body.decode("utf-8", errors="replace"), status is None
+
     for _ in range(25):
         try:
             return json.loads(body), False
         except ValueError:
-            more, _short = once(len(body))
-            if not more:
-                return None, True
-            body += more
+            pass
+        more, status = once(len(body))
+        if not more:
+            break
+        if status == 206 or status is None:
+            body += more                      # a genuine continuation
+        elif len(more) > len(body):
+            body = more                       # Range ignored; start again
+        else:
+            break                             # no progress to be had
+    print("  ! could not read a complete document from %s" % url)
     return None, True
 
 
@@ -193,6 +205,17 @@ def main():
     parser.add_argument("--json", action="store_true",
                         help="machine-readable output")
     args = parser.parse_args()
+
+    # USED is written out by hand, so it can drift from the table the tool
+    # actually pulls with. Catch that before reporting on a list that no
+    # longer describes the code.
+    declared = {path.strip("/").split("/")[0] for _m, path, _w in USED}
+    adrift = sorted(set(ENDPOINTS) - declared)
+    if adrift:
+        print("USED is out of date: endpoints.py pulls %s, which is not\n"
+              "listed here. Add it before trusting this report."
+              % ", ".join(adrift))
+        return 1
 
     spec, spec_short = read(SPEC, ranged=True)
     page, page_short = read(REFERENCE)
